@@ -56,6 +56,9 @@ namespace Config
   const int TARGET_FPS = 30;            // Target frames per second for capture
   const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
+  // Capture method
+  const bool USE_DESKTOP_DUPLICATION = false; // Use DXGI Desktop Duplication API (synced to display refresh) vs BitBlt
+
   // Banner settings
   const int BANNER_HEIGHT = 40;                               // Height of info banner at top
   const cv::Scalar BANNER_BG_COLOR = cv::Scalar(40, 40, 40);  // Dark gray background

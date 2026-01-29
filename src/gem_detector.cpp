@@ -208,7 +208,7 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
   };
 
   // Use 8 threads to process 8 tiles each (64 total tiles)
-  const int NUM_THREADS = 8;
+  const int NUM_THREADS = 4;
   const int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
   const int TILES_PER_THREAD = TOTAL_TILES / NUM_THREADS;
 

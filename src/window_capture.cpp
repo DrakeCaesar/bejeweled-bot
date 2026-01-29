@@ -2,6 +2,9 @@
 #include "config.h"
 #include <iostream>
 
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
+
 HWND FindGameWindow(const std::string &windowTitle)
 {
   HWND hwnd = FindWindowA(NULL, windowTitle.c_str());
@@ -229,4 +232,296 @@ cv::Mat CropGameBoard(const cv::Mat &fullWindow)
       maxY - Config::BOARD_Y);
 
   return fullWindow(cropRect).clone();
+}
+
+// ============================================================================
+// Desktop Duplication API (DXGI) - Frame-Perfect Capture
+// ============================================================================
+
+DuplicationContext *InitializeDesktopDuplication(int monitorIndex)
+{
+  DuplicationContext *ctx = new DuplicationContext();
+
+  // Create D3D11 device
+  D3D_FEATURE_LEVEL featureLevel;
+  HRESULT hr = D3D11CreateDevice(
+      nullptr,
+      D3D_DRIVER_TYPE_HARDWARE,
+      nullptr,
+      0,
+      nullptr,
+      0,
+      D3D11_SDK_VERSION,
+      &ctx->device,
+      &featureLevel,
+      &ctx->context);
+
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to create D3D11 device" << std::endl;
+    delete ctx;
+    return nullptr;
+  }
+
+  // Get DXGI device
+  IDXGIDevice *dxgiDevice = nullptr;
+  hr = ctx->device->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to get DXGI device" << std::endl;
+    ctx->device->Release();
+    delete ctx;
+    return nullptr;
+  }
+
+  // Get DXGI adapter
+  IDXGIAdapter *dxgiAdapter = nullptr;
+  hr = dxgiDevice->GetParent(__uuidof(IDXGIAdapter), (void **)&dxgiAdapter);
+  dxgiDevice->Release();
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to get DXGI adapter" << std::endl;
+    ctx->device->Release();
+    delete ctx;
+    return nullptr;
+  }
+
+  // Get output (monitor)
+  IDXGIOutput *dxgiOutput = nullptr;
+  hr = dxgiAdapter->EnumOutputs(monitorIndex, &dxgiOutput);
+  dxgiAdapter->Release();
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to get DXGI output" << std::endl;
+    ctx->device->Release();
+    delete ctx;
+    return nullptr;
+  }
+
+  // Get output1 interface for duplication
+  IDXGIOutput1 *dxgiOutput1 = nullptr;
+  hr = dxgiOutput->QueryInterface(__uuidof(IDXGIOutput1), (void **)&dxgiOutput1);
+  dxgiOutput->Release();
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to get DXGI output1" << std::endl;
+    ctx->device->Release();
+    delete ctx;
+    return nullptr;
+  }
+
+  // Create desktop duplication
+  hr = dxgiOutput1->DuplicateOutput(ctx->device, &ctx->duplication);
+  dxgiOutput1->Release();
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to create desktop duplication (check if running as admin or another duplication exists)" << std::endl;
+    ctx->device->Release();
+    delete ctx;
+    return nullptr;
+  }
+
+  // Get duplication description
+  DXGI_OUTDUPL_DESC dupDesc;
+  ctx->duplication->GetDesc(&dupDesc);
+  ctx->width = dupDesc.ModeDesc.Width;
+  ctx->height = dupDesc.ModeDesc.Height;
+
+  // Create staging texture for CPU access
+  D3D11_TEXTURE2D_DESC texDesc = {};
+  texDesc.Width = ctx->width;
+  texDesc.Height = ctx->height;
+  texDesc.MipLevels = 1;
+  texDesc.ArraySize = 1;
+  texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  texDesc.SampleDesc.Count = 1;
+  texDesc.Usage = D3D11_USAGE_STAGING;
+  texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+  hr = ctx->device->CreateTexture2D(&texDesc, nullptr, &ctx->stagingTexture);
+  if (FAILED(hr))
+  {
+    std::cerr << "Failed to create staging texture" << std::endl;
+    ctx->duplication->Release();
+    ctx->device->Release();
+    delete ctx;
+    return nullptr;
+  }
+
+  std::cout << "Desktop Duplication initialized: " << ctx->width << "x" << ctx->height << std::endl;
+  return ctx;
+}
+
+bool CaptureNextDuplicationFrame(DuplicationContext *ctx, cv::Mat &outputBuffer, int timeoutMs)
+{
+  if (!ctx || !ctx->duplication)
+    return false;
+
+  IDXGIResource *frameResource = nullptr;
+  DXGI_OUTDUPL_FRAME_INFO frameInfo;
+
+  // Acquire next frame (blocks until new frame or timeout)
+  HRESULT hr = ctx->duplication->AcquireNextFrame(timeoutMs, &frameInfo, &frameResource);
+
+  if (hr == DXGI_ERROR_WAIT_TIMEOUT)
+  {
+    return false; // No new frame yet
+  }
+
+  if (FAILED(hr))
+  {
+    if (hr == DXGI_ERROR_ACCESS_LOST)
+    {
+      std::cerr << "Desktop duplication access lost (display mode change?)" << std::endl;
+    }
+    return false;
+  }
+
+  // Get texture from frame
+  ID3D11Texture2D *frameTexture = nullptr;
+  hr = frameResource->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&frameTexture);
+  frameResource->Release();
+
+  if (FAILED(hr))
+  {
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  // Copy to staging texture
+  ctx->context->CopyResource(ctx->stagingTexture, frameTexture);
+  frameTexture->Release();
+
+  // Map staging texture for CPU read
+  D3D11_MAPPED_SUBRESOURCE mapped;
+  hr = ctx->context->Map(ctx->stagingTexture, 0, D3D11_MAP_READ, 0, &mapped);
+
+  if (FAILED(hr))
+  {
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  // Verify buffer size
+  if (outputBuffer.rows != ctx->height || outputBuffer.cols != ctx->width || outputBuffer.type() != CV_8UC3)
+  {
+    std::cerr << "Output buffer size mismatch" << std::endl;
+    ctx->context->Unmap(ctx->stagingTexture, 0);
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  // Convert BGRA to BGR
+  for (int y = 0; y < ctx->height; y++)
+  {
+    const BYTE *src = (const BYTE *)mapped.pData + y * mapped.RowPitch;
+    BYTE *dst = outputBuffer.ptr<BYTE>(y);
+
+    for (int x = 0; x < ctx->width; x++)
+    {
+      dst[x * 3 + 0] = src[x * 4 + 0]; // B
+      dst[x * 3 + 1] = src[x * 4 + 1]; // G
+      dst[x * 3 + 2] = src[x * 4 + 2]; // R
+      // Skip A channel
+    }
+  }
+
+  ctx->context->Unmap(ctx->stagingTexture, 0);
+  ctx->duplication->ReleaseFrame();
+
+  return true;
+}
+
+bool CaptureRegionFromDuplication(DuplicationContext *ctx, int x, int y, int width, int height, cv::Mat &outputBuffer, int timeoutMs)
+{
+  if (!ctx || !ctx->duplication)
+    return false;
+
+  IDXGIResource *frameResource = nullptr;
+  DXGI_OUTDUPL_FRAME_INFO frameInfo;
+
+  HRESULT hr = ctx->duplication->AcquireNextFrame(timeoutMs, &frameInfo, &frameResource);
+
+  if (hr == DXGI_ERROR_WAIT_TIMEOUT)
+  {
+    return false;
+  }
+
+  if (FAILED(hr))
+  {
+    return false;
+  }
+
+  ID3D11Texture2D *frameTexture = nullptr;
+  hr = frameResource->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&frameTexture);
+  frameResource->Release();
+
+  if (FAILED(hr))
+  {
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  ctx->context->CopyResource(ctx->stagingTexture, frameTexture);
+  frameTexture->Release();
+
+  D3D11_MAPPED_SUBRESOURCE mapped;
+  hr = ctx->context->Map(ctx->stagingTexture, 0, D3D11_MAP_READ, 0, &mapped);
+
+  if (FAILED(hr))
+  {
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  // Verify buffer and region
+  if (outputBuffer.rows != height || outputBuffer.cols != width || outputBuffer.type() != CV_8UC3)
+  {
+    ctx->context->Unmap(ctx->stagingTexture, 0);
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  if (x + width > ctx->width || y + height > ctx->height)
+  {
+    ctx->context->Unmap(ctx->stagingTexture, 0);
+    ctx->duplication->ReleaseFrame();
+    return false;
+  }
+
+  // Copy region and convert BGRA to BGR
+  for (int row = 0; row < height; row++)
+  {
+    const BYTE *src = (const BYTE *)mapped.pData + (y + row) * mapped.RowPitch + x * 4;
+    BYTE *dst = outputBuffer.ptr<BYTE>(row);
+
+    for (int col = 0; col < width; col++)
+    {
+      dst[col * 3 + 0] = src[col * 4 + 0]; // B
+      dst[col * 3 + 1] = src[col * 4 + 1]; // G
+      dst[col * 3 + 2] = src[col * 4 + 2]; // R
+    }
+  }
+
+  ctx->context->Unmap(ctx->stagingTexture, 0);
+  ctx->duplication->ReleaseFrame();
+
+  return true;
+}
+
+void CleanupDesktopDuplication(DuplicationContext *ctx)
+{
+  if (!ctx)
+    return;
+
+  if (ctx->stagingTexture)
+    ctx->stagingTexture->Release();
+  if (ctx->duplication)
+    ctx->duplication->Release();
+  if (ctx->context)
+    ctx->context->Release();
+  if (ctx->device)
+    ctx->device->Release();
+
+  delete ctx;
 }

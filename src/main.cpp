@@ -78,6 +78,9 @@ struct SharedFrameData
 
     // Main thread display copy
     cv::Mat displayCopy;
+
+    // Desktop Duplication context
+    DuplicationContext *dupContext = nullptr;
 };
 
 // ============================================================================
@@ -88,6 +91,9 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
 {
     const int ACTIVATION_INTERVAL_MS = 1000;
     auto lastActivation = std::chrono::high_resolution_clock::now();
+
+    // Use Desktop Duplication if available, fallback to BitBlt
+    bool useDuplication = (frameData.dupContext != nullptr);
 
     while (true)
     {
@@ -101,16 +107,48 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             lastActivation = now;
         }
 
-        // Capture only the game board region directly (zero allocation, zero crop)
+        bool captureSuccess = false;
         auto captureStart = std::chrono::high_resolution_clock::now();
-        bool captureSuccess = CaptureWindowRegionInto(gameWindow, Config::BOARD_X, Config::BOARD_Y,
-                                                      Config::BOARD_WIDTH, Config::BOARD_HEIGHT,
-                                                      frameData.gameBoardBuffer[frameData.captureIndex]);
+
+        if (useDuplication)
+        {
+            // Convert window-relative coordinates to screen-absolute coordinates
+            RECT windowRect;
+            GetWindowRect(gameWindow, &windowRect);
+            POINT clientOffset = {0, 0};
+            ClientToScreen(gameWindow, &clientOffset);
+
+            int screenX = clientOffset.x + Config::BOARD_X;
+            int screenY = clientOffset.y + Config::BOARD_Y;
+
+            // Desktop Duplication - blocks until new frame arrives (perfect sync!)
+            captureSuccess = CaptureRegionFromDuplication(
+                frameData.dupContext,
+                screenX, screenY,
+                Config::BOARD_WIDTH, Config::BOARD_HEIGHT,
+                frameData.gameBoardBuffer[frameData.captureIndex],
+                16 // 16ms timeout = ~60 FPS minimum
+            );
+        }
+        else
+        {
+            // Fallback to BitBlt
+            captureSuccess = CaptureWindowRegionInto(
+                gameWindow,
+                Config::BOARD_X, Config::BOARD_Y,
+                Config::BOARD_WIDTH, Config::BOARD_HEIGHT,
+                frameData.gameBoardBuffer[frameData.captureIndex]);
+        }
+
         auto captureEnd = std::chrono::high_resolution_clock::now();
 
         if (!captureSuccess)
         {
-            std::cerr << "Warning: Failed to capture window region" << std::endl;
+            if (!useDuplication)
+            {
+                std::cerr << "Warning: Failed to capture window region" << std::endl;
+            }
+            // For duplication, timeout is normal, just continue
             continue;
         }
 
@@ -120,9 +158,9 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             if (frameData.shouldExit)
                 break;
 
-            // Update timing (crop is now part of capture)
+            // Update timing
             timingInfo.captureMs = std::chrono::duration<double, std::milli>(captureEnd - captureStart).count();
-            timingInfo.cropMs = 0.0; // No separate crop needed
+            timingInfo.cropMs = 0.0;
 
             frameData.captureReady = true;
         }
@@ -264,6 +302,58 @@ int main()
     // Shared frame data for threading
     SharedFrameData frameData;
 
+    // Detect which monitor the game window is on
+    HMONITOR hMonitor = MonitorFromWindow(gameWindow, MONITOR_DEFAULTTOPRIMARY);
+    int monitorIndex = 0;
+
+    // Enumerate monitors to find the index
+    struct MonitorEnumData
+    {
+        HMONITOR targetMonitor;
+        int currentIndex;
+        int foundIndex;
+    };
+
+    MonitorEnumData enumData = {hMonitor, 0, -1};
+
+    EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMon, HDC hdc, LPRECT rect, LPARAM data) -> BOOL
+                        {
+                            MonitorEnumData *pData = (MonitorEnumData *)data;
+                            if (hMon == pData->targetMonitor)
+                            {
+                                pData->foundIndex = pData->currentIndex;
+                                return FALSE; // Stop enumeration
+                            }
+                            pData->currentIndex++;
+                            return TRUE; // Continue enumeration
+                        },
+                        (LPARAM)&enumData);
+
+    if (enumData.foundIndex >= 0)
+    {
+        monitorIndex = enumData.foundIndex;
+        std::cout << "Game window detected on monitor " << monitorIndex << std::endl;
+    }
+
+    // Try to initialize Desktop Duplication for perfect frame sync (if enabled)
+    if (Config::USE_DESKTOP_DUPLICATION)
+    {
+        std::cout << "Initializing Desktop Duplication API..." << std::endl;
+        frameData.dupContext = InitializeDesktopDuplication(monitorIndex);
+        if (frameData.dupContext)
+        {
+            std::cout << "Desktop Duplication enabled - capturing synced to display refresh!" << std::endl;
+        }
+        else
+        {
+            std::cout << "Desktop Duplication not available - falling back to BitBlt (may need admin rights)" << std::endl;
+        }
+    }
+    else
+    {
+        std::cout << "Desktop Duplication disabled in config - using BitBlt" << std::endl;
+    }
+
     // Pre-allocate all buffers with proper sizes
     int windowWidth = windowRect.right - windowRect.left;
     int windowHeight = windowRect.bottom - windowRect.top;
@@ -375,6 +465,12 @@ int main()
     // Wait for threads to finish
     captureThread.join();
     processThread.join();
+
+    // Cleanup Desktop Duplication if it was initialized
+    if (frameData.dupContext)
+    {
+        CleanupDesktopDuplication(frameData.dupContext);
+    }
 
     cv::destroyAllWindows();
     return 0;
