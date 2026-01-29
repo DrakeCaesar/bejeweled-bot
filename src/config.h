@@ -56,4 +56,8 @@ namespace Config
   const int TARGET_FPS = 30;            // Target frames per second for capture
   const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
+  // Banner settings
+  const int BANNER_HEIGHT = 40;                               // Height of info banner at top
+  const cv::Scalar BANNER_BG_COLOR = cv::Scalar(40, 40, 40);  // Dark gray background
+  const cv::Scalar BANNER_TEXT_COLOR = cv::Scalar(0, 255, 0); // Green text
 } // namespace Config

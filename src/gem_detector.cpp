@@ -204,39 +204,41 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
 
 void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
 {
-  // Draw grid lines
+  // Draw grid lines with offset for banner
   for (int i = 0; i <= Config::GRID_SIZE; i++)
   {
     int pos = i * Config::CELL_SIZE;
-    cv::line(image, cv::Point(pos, 0), cv::Point(pos, image.rows),
+    cv::line(image, cv::Point(pos, Config::BANNER_HEIGHT), cv::Point(pos, image.rows),
              cv::Scalar(100, 100, 100), 1);
-    cv::line(image, cv::Point(0, pos), cv::Point(image.cols, pos),
+    cv::line(image, cv::Point(0, Config::BANNER_HEIGHT + pos), cv::Point(image.cols, Config::BANNER_HEIGHT + pos),
              cv::Scalar(100, 100, 100), 1);
   }
 
-  // Draw gem information
+  // Draw gem information with offset for banner
   for (int row = 0; row < Config::GRID_SIZE; row++)
   {
     for (int col = 0; col < Config::GRID_SIZE; col++)
     {
       const Gem &gem = grid[row][col];
 
-      // Draw center ROI
-      cv::rectangle(image, gem.roi,
+      // Draw center ROI with offset
+      cv::Rect offsetRoi = gem.roi;
+      offsetRoi.y += Config::BANNER_HEIGHT;
+      cv::rectangle(image, offsetRoi,
                     gem.isMoving ? cv::Scalar(0, 0, 255) : cv::Scalar(0, 255, 0),
                     2);
 
-      // Draw gem type label
+      // Draw gem type label with offset
       if (!gem.isMoving && gem.type != GemType::UNKNOWN)
       {
-        cv::Point labelPos(col * Config::CELL_SIZE + 5, row * Config::CELL_SIZE + 20);
+        cv::Point labelPos(col * Config::CELL_SIZE + 5, Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 20);
         cv::putText(image, GemTypeToString(gem.type), labelPos,
                     cv::FONT_HERSHEY_SIMPLEX, 0.4,
                     GemTypeToColor(gem.type), 1);
       }
       else if (gem.isMoving)
       {
-        cv::Point labelPos(col * Config::CELL_SIZE + 5, row * Config::CELL_SIZE + 20);
+        cv::Point labelPos(col * Config::CELL_SIZE + 5, Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 20);
         cv::putText(image, "MOVING", labelPos,
                     cv::FONT_HERSHEY_SIMPLEX, 0.4,
                     cv::Scalar(0, 0, 255), 1);
@@ -265,4 +267,31 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
     std::cout << std::endl;
   }
   std::cout << std::endl;
+}
+
+void DrawBanner(cv::Mat &image, float fps)
+{
+  // Draw banner background
+  cv::rectangle(image, cv::Rect(0, 0, image.cols, Config::BANNER_HEIGHT),
+                Config::BANNER_BG_COLOR, -1);
+
+  // Create text
+  std::string fpsText = "FPS: " + std::to_string(static_cast<int>(fps + 0.5f));
+
+  // Get text size for positioning
+  int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+  double fontScale = 0.6;
+  int thickness = 1;
+  int baseline = 0;
+  cv::Size textSize = cv::getTextSize(fpsText, fontFace, fontScale, thickness, &baseline);
+
+  // Draw FPS text in banner
+  cv::putText(image, fpsText,
+              cv::Point(10, Config::BANNER_HEIGHT / 2 + textSize.height / 2),
+              fontFace, fontScale, Config::BANNER_TEXT_COLOR, thickness);
+
+  // Draw separator line below banner
+  cv::line(image, cv::Point(0, Config::BANNER_HEIGHT),
+           cv::Point(image.cols, Config::BANNER_HEIGHT),
+           cv::Scalar(100, 100, 100), 1);
 }

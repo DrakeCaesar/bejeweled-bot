@@ -54,6 +54,11 @@ int main()
     // Store previous frame for motion detection
     cv::Mat prevGameBoard;
 
+    // FPS tracking
+    auto lastFpsUpdateTime = std::chrono::high_resolution_clock::now();
+    int frameCount = 0;
+    float currentFps = 0.0f;
+
     // Main capture loop
     while (true)
     {
@@ -83,8 +88,14 @@ int main()
             // Detect gems in the grid
             std::vector<std::vector<Gem>> gemGrid = DetectGems(gameBoard, prevGameBoard);
 
-            // Create display image
-            cv::Mat displayImage = gameBoard.clone();
+            // Create display image with banner space at the top
+            cv::Mat displayImage(gameBoard.rows + Config::BANNER_HEIGHT, gameBoard.cols, gameBoard.type(), cv::Scalar(20, 20, 20));
+            
+            // Copy the game board to below the banner
+            gameBoard.copyTo(displayImage(cv::Rect(0, Config::BANNER_HEIGHT, gameBoard.cols, gameBoard.rows)));
+
+            // Draw banner with FPS
+            DrawBanner(displayImage, currentFps);
 
             // Draw debug overlay if enabled
             if (Config::SHOW_DEBUG_OVERLAY)
@@ -97,6 +108,17 @@ int main()
 
             // Store current frame for next iteration
             prevGameBoard = gameBoard.clone();
+        }
+
+        // Update FPS counter
+        frameCount++;
+        auto now = std::chrono::high_resolution_clock::now();
+        auto fpsElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFpsUpdateTime).count();
+        if (fpsElapsed >= 500) // Update FPS every 500ms
+        {
+            currentFps = (frameCount * 1000.0f) / fpsElapsed;
+            frameCount = 0;
+            lastFpsUpdateTime = now;
         }
 
         // Handle keyboard input

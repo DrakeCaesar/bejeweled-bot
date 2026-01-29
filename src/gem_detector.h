@@ -76,6 +76,13 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
 void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid);
 
 /**
+ * Draw information banner at the top of the image
+ * @param image The image to draw on (will be modified)
+ * @param fps Current frames per second
+ */
+void DrawBanner(cv::Mat &image, float fps);
+
+/**
  * Print the gem grid to console for debugging
  */
 void PrintGemGrid(const std::vector<std::vector<Gem>> &grid);
