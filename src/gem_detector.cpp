@@ -298,7 +298,7 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
   std::cout << std::endl;
 }
 
-void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs)
+void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, double drawMs, double displayMs)
 {
   // Draw banner background
   cv::rectangle(image, cv::Rect(0, 0, image.cols, Config::BANNER_HEIGHT),
@@ -308,7 +308,9 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs)
   std::ostringstream oss;
   oss << "FPS: " << std::fixed << std::setprecision(1) << fps
       << " | Capture: " << std::setprecision(2) << captureMs << "ms"
-      << " | Detect: " << detectMs << "ms";
+      << " | Detect: " << detectMs << "ms"
+      << " | Draw: " << drawMs << "ms"
+      << " | Display: " << displayMs << "ms";
   std::string bannerText = oss.str();
 
   // Get text size for positioning

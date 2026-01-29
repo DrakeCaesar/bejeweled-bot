@@ -63,12 +63,65 @@ struct TimerResolution
 
 struct TimingInfo
 {
+    // Rolling average over 100 frames
+    static const int HISTORY_SIZE = 100;
+    double captureHistory[HISTORY_SIZE] = {0};
+    double detectHistory[HISTORY_SIZE] = {0};
+    double drawHistory[HISTORY_SIZE] = {0};
+    double displayHistory[HISTORY_SIZE] = {0};
+    double fpsHistory[HISTORY_SIZE] = {0};
+    int historyIndex = 0;
+    int validFrameCount = 0; // Track how many frames we've actually collected
+
+    // Current frame timings (for updating history)
     double captureMs = 0;
-    double cropMs = 0;
     double detectMs = 0;
     double drawMs = 0;
     double displayMs = 0;
-    double totalMs = 0;
+    float currentFps = 0;
+
+    // Computed averages
+    double avgCaptureMs = 0;
+    double avgDetectMs = 0;
+    double avgDrawMs = 0;
+    double avgDisplayMs = 0;
+    float avgFps = 0;
+
+    void updateAverages()
+    {
+        captureHistory[historyIndex] = captureMs;
+        detectHistory[historyIndex] = detectMs;
+        drawHistory[historyIndex] = drawMs;
+        displayHistory[historyIndex] = displayMs;
+        fpsHistory[historyIndex] = currentFps;
+
+        historyIndex = (historyIndex + 1) % HISTORY_SIZE;
+        if (validFrameCount < HISTORY_SIZE)
+            validFrameCount++;
+
+        // Calculate averages over valid frames only
+        int count = validFrameCount;
+        avgCaptureMs = 0;
+        avgDetectMs = 0;
+        avgDrawMs = 0;
+        avgDisplayMs = 0;
+        avgFps = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            avgCaptureMs += captureHistory[i];
+            avgDetectMs += detectHistory[i];
+            avgDrawMs += drawHistory[i];
+            avgDisplayMs += displayHistory[i];
+            avgFps += fpsHistory[i];
+        }
+
+        avgCaptureMs /= count;
+        avgDetectMs /= count;
+        avgDrawMs /= count;
+        avgDisplayMs /= count;
+        avgFps /= count;
+    }
 };
 
 // ============================================================================
@@ -203,7 +256,6 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
 
             // Update timing
             timingInfo.captureMs = std::chrono::duration<double, std::milli>(captureEnd - captureStart).count();
-            timingInfo.cropMs = 0.0;
 
             frameData.captureReady = true;
         }
@@ -264,7 +316,8 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
                 fullBuffer(cv::Rect(0, 0, fullBuffer.cols, Config::BANNER_HEIGHT)).setTo(cv::Scalar(20, 20, 20));
 
                 // Draw banner and overlay directly on buffer
-                DrawBanner(fullBuffer, currentFps, timingInfo.captureMs, timingInfo.detectMs);
+                DrawBanner(fullBuffer, timingInfo.avgFps, timingInfo.avgCaptureMs, timingInfo.avgDetectMs,
+                           timingInfo.avgDrawMs, timingInfo.avgDisplayMs);
 
                 if (Config::SHOW_DEBUG_OVERLAY)
                 {
@@ -281,22 +334,28 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             // No copy needed! Previous frame is already in gameBoardBuffer[prevIndex]
         }
 
-        // Update FPS
+        // Update rolling averages every frame
         frameCount++;
         auto now = std::chrono::high_resolution_clock::now();
         auto fpsElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFpsUpdateTime).count();
+
+        // Calculate instantaneous FPS for this frame
+        timingInfo.currentFps = (frameCount * 1000.0f) / fpsElapsed;
+        timingInfo.updateAverages();
+
+        // Print to console every 500ms
         if (fpsElapsed >= 500)
         {
-            currentFps = (frameCount * 1000.0f) / fpsElapsed;
+            currentFps = timingInfo.avgFps; // Use smoothed FPS
             frameCount = 0;
             lastFpsUpdateTime = now;
 
-            std::cout << "Timing (ms): Capture=" << std::fixed << std::setprecision(2) << timingInfo.captureMs
-                      << " Crop=" << timingInfo.cropMs
-                      << " Detect=" << timingInfo.detectMs
-                      << " Draw=" << timingInfo.drawMs
-                      << " Display=" << timingInfo.displayMs
-                      << " FPS=" << currentFps << std::endl;
+            std::cout << "FPS: " << std::fixed << std::setprecision(1) << timingInfo.avgFps
+                      << " | Capture: " << std::setprecision(2) << timingInfo.avgCaptureMs << "ms"
+                      << " | Detect: " << timingInfo.avgDetectMs << "ms"
+                      << " | Draw: " << timingInfo.avgDrawMs << "ms"
+                      << " | Display: " << timingInfo.avgDisplayMs << "ms"
+                      << std::endl;
         }
     }
 }

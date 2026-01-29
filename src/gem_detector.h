@@ -81,8 +81,11 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
  * @param fps Current frames per second
  * @param captureMs Capture time in milliseconds
  * @param detectMs Detection time in milliseconds
+ * @param drawMs Draw time in milliseconds
+ * @param displayMs Display time in milliseconds
  */
-void DrawBanner(cv::Mat &image, float fps, double captureMs = 0, double detectMs = 0);
+void DrawBanner(cv::Mat &image, float fps, double captureMs = 0, double detectMs = 0,
+                double drawMs = 0, double displayMs = 0);
 
 /**
  * Print the gem grid to console for debugging
