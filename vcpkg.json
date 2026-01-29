@@ -5,7 +5,8 @@
   "dependencies": [
     {
       "name": "opencv",
-      "version>=": "4.11.0"
+      "version>=": "4.11.0",
+      "features": ["contrib", "freetype"]
     }
   ]
 }

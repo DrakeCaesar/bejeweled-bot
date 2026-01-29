@@ -86,10 +86,10 @@ struct TimingInfo
     double avgDrawMs = 0;
     double avgDisplayMs = 0;
     float avgFps = 0;
-    
+
     // Max widths for padding
-    int maxFpsWidth = 5;      // "100.0" = 5 chars
-    int maxCaptureWidth = 4;  // "0.00" = 4 chars
+    int maxFpsWidth = 5;     // "100.0" = 5 chars
+    int maxCaptureWidth = 4; // "0.00" = 4 chars
     int maxDetectWidth = 4;
     int maxDrawWidth = 4;
     int maxDisplayWidth = 4;
@@ -128,24 +128,24 @@ struct TimingInfo
         avgDrawMs /= count;
         avgDisplayMs /= count;
         avgFps /= count;
-        
+
         // Update max widths
         std::ostringstream oss;
         oss << std::fixed << std::setprecision(1) << avgFps;
         maxFpsWidth = std::max(maxFpsWidth, (int)oss.str().length());
-        
+
         oss.str("");
         oss << std::setprecision(2) << avgCaptureMs;
         maxCaptureWidth = std::max(maxCaptureWidth, (int)oss.str().length());
-        
+
         oss.str("");
         oss << avgDetectMs;
         maxDetectWidth = std::max(maxDetectWidth, (int)oss.str().length());
-        
+
         oss.str("");
         oss << avgDrawMs;
         maxDrawWidth = std::max(maxDrawWidth, (int)oss.str().length());
-        
+
         oss.str("");
         oss << avgDisplayMs;
         maxDisplayWidth = std::max(maxDisplayWidth, (int)oss.str().length());

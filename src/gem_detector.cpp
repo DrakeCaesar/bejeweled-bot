@@ -5,6 +5,48 @@
 #include <iomanip>
 #include <thread>
 #include <vector>
+#include <opencv2/freetype.hpp>
+
+// Static freetype font instance
+static cv::Ptr<cv::freetype::FreeType2> ft2;
+static bool freetypeInitialized = false;
+
+static void InitializeFreeType()
+{
+  if (freetypeInitialized)
+    return;
+
+  try
+  {
+    ft2 = cv::freetype::createFreeType2();
+
+    // Try Fira Code Nerd Font first, then common monospace fallbacks
+    std::vector<std::string> fontPaths = {
+        "C:/Windows/Fonts/FiraCodeNerdFont-Regular.ttf",
+        "C:/Windows/Fonts/FiraCodeNerdFontMono-Regular.ttf",
+        "C:/Windows/Fonts/consola.ttf", // Consolas
+        "C:/Windows/Fonts/cour.ttf",    // Courier New
+    };
+
+    for (const auto &path : fontPaths)
+    {
+      try
+      {
+        ft2->loadFontData(path, 0);
+        freetypeInitialized = true;
+        return;
+      }
+      catch (...)
+      {
+        continue;
+      }
+    }
+  }
+  catch (...)
+  {
+    // FreeType not available, will use built-in font
+  }
+}
 
 std::string GemTypeToString(GemType type)
 {
@@ -301,6 +343,9 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
 void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, double drawMs, double displayMs,
                 int fpsWidth, int captureWidth, int detectWidth, int drawWidth, int displayWidth)
 {
+  // Initialize FreeType on first call
+  InitializeFreeType();
+
   // Draw banner background
   cv::rectangle(image, cv::Rect(0, 0, image.cols, Config::BANNER_HEIGHT),
                 Config::BANNER_BG_COLOR, -1);
@@ -314,17 +359,31 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, do
       << " | Display: " << std::setw(displayWidth) << displayMs << "ms";
   std::string bannerText = oss.str();
 
-  // Get text size for positioning
-  int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-  double fontScale = 0.5;
-  int thickness = 1;
-  int baseline = 0;
-  cv::Size textSize = cv::getTextSize(bannerText, fontFace, fontScale, thickness, &baseline);
+  // Draw text with monospace font
+  if (freetypeInitialized && ft2)
+  {
+    // Use FreeType2 with monospace font
+    ft2->putText(image, bannerText,
+                 cv::Point(10, Config::BANNER_HEIGHT / 2 - 8),
+                 16, // Font height
+                 Config::BANNER_TEXT_COLOR,
+                 -1, // Thickness (filled)
+                 cv::LINE_AA,
+                 false); // Bottom-left origin
+  }
+  else
+  {
+    // Fallback to built-in font (not truly monospace but best we have)
+    int fontFace = cv::FONT_HERSHEY_PLAIN;
+    double fontScale = 1.0;
+    int thickness = 1;
+    int baseline = 0;
+    cv::Size textSize = cv::getTextSize(bannerText, fontFace, fontScale, thickness, &baseline);
 
-  // Draw text in banner
-  cv::putText(image, bannerText,
-              cv::Point(10, Config::BANNER_HEIGHT / 2 + textSize.height / 2),
-              fontFace, fontScale, Config::BANNER_TEXT_COLOR, thickness);
+    cv::putText(image, bannerText,
+                cv::Point(10, Config::BANNER_HEIGHT / 2 + textSize.height / 2),
+                fontFace, fontScale, Config::BANNER_TEXT_COLOR, thickness);
+  }
 
   // Draw separator line below banner
   cv::line(image, cv::Point(0, Config::BANNER_HEIGHT),
