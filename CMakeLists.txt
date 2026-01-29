@@ -10,7 +10,14 @@ find_package(OpenCV CONFIG REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-add_executable(bejeweled-bot src/main.cpp)
+add_executable(bejeweled-bot
+  src/main.cpp
+  src/window_capture.cpp
+  src/gem_detector.cpp
+)
 
 target_link_libraries(bejeweled-bot PRIVATE ${OpenCV_LIBS})
-target_include_directories(bejeweled-bot PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_include_directories(bejeweled-bot PRIVATE
+  ${OpenCV_INCLUDE_DIRS}
+  ${CMAKE_SOURCE_DIR}/src
+)
