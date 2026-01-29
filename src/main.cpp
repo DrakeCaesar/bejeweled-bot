@@ -77,10 +77,11 @@ struct TimingInfo
 
 struct SharedFrameData
 {
-    // Double buffers for game board
-    cv::Mat gameBoardBuffer[2];
+    // Triple buffers for game board (circular rotation: capture -> process -> previous)
+    cv::Mat gameBoardBuffer[3];
     int captureIndex = 0;
     int processIndex = 1;
+    int prevIndex = 2;
 
     std::mutex mutex;
     std::condition_variable cv;
@@ -93,9 +94,6 @@ struct SharedFrameData
     int displayWriteIndex = 0;
     int displayReadIndex = 1;
     bool hasDisplayReady = false;
-
-    // Previous frame for motion detection
-    cv::Mat prevGameBoard;
 
     // Desktop Duplication context
     DuplicationContext *dupContext = nullptr;
@@ -230,21 +228,24 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
         if (frameData.shouldExit && !frameData.captureReady)
             break;
 
-        // Swap indices first
-        frameData.captureIndex = 1 - frameData.captureIndex;
-        frameData.processIndex = 1 - frameData.processIndex;
+        // Rotate triple buffer indices: prev <- process <- capture <- next
+        int oldPrev = frameData.prevIndex;
+        frameData.prevIndex = frameData.processIndex;
+        frameData.processIndex = frameData.captureIndex;
+        frameData.captureIndex = oldPrev;
         frameData.captureReady = false;
 
         lock.unlock();
 
-        // Use direct reference to buffer (no copy needed - buffer won't change until next frame)
-        cv::Mat &currentFrame = frameData.gameBoardBuffer[1 - frameData.processIndex]; // The buffer we just finished capturing
+        // Use direct reference to buffers (no copy needed!)
+        cv::Mat &currentFrame = frameData.gameBoardBuffer[frameData.processIndex];
+        cv::Mat &prevFrame = frameData.gameBoardBuffer[frameData.prevIndex];
 
         if (!currentFrame.empty())
         {
-            // Detect gems
+            // Detect gems (using previous frame for motion detection)
             auto detectStart = std::chrono::high_resolution_clock::now();
-            std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, frameData.prevGameBoard);
+            std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, prevFrame);
             auto detectEnd = std::chrono::high_resolution_clock::now();
             timingInfo.detectMs = std::chrono::duration<double, std::milli>(detectEnd - detectStart).count();
 
@@ -275,8 +276,7 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             auto drawEnd = std::chrono::high_resolution_clock::now();
             timingInfo.drawMs = std::chrono::duration<double, std::milli>(drawEnd - drawStart).count();
 
-            // Update previous frame (only copy needed for motion detection)
-            currentFrame.copyTo(frameData.prevGameBoard);
+            // No copy needed! Previous frame is already in gameBoardBuffer[prevIndex]
         }
 
         // Update FPS
@@ -421,12 +421,11 @@ int main()
     int captureType = dummyCapture.type();
     int boardType = dummyBoard.type();
 
-    for (int i = 0; i < 2; i++)
+    // Triple buffer for game board (circular rotation eliminates prevGameBoard copy!)
+    for (int i = 0; i < 3; i++)
     {
         frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.size(), boardType);
     }
-    frameData.prevGameBoard = cv::Mat(dummyBoard.size(), boardType);
-    frameData.prevGameBoard.setTo(cv::Scalar(0, 0, 0, 0)); // Initialize to black
     // Double buffer for display (zero-copy display)
     for (int i = 0; i < 2; i++)
     {
