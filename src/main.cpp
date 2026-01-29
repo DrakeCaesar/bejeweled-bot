@@ -58,8 +58,8 @@ struct TimingInfo
 
 struct SharedFrameData
 {
-    // Double buffers for capture
-    cv::Mat captureBuffer[2];
+    // Buffers
+    cv::Mat fullWindowBuffer; // For direct capture (no allocation)
     cv::Mat gameBoardBuffer[2];
     int captureIndex = 0;
     int processIndex = 1;
@@ -103,21 +103,18 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             lastActivation = now;
         }
 
-        // Capture window
+        // Capture directly into pre-allocated buffer (zero allocation)
         auto captureStart = std::chrono::high_resolution_clock::now();
-        cv::Mat fullWindow = CaptureWindow(gameWindow);
+        bool captureSuccess = CaptureWindowInto(gameWindow, frameData.fullWindowBuffer);
         auto captureEnd = std::chrono::high_resolution_clock::now();
 
-        if (fullWindow.empty())
+        if (!captureSuccess)
         {
             std::cerr << "Warning: Failed to capture window" << std::endl;
             continue;
         }
 
-        // Crop to game board
         auto cropStart = std::chrono::high_resolution_clock::now();
-        cv::Mat gameBoard = CropGameBoard(fullWindow);
-        auto cropEnd = std::chrono::high_resolution_clock::now();
 
         {
             std::lock_guard<std::mutex> lock(frameData.mutex);
@@ -125,9 +122,13 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             if (frameData.shouldExit)
                 break;
 
-            // Copy into pre-allocated buffers (no reallocation)
-            fullWindow.copyTo(frameData.captureBuffer[frameData.captureIndex]);
-            gameBoard.copyTo(frameData.gameBoardBuffer[frameData.captureIndex]);
+            // Crop directly into pre-allocated buffer (zero allocation)
+            cv::Rect cropRect(Config::BOARD_X, Config::BOARD_Y,
+                              std::min(Config::BOARD_WIDTH, frameData.fullWindowBuffer.cols - Config::BOARD_X),
+                              std::min(Config::BOARD_HEIGHT, frameData.fullWindowBuffer.rows - Config::BOARD_Y));
+            frameData.fullWindowBuffer(cropRect).copyTo(frameData.gameBoardBuffer[frameData.captureIndex]);
+
+            auto cropEnd = std::chrono::high_resolution_clock::now();
 
             // Update timing
             timingInfo.captureMs = std::chrono::duration<double, std::milli>(captureEnd - captureStart).count();
@@ -292,19 +293,19 @@ int main()
     int captureType = dummyCapture.type();
     int boardType = dummyBoard.type();
 
+    frameData.fullWindowBuffer = cv::Mat(dummyCapture.size(), captureType);
     for (int i = 0; i < 2; i++)
     {
-        frameData.captureBuffer[i] = cv::Mat(dummyCapture.size(), captureType);
         frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.size(), boardType);
     }
     frameData.processWorkingBuffer = cv::Mat(dummyBoard.size(), boardType);
     frameData.prevGameBoard = cv::Mat(dummyBoard.size(), boardType);
     frameData.prevGameBoard.setTo(cv::Scalar(0, 0, 0, 0)); // Initialize to black
+    // Double buffer for display (eliminate copy in main thread)
     frameData.displayReady = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
     frameData.displayCopy = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
 
-    std::cout << "Pre-allocated buffers: Capture=" << dummyCapture.size() << " type=" << captureType
-              << ", Board=" << dummyBoard.size() << " type=" << boardType << std::endl;
+    std::cout << "Pre-allocated buffers: Board=" << dummyBoard.size() << " type=" << boardType << std::endl;
 
     // Timing tracking
     TimingInfo timingInfo;
@@ -364,11 +365,6 @@ int main()
             std::cout << "Window info:" << std::endl;
             {
                 std::lock_guard<std::mutex> lock(frameData.mutex);
-                if (!frameData.captureBuffer[frameData.processIndex].empty())
-                {
-                    std::cout << "  Full window size: " << frameData.captureBuffer[frameData.processIndex].cols
-                              << "x" << frameData.captureBuffer[frameData.processIndex].rows << std::endl;
-                }
                 if (!frameData.gameBoardBuffer[frameData.processIndex].empty())
                 {
                     std::cout << "  Game board size: " << frameData.gameBoardBuffer[frameData.processIndex].cols
