@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Rebuild and Run",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/builds/msbuild-vcpkg/Debug/bejeweled-bot.exe",
+      "preLaunchTask": "Rebuild and Run",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "suppressMultipleSessionWarning": true
+    }
+  ]
+}

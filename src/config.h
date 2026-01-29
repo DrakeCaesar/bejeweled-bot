@@ -25,8 +25,8 @@ namespace Config
   const int CELL_SIZE = 128; // Each cell is 128x128 pixels
 
   // Gem detection settings
-  const int GEM_CENTER_SIZE = 80;      // Size of center region to sample (80x80 from center of 128x128 cell)
-  const float MOTION_THRESHOLD = 5.0f; // Pixel difference threshold to detect motion
+  const int GEM_CENTER_SIZE = 80;       // Size of center region to sample (80x80 from center of 128x128 cell)
+  const float MOTION_THRESHOLD = 50.0f; // Pixel difference threshold to detect motion
 
   // Color thresholds for gem classification (HSV color space)
   // These need to be calibrated based on actual game colors
