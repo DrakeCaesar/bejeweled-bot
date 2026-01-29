@@ -10,6 +10,16 @@
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "suppressMultipleSessionWarning": true
+    },
+    {
+      "name": "Rebuild and Run (Release)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/builds/msbuild-vcpkg/Release/bejeweled-bot.exe",
+      "preLaunchTask": "Rebuild and Run (Release)",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "suppressMultipleSessionWarning": true
     }
   ]
 }

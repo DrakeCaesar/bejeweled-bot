@@ -26,6 +26,31 @@
 				"kind": "build",
 				"isDefault": true
 			}
+		},
+		{
+			"label": "Rebuild and Run (Release)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-c",
+				"taskkill -IM bejeweled-bot.exe -F 2>/dev/null || true; cmake --build builds/msbuild-vcpkg --config Release && ./builds/msbuild-vcpkg/Release/bejeweled-bot.exe"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "shared"
+			},
+			"group": {
+				"kind": "build"
+			}
 		}
 	]
 }

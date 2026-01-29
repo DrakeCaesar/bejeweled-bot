@@ -90,7 +90,7 @@ int main()
 
             // Create display image with banner space at the top
             cv::Mat displayImage(gameBoard.rows + Config::BANNER_HEIGHT, gameBoard.cols, gameBoard.type(), cv::Scalar(20, 20, 20));
-            
+
             // Copy the game board to below the banner
             gameBoard.copyTo(displayImage(cv::Rect(0, Config::BANNER_HEIGHT, gameBoard.cols, gameBoard.rows)));
 
