@@ -79,8 +79,10 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
  * Draw information banner at the top of the image
  * @param image The image to draw on (will be modified)
  * @param fps Current frames per second
+ * @param captureMs Capture time in milliseconds
+ * @param detectMs Detection time in milliseconds
  */
-void DrawBanner(cv::Mat &image, float fps);
+void DrawBanner(cv::Mat &image, float fps, double captureMs = 0, double detectMs = 0);
 
 /**
  * Print the gem grid to console for debugging

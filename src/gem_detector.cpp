@@ -1,6 +1,8 @@
 #include "gem_detector.h"
 #include "config.h"
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 
 std::string GemTypeToString(GemType type)
 {
@@ -269,24 +271,28 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
   std::cout << std::endl;
 }
 
-void DrawBanner(cv::Mat &image, float fps)
+void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs)
 {
   // Draw banner background
   cv::rectangle(image, cv::Rect(0, 0, image.cols, Config::BANNER_HEIGHT),
                 Config::BANNER_BG_COLOR, -1);
 
-  // Create text
-  std::string fpsText = "FPS: " + std::to_string(static_cast<int>(fps + 0.5f));
+  // Create timing text
+  std::ostringstream oss;
+  oss << "FPS: " << std::fixed << std::setprecision(1) << fps
+      << " | Capture: " << std::setprecision(2) << captureMs << "ms"
+      << " | Detect: " << detectMs << "ms";
+  std::string bannerText = oss.str();
 
   // Get text size for positioning
   int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-  double fontScale = 0.6;
+  double fontScale = 0.5;
   int thickness = 1;
   int baseline = 0;
-  cv::Size textSize = cv::getTextSize(fpsText, fontFace, fontScale, thickness, &baseline);
+  cv::Size textSize = cv::getTextSize(bannerText, fontFace, fontScale, thickness, &baseline);
 
-  // Draw FPS text in banner
-  cv::putText(image, fpsText,
+  // Draw text in banner
+  cv::putText(image, bannerText,
               cv::Point(10, Config::BANNER_HEIGHT / 2 + textSize.height / 2),
               fontFace, fontScale, Config::BANNER_TEXT_COLOR, thickness);
 
