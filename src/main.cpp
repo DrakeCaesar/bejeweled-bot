@@ -88,15 +88,14 @@ struct SharedFrameData
     bool shouldExit = false;
     bool captureReady = false;
 
-    // Display buffer
-    cv::Mat displayReady;
+    // Double buffers for display (zero-copy display)
+    cv::Mat displayBuffer[2];
+    int displayWriteIndex = 0;
+    int displayReadIndex = 1;
     bool hasDisplayReady = false;
 
     // Previous frame for motion detection
     cv::Mat prevGameBoard;
-
-    // Main thread display copy
-    cv::Mat displayCopy;
 
     // Desktop Duplication context
     DuplicationContext *dupContext = nullptr;
@@ -255,17 +254,21 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             {
                 std::lock_guard<std::mutex> displayLock(frameData.mutex);
 
-                frameData.displayReady.setTo(cv::Scalar(20, 20, 20));
-                currentFrame.copyTo(frameData.displayReady(cv::Rect(0, Config::BANNER_HEIGHT,
-                                                                    currentFrame.cols,
-                                                                    currentFrame.rows)));
-                DrawBanner(frameData.displayReady, currentFps, timingInfo.captureMs, timingInfo.detectMs);
+                cv::Mat &displayBuf = frameData.displayBuffer[frameData.displayWriteIndex];
+                displayBuf.setTo(cv::Scalar(20, 20, 20));
+                currentFrame.copyTo(displayBuf(cv::Rect(0, Config::BANNER_HEIGHT,
+                                                        currentFrame.cols,
+                                                        currentFrame.rows)));
+                DrawBanner(displayBuf, currentFps, timingInfo.captureMs, timingInfo.detectMs);
 
                 if (Config::SHOW_DEBUG_OVERLAY)
                 {
-                    DrawDebugOverlay(frameData.displayReady, gemGrid);
+                    DrawDebugOverlay(displayBuf, gemGrid);
                 }
 
+                // Swap display buffer indices
+                frameData.displayWriteIndex = 1 - frameData.displayWriteIndex;
+                frameData.displayReadIndex = 1 - frameData.displayReadIndex;
                 frameData.hasDisplayReady = true;
             }
 
@@ -424,9 +427,11 @@ int main()
     }
     frameData.prevGameBoard = cv::Mat(dummyBoard.size(), boardType);
     frameData.prevGameBoard.setTo(cv::Scalar(0, 0, 0, 0)); // Initialize to black
-    // Double buffer for display (eliminate copy in main thread)
-    frameData.displayReady = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
-    frameData.displayCopy = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
+    // Double buffer for display (zero-copy display)
+    for (int i = 0; i < 2; i++)
+    {
+        frameData.displayBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
+    }
 
     std::cout << "Pre-allocated buffers: Board=" << dummyBoard.size() << " type=" << boardType << std::endl;
 
@@ -454,15 +459,16 @@ int main()
 
     // Main thread: handle keyboard input and display
     bool running = true;
-    bool shouldDisplay = false;
     while (running)
     {
-        // Quick copy while holding mutex, then display without mutex
+        // Check if display is ready (no copy - direct display!)
+        bool shouldDisplay = false;
+        int displayIdx = 0;
         {
             std::lock_guard<std::mutex> lock(frameData.mutex);
             if (frameData.hasDisplayReady)
             {
-                frameData.displayReady.copyTo(frameData.displayCopy);
+                displayIdx = frameData.displayReadIndex;
                 frameData.hasDisplayReady = false;
                 shouldDisplay = true;
             }
@@ -472,10 +478,9 @@ int main()
         if (shouldDisplay)
         {
             auto displayStart = std::chrono::high_resolution_clock::now();
-            cv::imshow(Config::DISPLAY_WINDOW_NAME, frameData.displayCopy);
+            cv::imshow(Config::DISPLAY_WINDOW_NAME, frameData.displayBuffer[displayIdx]);
             auto displayEnd = std::chrono::high_resolution_clock::now();
             timingInfo.displayMs = std::chrono::duration<double, std::milli>(displayEnd - displayStart).count();
-            shouldDisplay = false;
         }
 
         int key = cv::waitKey(1);
