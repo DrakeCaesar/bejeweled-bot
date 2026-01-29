@@ -77,7 +77,8 @@ struct TimingInfo
 
 struct SharedFrameData
 {
-    // Triple buffers for game board (circular rotation: capture -> process -> previous)
+    // Triple buffers sized for display (banner + game board)
+    // Capture writes to bottom region, banner drawn on top - zero copy display!
     cv::Mat gameBoardBuffer[3];
     int captureIndex = 0;
     int processIndex = 1;
@@ -88,12 +89,8 @@ struct SharedFrameData
 
     bool shouldExit = false;
     bool captureReady = false;
-
-    // Double buffers for display (zero-copy display)
-    cv::Mat displayBuffer[2];
-    int displayWriteIndex = 0;
-    int displayReadIndex = 1;
     bool hasDisplayReady = false;
+    int displayReadIndex = 1;
 
     // Desktop Duplication context
     DuplicationContext *dupContext = nullptr;
@@ -152,6 +149,10 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
         bool captureSuccess = false;
         auto captureStart = std::chrono::high_resolution_clock::now();
 
+        // Get ROI for game board region (below banner)
+        cv::Mat gameBoardROI = frameData.gameBoardBuffer[frameData.captureIndex](
+            cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
+
         if (useDuplication)
         {
             // Convert window-relative coordinates to screen-absolute coordinates
@@ -168,18 +169,18 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
                 frameData.dupContext,
                 screenX, screenY,
                 Config::BOARD_WIDTH, Config::BOARD_HEIGHT,
-                frameData.gameBoardBuffer[frameData.captureIndex],
+                gameBoardROI,
                 16 // 16ms timeout = ~60 FPS minimum
             );
         }
         else
         {
-            // Fallback to BitBlt
+            // Fallback to BitBlt - capture into ROI
             captureSuccess = CaptureWindowRegionInto(
                 gameWindow,
                 Config::BOARD_X, Config::BOARD_Y,
                 Config::BOARD_WIDTH, Config::BOARD_HEIGHT,
-                frameData.gameBoardBuffer[frameData.captureIndex]);
+                gameBoardROI);
         }
 
         auto captureEnd = std::chrono::high_resolution_clock::now();
@@ -237,9 +238,11 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
 
         lock.unlock();
 
-        // Use direct reference to buffers (no copy needed!)
-        cv::Mat &currentFrame = frameData.gameBoardBuffer[frameData.processIndex];
-        cv::Mat &prevFrame = frameData.gameBoardBuffer[frameData.prevIndex];
+        // Get ROI references for game board region (excluding banner)
+        cv::Mat currentFrame = frameData.gameBoardBuffer[frameData.processIndex](
+            cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
+        cv::Mat prevFrame = frameData.gameBoardBuffer[frameData.prevIndex](
+            cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
         if (!currentFrame.empty())
         {
@@ -249,27 +252,26 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             auto detectEnd = std::chrono::high_resolution_clock::now();
             timingInfo.detectMs = std::chrono::duration<double, std::milli>(detectEnd - detectStart).count();
 
-            // Draw into pre-allocated display buffer (protected by mutex)
+            // Draw banner and overlay directly onto the buffer (zero-copy!)
             auto drawStart = std::chrono::high_resolution_clock::now();
 
             {
                 std::lock_guard<std::mutex> displayLock(frameData.mutex);
 
-                cv::Mat &displayBuf = frameData.displayBuffer[frameData.displayWriteIndex];
-                displayBuf.setTo(cv::Scalar(20, 20, 20));
-                currentFrame.copyTo(displayBuf(cv::Rect(0, Config::BANNER_HEIGHT,
-                                                        currentFrame.cols,
-                                                        currentFrame.rows)));
-                DrawBanner(displayBuf, currentFps, timingInfo.captureMs, timingInfo.detectMs);
+                cv::Mat &fullBuffer = frameData.gameBoardBuffer[frameData.processIndex];
+
+                // Clear banner area
+                fullBuffer(cv::Rect(0, 0, fullBuffer.cols, Config::BANNER_HEIGHT)).setTo(cv::Scalar(20, 20, 20));
+
+                // Draw banner and overlay directly on buffer
+                DrawBanner(fullBuffer, currentFps, timingInfo.captureMs, timingInfo.detectMs);
 
                 if (Config::SHOW_DEBUG_OVERLAY)
                 {
-                    DrawDebugOverlay(displayBuf, gemGrid);
+                    DrawDebugOverlay(fullBuffer, gemGrid);
                 }
 
-                // Swap display buffer indices
-                frameData.displayWriteIndex = 1 - frameData.displayWriteIndex;
-                frameData.displayReadIndex = 1 - frameData.displayReadIndex;
+                frameData.displayReadIndex = frameData.processIndex;
                 frameData.hasDisplayReady = true;
             }
 
@@ -421,15 +423,11 @@ int main()
     int captureType = dummyCapture.type();
     int boardType = dummyBoard.type();
 
-    // Triple buffer for game board (circular rotation eliminates prevGameBoard copy!)
+    // Triple buffer for game board WITH banner space (zero-copy display!)
+    // Buffers are 1064px tall (40px banner + 1024px game)
     for (int i = 0; i < 3; i++)
     {
-        frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.size(), boardType);
-    }
-    // Double buffer for display (zero-copy display)
-    for (int i = 0; i < 2; i++)
-    {
-        frameData.displayBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
+        frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
     }
 
     std::cout << "Pre-allocated buffers: Board=" << dummyBoard.size() << " type=" << boardType << std::endl;
@@ -460,7 +458,7 @@ int main()
     bool running = true;
     while (running)
     {
-        // Check if display is ready (no copy - direct display!)
+        // Check if display is ready (zero-copy - direct display!)
         bool shouldDisplay = false;
         int displayIdx = 0;
         {
@@ -477,7 +475,7 @@ int main()
         if (shouldDisplay)
         {
             auto displayStart = std::chrono::high_resolution_clock::now();
-            cv::imshow(Config::DISPLAY_WINDOW_NAME, frameData.displayBuffer[displayIdx]);
+            cv::imshow(Config::DISPLAY_WINDOW_NAME, frameData.gameBoardBuffer[displayIdx]);
             auto displayEnd = std::chrono::high_resolution_clock::now();
             timingInfo.displayMs = std::chrono::duration<double, std::milli>(displayEnd - displayStart).count();
         }
