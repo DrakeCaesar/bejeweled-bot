@@ -7,7 +7,7 @@
 			"command": "bash",
 			"args": [
 				"-c",
-				"pkill -f bejeweled-bot || true; cmake --build builds/msbuild-vcpkg --config Debug && ./builds/msbuild-vcpkg/Debug/bejeweled-bot.exe"
+				"taskkill -IM bejeweled-bot.exe -F 2>/dev/null || true; cmake --build builds/msbuild-vcpkg --config Debug && ./builds/msbuild-vcpkg/Debug/bejeweled-bot.exe"
 			],
 			"options": {
 				"cwd": "${workspaceFolder}"
@@ -25,7 +25,7 @@
 			"group": {
 				"kind": "build",
 				"isDefault": true
-			},
+			}
 		}
-	],
+	]
 }

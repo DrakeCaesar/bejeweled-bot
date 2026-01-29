@@ -125,6 +125,13 @@ int main()
             }
         }
 
+        // Check if window was closed
+        if (cv::getWindowProperty(Config::DISPLAY_WINDOW_NAME, cv::WND_PROP_VISIBLE) <= 0)
+        {
+            std::cout << "Window closed. Exiting..." << std::endl;
+            break;
+        }
+
         // Maintain target FPS
         auto endTime = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
