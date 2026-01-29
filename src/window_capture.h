@@ -32,6 +32,18 @@ cv::Mat CaptureWindow(HWND hwnd);
 bool CaptureWindowInto(HWND hwnd, cv::Mat &outputBuffer);
 
 /**
+ * Capture a specific region of a window directly into a pre-allocated buffer
+ * @param hwnd Window handle to capture
+ * @param x X offset from window client area
+ * @param y Y offset from window client area
+ * @param width Width of region to capture
+ * @param height Height of region to capture
+ * @param outputBuffer Pre-allocated Mat to write into (must match width x height x CV_8UC3)
+ * @return true if successful, false otherwise
+ */
+bool CaptureWindowRegionInto(HWND hwnd, int x, int y, int width, int height, cv::Mat &outputBuffer);
+
+/**
  * Crop the game board from the full window capture
  * @param fullWindow The full window capture
  * @return Cropped game board region

@@ -152,6 +152,59 @@ bool CaptureWindowInto(HWND hwnd, cv::Mat &outputBuffer)
   return true;
 }
 
+bool CaptureWindowRegionInto(HWND hwnd, int x, int y, int width, int height, cv::Mat &outputBuffer)
+{
+  if (!hwnd || outputBuffer.empty())
+  {
+    return false;
+  }
+
+  // Verify buffer size matches requested region
+  if (outputBuffer.rows != height || outputBuffer.cols != width || outputBuffer.type() != CV_8UC3)
+  {
+    return false;
+  }
+
+  // Get device context
+  HDC hdcWindow = GetDC(hwnd);
+  HDC hdcMemory = CreateCompatibleDC(hdcWindow);
+
+  // Create bitmap for the region only
+  HBITMAP hBitmap = CreateCompatibleBitmap(hdcWindow, width, height);
+  HGDIOBJ oldBitmap = SelectObject(hdcMemory, hBitmap);
+
+  // Copy only the specified region from window
+  BitBlt(hdcMemory, 0, 0, width, height, hdcWindow, x, y, SRCCOPY);
+
+  // Convert to OpenCV Mat
+  BITMAPINFOHEADER bi;
+  bi.biSize = sizeof(BITMAPINFOHEADER);
+  bi.biWidth = width;
+  bi.biHeight = -height; // Negative to flip image
+  bi.biPlanes = 1;
+  bi.biBitCount = 32;
+  bi.biCompression = BI_RGB;
+  bi.biSizeImage = 0;
+  bi.biXPelsPerMeter = 0;
+  bi.biYPelsPerMeter = 0;
+  bi.biClrUsed = 0;
+  bi.biClrImportant = 0;
+
+  cv::Mat temp(height, width, CV_8UC4);
+  GetDIBits(hdcMemory, hBitmap, 0, height, temp.data, (BITMAPINFO *)&bi, DIB_RGB_COLORS);
+
+  // Convert BGRA to BGR directly into output buffer
+  cv::cvtColor(temp, outputBuffer, cv::COLOR_BGRA2BGR);
+
+  // Cleanup
+  SelectObject(hdcMemory, oldBitmap);
+  DeleteObject(hBitmap);
+  DeleteDC(hdcMemory);
+  ReleaseDC(hwnd, hdcWindow);
+
+  return true;
+}
+
 cv::Mat CropGameBoard(const cv::Mat &fullWindow)
 {
   if (fullWindow.empty())

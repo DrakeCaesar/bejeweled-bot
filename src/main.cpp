@@ -58,8 +58,7 @@ struct TimingInfo
 
 struct SharedFrameData
 {
-    // Buffers
-    cv::Mat fullWindowBuffer; // For direct capture (no allocation)
+    // Double buffers for game board
     cv::Mat gameBoardBuffer[2];
     int captureIndex = 0;
     int processIndex = 1;
@@ -103,18 +102,18 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             lastActivation = now;
         }
 
-        // Capture directly into pre-allocated buffer (zero allocation)
+        // Capture only the game board region directly (zero allocation, zero crop)
         auto captureStart = std::chrono::high_resolution_clock::now();
-        bool captureSuccess = CaptureWindowInto(gameWindow, frameData.fullWindowBuffer);
+        bool captureSuccess = CaptureWindowRegionInto(gameWindow, Config::BOARD_X, Config::BOARD_Y,
+                                                      Config::BOARD_WIDTH, Config::BOARD_HEIGHT,
+                                                      frameData.gameBoardBuffer[frameData.captureIndex]);
         auto captureEnd = std::chrono::high_resolution_clock::now();
 
         if (!captureSuccess)
         {
-            std::cerr << "Warning: Failed to capture window" << std::endl;
+            std::cerr << "Warning: Failed to capture window region" << std::endl;
             continue;
         }
-
-        auto cropStart = std::chrono::high_resolution_clock::now();
 
         {
             std::lock_guard<std::mutex> lock(frameData.mutex);
@@ -122,17 +121,9 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             if (frameData.shouldExit)
                 break;
 
-            // Crop directly into pre-allocated buffer (zero allocation)
-            cv::Rect cropRect(Config::BOARD_X, Config::BOARD_Y,
-                              std::min(Config::BOARD_WIDTH, frameData.fullWindowBuffer.cols - Config::BOARD_X),
-                              std::min(Config::BOARD_HEIGHT, frameData.fullWindowBuffer.rows - Config::BOARD_Y));
-            frameData.fullWindowBuffer(cropRect).copyTo(frameData.gameBoardBuffer[frameData.captureIndex]);
-
-            auto cropEnd = std::chrono::high_resolution_clock::now();
-
-            // Update timing
+            // Update timing (crop is now part of capture)
             timingInfo.captureMs = std::chrono::duration<double, std::milli>(captureEnd - captureStart).count();
-            timingInfo.cropMs = std::chrono::duration<double, std::milli>(cropEnd - cropStart).count();
+            timingInfo.cropMs = 0.0; // No separate crop needed
 
             frameData.captureReady = true;
         }
@@ -293,7 +284,6 @@ int main()
     int captureType = dummyCapture.type();
     int boardType = dummyBoard.type();
 
-    frameData.fullWindowBuffer = cv::Mat(dummyCapture.size(), captureType);
     for (int i = 0; i < 2; i++)
     {
         frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.size(), boardType);
