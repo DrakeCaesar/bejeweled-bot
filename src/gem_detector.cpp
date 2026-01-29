@@ -298,19 +298,20 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
   std::cout << std::endl;
 }
 
-void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, double drawMs, double displayMs)
+void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, double drawMs, double displayMs,
+                int fpsWidth, int captureWidth, int detectWidth, int drawWidth, int displayWidth)
 {
   // Draw banner background
   cv::rectangle(image, cv::Rect(0, 0, image.cols, Config::BANNER_HEIGHT),
                 Config::BANNER_BG_COLOR, -1);
 
-  // Create timing text
+  // Create timing text with padding
   std::ostringstream oss;
-  oss << "FPS: " << std::fixed << std::setprecision(1) << fps
-      << " | Capture: " << std::setprecision(2) << captureMs << "ms"
-      << " | Detect: " << detectMs << "ms"
-      << " | Draw: " << drawMs << "ms"
-      << " | Display: " << displayMs << "ms";
+  oss << "FPS: " << std::fixed << std::setprecision(1) << std::setw(fpsWidth) << fps
+      << " | Capture: " << std::setprecision(2) << std::setw(captureWidth) << captureMs << "ms"
+      << " | Detect: " << std::setw(detectWidth) << detectMs << "ms"
+      << " | Draw: " << std::setw(drawWidth) << drawMs << "ms"
+      << " | Display: " << std::setw(displayWidth) << displayMs << "ms";
   std::string bannerText = oss.str();
 
   // Get text size for positioning

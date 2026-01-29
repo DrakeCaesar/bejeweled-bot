@@ -86,6 +86,13 @@ struct TimingInfo
     double avgDrawMs = 0;
     double avgDisplayMs = 0;
     float avgFps = 0;
+    
+    // Max widths for padding
+    int maxFpsWidth = 5;      // "100.0" = 5 chars
+    int maxCaptureWidth = 4;  // "0.00" = 4 chars
+    int maxDetectWidth = 4;
+    int maxDrawWidth = 4;
+    int maxDisplayWidth = 4;
 
     void updateAverages()
     {
@@ -121,6 +128,27 @@ struct TimingInfo
         avgDrawMs /= count;
         avgDisplayMs /= count;
         avgFps /= count;
+        
+        // Update max widths
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1) << avgFps;
+        maxFpsWidth = std::max(maxFpsWidth, (int)oss.str().length());
+        
+        oss.str("");
+        oss << std::setprecision(2) << avgCaptureMs;
+        maxCaptureWidth = std::max(maxCaptureWidth, (int)oss.str().length());
+        
+        oss.str("");
+        oss << avgDetectMs;
+        maxDetectWidth = std::max(maxDetectWidth, (int)oss.str().length());
+        
+        oss.str("");
+        oss << avgDrawMs;
+        maxDrawWidth = std::max(maxDrawWidth, (int)oss.str().length());
+        
+        oss.str("");
+        oss << avgDisplayMs;
+        maxDisplayWidth = std::max(maxDisplayWidth, (int)oss.str().length());
     }
 };
 
@@ -317,7 +345,9 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
 
                 // Draw banner and overlay directly on buffer
                 DrawBanner(fullBuffer, timingInfo.avgFps, timingInfo.avgCaptureMs, timingInfo.avgDetectMs,
-                           timingInfo.avgDrawMs, timingInfo.avgDisplayMs);
+                           timingInfo.avgDrawMs, timingInfo.avgDisplayMs,
+                           timingInfo.maxFpsWidth, timingInfo.maxCaptureWidth, timingInfo.maxDetectWidth,
+                           timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
 
                 if (Config::SHOW_DEBUG_OVERLAY)
                 {
@@ -350,11 +380,11 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             frameCount = 0;
             lastFpsUpdateTime = now;
 
-            std::cout << "FPS: " << std::fixed << std::setprecision(1) << timingInfo.avgFps
-                      << " | Capture: " << std::setprecision(2) << timingInfo.avgCaptureMs << "ms"
-                      << " | Detect: " << timingInfo.avgDetectMs << "ms"
-                      << " | Draw: " << timingInfo.avgDrawMs << "ms"
-                      << " | Display: " << timingInfo.avgDisplayMs << "ms"
+            std::cout << "FPS: " << std::fixed << std::setprecision(1) << std::setw(timingInfo.maxFpsWidth) << timingInfo.avgFps
+                      << " | Capture: " << std::setprecision(2) << std::setw(timingInfo.maxCaptureWidth) << timingInfo.avgCaptureMs << "ms"
+                      << " | Detect: " << std::setw(timingInfo.maxDetectWidth) << timingInfo.avgDetectMs << "ms"
+                      << " | Draw: " << std::setw(timingInfo.maxDrawWidth) << timingInfo.avgDrawMs << "ms"
+                      << " | Display: " << std::setw(timingInfo.maxDisplayWidth) << timingInfo.avgDisplayMs << "ms"
                       << std::endl;
         }
     }
