@@ -8,6 +8,9 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <mmsystem.h>
+
+#pragma comment(lib, "winmm.lib")
 
 // ============================================================================
 // Helper Functions
@@ -37,6 +40,22 @@ void SetWindowAlwaysOnTop(HWND hwnd, bool onTop)
                  0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
+
+struct TimerResolution
+{
+    explicit TimerResolution(UINT periodMs)
+        : period(periodMs)
+    {
+        timeBeginPeriod(period);
+    }
+
+    ~TimerResolution()
+    {
+        timeEndPeriod(period);
+    }
+
+    UINT period;
+};
 
 // ============================================================================
 // Timing Structure
@@ -98,18 +117,29 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
     // Use Desktop Duplication if available, fallback to BitBlt
     bool useDuplication = (frameData.dupContext != nullptr);
 
+    const auto spinThreshold = std::chrono::microseconds(300);
+
     while (true)
     {
         // Pace capture to fixed interval (e.g., every 10 ms)
         auto nowSteady = std::chrono::steady_clock::now();
-        if (nowSteady < nextCaptureTime)
-        {
-            std::this_thread::sleep_until(nextCaptureTime);
-        }
-        else
+        if (nextCaptureTime < nowSteady)
         {
             nextCaptureTime = nowSteady;
         }
+
+        auto timeToWait = nextCaptureTime - nowSteady;
+        auto sleepUntil = (timeToWait > spinThreshold) ? (nextCaptureTime - spinThreshold) : nextCaptureTime;
+        if (sleepUntil > nowSteady)
+        {
+            std::this_thread::sleep_until(sleepUntil);
+        }
+
+        while (std::chrono::steady_clock::now() < nextCaptureTime)
+        {
+            std::this_thread::yield();
+        }
+
         nextCaptureTime += captureInterval;
 
         auto frameStart = std::chrono::high_resolution_clock::now();
@@ -272,6 +302,8 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
 
 int main()
 {
+    TimerResolution timerResolution(1);
+
     std::cout << "Bejeweled 3 Bot - Window Capture Module" << std::endl;
     std::cout << "=========================================" << std::endl;
     std::cout << std::endl;
