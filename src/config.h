@@ -56,6 +56,9 @@ namespace Config
   const int TARGET_FPS = 30;            // Target frames per second for capture
   const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
+  // Capture interval (ms)
+  const int CAPTURE_INTERVAL_MS = 10; // Capture every 10 ms
+
   // Capture method
   const bool USE_DESKTOP_DUPLICATION = false; // Use DXGI Desktop Duplication API (synced to display refresh) vs BitBlt
 

@@ -92,11 +92,26 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
     const int ACTIVATION_INTERVAL_MS = 1000;
     auto lastActivation = std::chrono::high_resolution_clock::now();
 
+    const auto captureInterval = std::chrono::milliseconds(Config::CAPTURE_INTERVAL_MS);
+    auto nextCaptureTime = std::chrono::steady_clock::now();
+
     // Use Desktop Duplication if available, fallback to BitBlt
     bool useDuplication = (frameData.dupContext != nullptr);
 
     while (true)
     {
+        // Pace capture to fixed interval (e.g., every 10 ms)
+        auto nowSteady = std::chrono::steady_clock::now();
+        if (nowSteady < nextCaptureTime)
+        {
+            std::this_thread::sleep_until(nextCaptureTime);
+        }
+        else
+        {
+            nextCaptureTime = nowSteady;
+        }
+        nextCaptureTime += captureInterval;
+
         auto frameStart = std::chrono::high_resolution_clock::now();
 
         // Periodically keep game active
