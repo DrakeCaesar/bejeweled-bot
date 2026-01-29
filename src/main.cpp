@@ -13,10 +13,10 @@ const std::string WINDOW_TITLE = "Bejeweled 3";
 
 // Game board crop rectangle (relative to the captured window)
 // These values need to be calibrated based on your screen resolution and window size
-const int BOARD_X = 100;      // X offset from left edge of window
-const int BOARD_Y = 100;      // Y offset from top edge of window
-const int BOARD_WIDTH = 800;  // Width of the game board area
-const int BOARD_HEIGHT = 800; // Height of the game board area
+const int BOARD_X = 523;       // X offset from left edge of window
+const int BOARD_Y = 75;        // Y offset from top edge of window
+const int BOARD_WIDTH = 1024;  // Width of the game board area
+const int BOARD_HEIGHT = 1024; // Height of the game board area
 
 // Display settings
 const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
