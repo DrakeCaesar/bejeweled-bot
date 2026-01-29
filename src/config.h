@@ -62,6 +62,9 @@ namespace Config
   // Capture method
   const bool USE_DESKTOP_DUPLICATION = false; // Use DXGI Desktop Duplication API (synced to display refresh) vs BitBlt
 
+  // Thread priority
+  const bool BOOST_THREAD_PRIORITY = true; // Reduce FPS drop when window loses focus
+
   // Banner settings
   const int BANNER_HEIGHT = 40;                               // Height of info banner at top
   const cv::Scalar BANNER_BG_COLOR = cv::Scalar(40, 40, 40);  // Dark gray background

@@ -445,6 +445,13 @@ int main()
     std::thread processThread(ProcessThreadFunc, std::ref(frameData), std::ref(timingInfo), std::ref(currentFps),
                               std::ref(frameCount), std::ref(lastFpsUpdateTime));
 
+    if (Config::BOOST_THREAD_PRIORITY)
+    {
+        SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+        SetThreadPriority(captureThread.native_handle(), THREAD_PRIORITY_HIGHEST);
+        SetThreadPriority(processThread.native_handle(), THREAD_PRIORITY_ABOVE_NORMAL);
+    }
+
     // Main thread: handle keyboard input and display
     bool running = true;
     bool shouldDisplay = false;
