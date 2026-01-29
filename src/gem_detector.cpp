@@ -3,6 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <thread>
+#include <vector>
 
 std::string GemTypeToString(GemType type)
 {
@@ -158,10 +160,14 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
 {
   std::vector<std::vector<Gem>> grid(Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
-  for (int row = 0; row < Config::GRID_SIZE; row++)
+  // Lambda to process a chunk of tiles
+  auto processTiles = [&](int startIdx, int endIdx)
   {
-    for (int col = 0; col < Config::GRID_SIZE; col++)
+    for (int idx = startIdx; idx < endIdx; idx++)
     {
+      int row = idx / Config::GRID_SIZE;
+      int col = idx % Config::GRID_SIZE;
+
       Gem &gem = grid[row][col];
       gem.gridPos = cv::Point(col, row);
       gem.state = GemState::NORMAL;
@@ -199,6 +205,27 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
         gem.type = GemType::UNKNOWN;
       }
     }
+  };
+
+  // Use 8 threads to process 8 tiles each (64 total tiles)
+  const int NUM_THREADS = 8;
+  const int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
+  const int TILES_PER_THREAD = TOTAL_TILES / NUM_THREADS;
+
+  std::vector<std::thread> threads;
+  threads.reserve(NUM_THREADS);
+
+  for (int t = 0; t < NUM_THREADS; t++)
+  {
+    int startIdx = t * TILES_PER_THREAD;
+    int endIdx = (t == NUM_THREADS - 1) ? TOTAL_TILES : (t + 1) * TILES_PER_THREAD;
+    threads.emplace_back(processTiles, startIdx, endIdx);
+  }
+
+  // Wait for all threads to complete
+  for (auto &thread : threads)
+  {
+    thread.join();
   }
 
   return grid;
