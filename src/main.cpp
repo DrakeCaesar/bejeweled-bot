@@ -6,6 +6,35 @@
 #include <chrono>
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+// Keep the game window active by sending activation messages
+void KeepGameActive(HWND gameWindow)
+{
+    // Send WM_ACTIVATEAPP to make the game think it's active
+    SendMessage(gameWindow, WM_ACTIVATEAPP, TRUE, 0);
+
+    // Send WM_ACTIVATE with WA_ACTIVE
+    SendMessage(gameWindow, WM_ACTIVATE, WA_ACTIVE, 0);
+
+    // Optional: Send a fake mouse move to show "activity"
+    POINT pt;
+    GetCursorPos(&pt);
+    ScreenToClient(gameWindow, &pt);
+    SendMessage(gameWindow, WM_MOUSEMOVE, 0, MAKELPARAM(pt.x, pt.y));
+}
+
+// Set window to always on top
+void SetWindowAlwaysOnTop(HWND hwnd, bool onTop)
+{
+    SetWindowPos(hwnd,
+                 onTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+// ============================================================================
 // Main Program
 // ============================================================================
 
@@ -28,6 +57,10 @@ int main()
 
     std::cout << "Game window found!" << std::endl;
     std::cout << std::endl;
+
+    // Set game window to always on top to keep it rendering
+    SetWindowAlwaysOnTop(gameWindow, true);
+    std::cout << "Set game window to always on top" << std::endl;
 
     // Get initial window size for info
     RECT windowRect;
@@ -72,10 +105,24 @@ int main()
         double totalMs = 0;
     } timingInfo;
 
+    // Tracking for periodic game activation
+    auto lastActivationTime = std::chrono::high_resolution_clock::now();
+    const int ACTIVATION_INTERVAL_MS = 1000; // Send activation message every 1 second
+
     // Main capture loop
     while (true)
     {
         auto startTime = std::chrono::high_resolution_clock::now();
+
+        // Periodically send activation messages to keep game rendering
+        auto timeSinceActivation = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       startTime - lastActivationTime)
+                                       .count();
+        if (timeSinceActivation >= ACTIVATION_INTERVAL_MS)
+        {
+            KeepGameActive(gameWindow);
+            lastActivationTime = startTime;
+        }
 
         // Capture the window
         auto captureStart = std::chrono::high_resolution_clock::now();
@@ -205,15 +252,6 @@ int main()
         {
             std::cout << "Window closed. Exiting..." << std::endl;
             break;
-        }
-
-        // Maintain target FPS
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-        int waitTime = frameDelay - static_cast<int>(elapsed);
-        if (waitTime > 0)
-        {
-            cv::waitKey(waitTime);
         }
     }
 
