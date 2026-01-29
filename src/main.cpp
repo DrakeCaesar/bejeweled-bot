@@ -73,8 +73,7 @@ struct SharedFrameData
     cv::Mat displayReady;
     bool hasDisplayReady = false;
 
-    // Working buffers for process thread
-    cv::Mat processWorkingBuffer;
+    // Previous frame for motion detection
     cv::Mat prevGameBoard;
 
     // Main thread display copy
@@ -149,23 +148,21 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
         if (frameData.shouldExit && !frameData.captureReady)
             break;
 
-        int processIdx = frameData.processIndex;
-
-        // Copy to working buffer while holding lock (thread safety)
-        frameData.gameBoardBuffer[processIdx].copyTo(frameData.processWorkingBuffer);
-
-        // Swap indices
+        // Swap indices first
         frameData.captureIndex = 1 - frameData.captureIndex;
         frameData.processIndex = 1 - frameData.processIndex;
         frameData.captureReady = false;
 
         lock.unlock();
 
-        if (!frameData.processWorkingBuffer.empty())
+        // Use direct reference to buffer (no copy needed - buffer won't change until next frame)
+        cv::Mat &currentFrame = frameData.gameBoardBuffer[1 - frameData.processIndex]; // The buffer we just finished capturing
+
+        if (!currentFrame.empty())
         {
             // Detect gems
             auto detectStart = std::chrono::high_resolution_clock::now();
-            std::vector<std::vector<Gem>> gemGrid = DetectGems(frameData.processWorkingBuffer, frameData.prevGameBoard);
+            std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, frameData.prevGameBoard);
             auto detectEnd = std::chrono::high_resolution_clock::now();
             timingInfo.detectMs = std::chrono::duration<double, std::milli>(detectEnd - detectStart).count();
 
@@ -176,9 +173,9 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
                 std::lock_guard<std::mutex> displayLock(frameData.mutex);
 
                 frameData.displayReady.setTo(cv::Scalar(20, 20, 20));
-                frameData.processWorkingBuffer.copyTo(frameData.displayReady(cv::Rect(0, Config::BANNER_HEIGHT,
-                                                                                      frameData.processWorkingBuffer.cols,
-                                                                                      frameData.processWorkingBuffer.rows)));
+                currentFrame.copyTo(frameData.displayReady(cv::Rect(0, Config::BANNER_HEIGHT,
+                                                                    currentFrame.cols,
+                                                                    currentFrame.rows)));
                 DrawBanner(frameData.displayReady, currentFps, timingInfo.captureMs, timingInfo.detectMs);
 
                 if (Config::SHOW_DEBUG_OVERLAY)
@@ -192,8 +189,8 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             auto drawEnd = std::chrono::high_resolution_clock::now();
             timingInfo.drawMs = std::chrono::duration<double, std::milli>(drawEnd - drawStart).count();
 
-            // Update previous frame
-            frameData.processWorkingBuffer.copyTo(frameData.prevGameBoard);
+            // Update previous frame (only copy needed for motion detection)
+            currentFrame.copyTo(frameData.prevGameBoard);
         }
 
         // Update FPS
@@ -288,7 +285,6 @@ int main()
     {
         frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.size(), boardType);
     }
-    frameData.processWorkingBuffer = cv::Mat(dummyBoard.size(), boardType);
     frameData.prevGameBoard = cv::Mat(dummyBoard.size(), boardType);
     frameData.prevGameBoard.setTo(cv::Scalar(0, 0, 0, 0)); // Initialize to black
     // Double buffer for display (eliminate copy in main thread)
