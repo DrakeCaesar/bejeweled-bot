@@ -57,8 +57,8 @@ int main()
     std::cout << "      Adjust color constants in config.h if gems aren't detected correctly." << std::endl;
     std::cout << std::endl;
 
-    // Create display window
-    cv::namedWindow(Config::DISPLAY_WINDOW_NAME, cv::WINDOW_NORMAL);
+    // Create display window (fixed size, no stretching)
+    cv::namedWindow(Config::DISPLAY_WINDOW_NAME, cv::WINDOW_AUTOSIZE | cv::WINDOW_KEEPRATIO);
 
     // Shared frame data for threading
     SharedFrameData frameData;
