@@ -4,3 +4,4 @@ out
 cmake-build-*
 builds/
 build/
+.cache/
