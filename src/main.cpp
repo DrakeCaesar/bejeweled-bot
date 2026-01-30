@@ -163,19 +163,39 @@ struct SharedFrameData
     cv::Mat gameBoardBuffer[3];
     int captureIndex = 0;
     int processIndex = 1;
+    int displayIndex = 2;
     int prevIndex = 2;
 
     std::mutex mutex;
     std::condition_variable cv;
 
     bool shouldExit = false;
-    bool captureReady = false;
+    bool captureDone = false;
+    bool processDone = false;
+    bool displayDone = true;  // wait for first processed frame
     bool hasDisplayReady = false;
-    int displayReadIndex = 1;
+    bool hasProcessedFrame = false;
 
     // Desktop Duplication context
     DuplicationContext *dupContext = nullptr;
 };
+
+static void TryRotateBuffers(SharedFrameData &frameData)
+{
+    if (frameData.captureDone && frameData.processDone && frameData.displayDone && frameData.hasProcessedFrame)
+    {
+        int oldDisplay = frameData.displayIndex;
+        frameData.displayIndex = frameData.processIndex;
+        frameData.processIndex = frameData.captureIndex;
+        frameData.captureIndex = oldDisplay;
+        frameData.prevIndex = frameData.displayIndex;
+
+        frameData.captureDone = false;
+        frameData.processDone = false;
+        frameData.displayDone = false;
+        frameData.hasDisplayReady = true;
+    }
+}
 
 // ============================================================================
 // Capture Thread
@@ -230,8 +250,18 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
         bool captureSuccess = false;
         auto captureStart = std::chrono::high_resolution_clock::now();
 
+        int localCaptureIndex = 0;
+        {
+            std::unique_lock<std::mutex> lock(frameData.mutex);
+            frameData.cv.wait(lock, [&]
+                              { return frameData.shouldExit || !frameData.captureDone; });
+            if (frameData.shouldExit)
+                break;
+            localCaptureIndex = frameData.captureIndex;
+        }
+
         // Get ROI for game board region (below banner)
-        cv::Mat gameBoardROI = frameData.gameBoardBuffer[frameData.captureIndex](
+        cv::Mat gameBoardROI = frameData.gameBoardBuffer[localCaptureIndex](
             cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
         if (useDuplication)
@@ -285,9 +315,10 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
             // Update timing
             timingInfo.captureMs = std::chrono::duration<double, std::milli>(captureEnd - captureStart).count();
 
-            frameData.captureReady = true;
+            frameData.captureDone = true;
+            TryRotateBuffers(frameData);
         }
-        frameData.cv.notify_one();
+        frameData.cv.notify_all();
     }
 }
 
@@ -302,26 +333,34 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
 
     while (true)
     {
-        std::unique_lock<std::mutex> lock(frameData.mutex);
-        frameData.cv.wait(lock, [&]
-                          { return frameData.captureReady || frameData.shouldExit; });
+        int localProcessIndex = 0;
+        int localPrevIndex = 0;
+        {
+            std::unique_lock<std::mutex> lock(frameData.mutex);
+            frameData.cv.wait(lock, [&]
+                              { return frameData.shouldExit || (!frameData.processDone && (frameData.hasProcessedFrame || frameData.captureDone)); });
 
-        if (frameData.shouldExit && !frameData.captureReady)
-            break;
+            if (frameData.shouldExit)
+                break;
 
-        // Rotate triple buffer indices: prev <- process <- capture <- next
-        int oldPrev = frameData.prevIndex;
-        frameData.prevIndex = frameData.processIndex;
-        frameData.processIndex = frameData.captureIndex;
-        frameData.captureIndex = oldPrev;
-        frameData.captureReady = false;
-
-        lock.unlock();
+            if (!frameData.hasProcessedFrame)
+            {
+                // First frame: process the freshly captured buffer
+                frameData.processIndex = frameData.captureIndex;
+                localProcessIndex = frameData.processIndex;
+                localPrevIndex = frameData.processIndex;
+            }
+            else
+            {
+                localProcessIndex = frameData.processIndex;
+                localPrevIndex = frameData.prevIndex;
+            }
+        }
 
         // Get ROI references for game board region (excluding banner)
-        cv::Mat currentFrame = frameData.gameBoardBuffer[frameData.processIndex](
+        cv::Mat currentFrame = frameData.gameBoardBuffer[localProcessIndex](
             cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
-        cv::Mat prevFrame = frameData.gameBoardBuffer[frameData.prevIndex](
+        cv::Mat prevFrame = frameData.gameBoardBuffer[localPrevIndex](
             cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
         if (!currentFrame.empty())
@@ -338,7 +377,7 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
             {
                 std::lock_guard<std::mutex> displayLock(frameData.mutex);
 
-                cv::Mat &fullBuffer = frameData.gameBoardBuffer[frameData.processIndex];
+                cv::Mat &fullBuffer = frameData.gameBoardBuffer[localProcessIndex];
 
                 // Clear banner area
                 fullBuffer(cv::Rect(0, 0, fullBuffer.cols, Config::BANNER_HEIGHT)).setTo(cv::Scalar(20, 20, 20));
@@ -354,7 +393,6 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
                     DrawDebugOverlay(fullBuffer, gemGrid);
                 }
 
-                frameData.displayReadIndex = frameData.processIndex;
                 frameData.hasDisplayReady = true;
             }
 
@@ -363,6 +401,14 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
 
             // No copy needed! Previous frame is already in gameBoardBuffer[prevIndex]
         }
+
+        {
+            std::lock_guard<std::mutex> lock(frameData.mutex);
+            frameData.processDone = true;
+            frameData.hasProcessedFrame = true;
+            TryRotateBuffers(frameData);
+        }
+        frameData.cv.notify_all();
 
         // Update rolling averages every frame
         frameCount++;
@@ -552,10 +598,9 @@ int main()
         int displayIdx = 0;
         {
             std::lock_guard<std::mutex> lock(frameData.mutex);
-            if (frameData.hasDisplayReady)
+            if (frameData.hasDisplayReady && !frameData.displayDone)
             {
-                displayIdx = frameData.displayReadIndex;
-                frameData.hasDisplayReady = false;
+                displayIdx = frameData.displayIndex;
                 shouldDisplay = true;
             }
         }
@@ -567,6 +612,14 @@ int main()
             cv::imshow(Config::DISPLAY_WINDOW_NAME, frameData.gameBoardBuffer[displayIdx]);
             auto displayEnd = std::chrono::high_resolution_clock::now();
             timingInfo.displayMs = std::chrono::duration<double, std::milli>(displayEnd - displayStart).count();
+
+            {
+                std::lock_guard<std::mutex> lock(frameData.mutex);
+                frameData.displayDone = true;
+                frameData.hasDisplayReady = false;
+                TryRotateBuffers(frameData);
+            }
+            frameData.cv.notify_all();
         }
 
         int key = cv::waitKey(1);
