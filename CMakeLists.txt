@@ -6,15 +6,17 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Prevent Windows headers from defining min/max macros
+add_compile_definitions(NOMINMAX)
+
 find_package(OpenCV CONFIG REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-add_executable(bejeweled-bot
-  src/main.cpp
-  src/window_capture.cpp
-  src/gem_detector.cpp
-)
+# Glob all source files recursively
+file(GLOB_RECURSE SOURCES "src/*.cpp")
+
+add_executable(bejeweled-bot ${SOURCES})
 
 target_link_libraries(bejeweled-bot PRIVATE ${OpenCV_LIBS})
 target_include_directories(bejeweled-bot PRIVATE
