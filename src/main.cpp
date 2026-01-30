@@ -172,7 +172,7 @@ struct SharedFrameData
     bool shouldExit = false;
     bool captureDone = false;
     bool processDone = false;
-    bool displayDone = true;  // wait for first processed frame
+    bool displayDone = true; // wait for first processed frame
     bool hasDisplayReady = false;
     bool hasProcessedFrame = false;
 
