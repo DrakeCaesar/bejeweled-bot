@@ -50,6 +50,7 @@ int main()
     std::cout << std::endl;
     std::cout << "Controls:" << std::endl;
     std::cout << "  'q' - Quit" << std::endl;
+    std::cout << "  'c' - Toggle classification mode (Color/Shape)" << std::endl;
     std::cout << "  'i' - Print window info" << std::endl;
     std::cout << "  'd' - Dump current gem grid to console" << std::endl;
     std::cout << std::endl;
@@ -208,6 +209,23 @@ int main()
             }
             frameData.cv.notify_one();
             running = false;
+        }
+        else if (key == 'c' || key == 'C')
+        {
+            // Toggle classification mode
+            {
+                std::lock_guard<std::mutex> lock(frameData.mutex);
+                if (frameData.classificationMode == Config::ClassificationMode::COLOR)
+                {
+                    frameData.classificationMode = Config::ClassificationMode::SHAPE;
+                    std::cout << "Classification mode changed to: SHAPE" << std::endl;
+                }
+                else
+                {
+                    frameData.classificationMode = Config::ClassificationMode::COLOR;
+                    std::cout << "Classification mode changed to: COLOR" << std::endl;
+                }
+            }
         }
         else if (key == 'i' || key == 'I')
         {

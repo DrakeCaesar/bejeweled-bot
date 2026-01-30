@@ -176,7 +176,7 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
     {
       // Detect gems (using previous frame for motion detection)
       auto detectStart = std::chrono::high_resolution_clock::now();
-      std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, prevFrame);
+      std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, prevFrame, frameData.classificationMode);
       auto detectEnd = std::chrono::high_resolution_clock::now();
       timingInfo.detectMs = std::chrono::duration<double, std::milli>(detectEnd - detectStart).count();
 
@@ -198,7 +198,7 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
 
         // Draw banner and overlay directly on buffer
         DrawBanner(fullBuffer, timingInfo.avgFps, timingInfo.avgCaptureMs, timingInfo.avgDetectMs,
-                   timingInfo.avgDrawMs, timingInfo.avgDisplayMs,
+                   timingInfo.avgDrawMs, timingInfo.avgDisplayMs, frameData.classificationMode,
                    timingInfo.maxFpsWidth, timingInfo.maxCaptureWidth, timingInfo.maxDetectWidth,
                    timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
 

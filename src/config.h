@@ -56,6 +56,13 @@ namespace Config
 
   const float COLOR_MATCH_THRESHOLD = 0.10f; // Minimum match ratio for a confident detection
 
+  // Classification mode
+  enum class ClassificationMode
+  {
+    COLOR,   // Classify gems by color
+    SHAPE    // Classify gems by shape (placeholder)
+  };
+
   // Display settings
   const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
   const int TARGET_FPS = 30;            // Target frames per second for capture

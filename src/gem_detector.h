@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <string>
+#include "config.h"
 
 // ============================================================================
 // Gem Types and States
@@ -58,10 +59,12 @@ std::string GemTypeToString(GemType type);
 cv::Scalar GemTypeToColor(GemType type);
 
 /**
- * Classify a gem based on its color in the provided region
+ * Classify a gem based on the specified classification mode
+ * For COLOR mode: classifies by color using HSV thresholds
+ * For SHAPE mode: returns UNKNOWN (placeholder for future shape classification)
  * Outputs best match ratio and closest hue match for debug display
  */
-GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType);
+GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType, Config::ClassificationMode mode = Config::ClassificationMode::COLOR);
 
 /**
  * Check if a gem is moving by comparing current and previous frames
@@ -72,7 +75,7 @@ bool IsGemMoving(const cv::Mat &prevFrame, const cv::Mat &currFrame, const cv::R
  * Detect all gems in the game board grid
  * Returns a 2D vector representing the 8x8 grid
  */
-std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat &prevBoard);
+std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat &prevBoard, Config::ClassificationMode mode = Config::ClassificationMode::COLOR);
 
 /**
  * Draw debug overlay on the image showing grid and detected gems
@@ -87,6 +90,7 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
  * @param detectMs Detection time in milliseconds
  * @param drawMs Draw time in milliseconds
  * @param displayMs Display time in milliseconds
+ * @param classificationMode Current classification mode (COLOR or SHAPE)
  * @param fpsWidth Width for FPS padding
  * @param captureWidth Width for capture padding
  * @param detectWidth Width for detect padding
@@ -94,7 +98,7 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
  * @param displayWidth Width for display padding
  */
 void DrawBanner(cv::Mat &image, float fps, double captureMs = 0, double detectMs = 0,
-                double drawMs = 0, double displayMs = 0,
+                double drawMs = 0, double displayMs = 0, Config::ClassificationMode classificationMode = Config::ClassificationMode::COLOR,
                 int fpsWidth = 5, int captureWidth = 4, int detectWidth = 4,
                 int drawWidth = 4, int displayWidth = 4);
 

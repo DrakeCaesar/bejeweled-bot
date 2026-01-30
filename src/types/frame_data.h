@@ -4,6 +4,7 @@
 #include <mutex>
 #include <condition_variable>
 #include "window_capture.h"
+#include "config.h"
 
 // ============================================================================
 // Shared State for Threading
@@ -33,6 +34,9 @@ struct SharedFrameData
 
   // Desktop Duplication context
   DuplicationContext *dupContext = nullptr;
+
+  // Classification mode toggle
+  Config::ClassificationMode classificationMode = Config::ClassificationMode::COLOR;
 };
 
 static void TryRotateBuffers(SharedFrameData &frameData)

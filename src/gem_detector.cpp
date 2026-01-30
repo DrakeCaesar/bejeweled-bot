@@ -127,9 +127,19 @@ namespace
   }
 }
 
-GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType)
+GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType, Config::ClassificationMode mode)
 {
   if (gemRegion.empty())
+  {
+    if (outBestMatch)
+      *outBestMatch = 0.0f;
+    if (outClosestType)
+      *outClosestType = GemType::UNKNOWN;
+    return GemType::UNKNOWN;
+  }
+
+  // If shape mode is enabled, return UNKNOWN (placeholder for future shape classification)
+  if (mode == Config::ClassificationMode::SHAPE)
   {
     if (outBestMatch)
       *outBestMatch = 0.0f;
@@ -322,7 +332,7 @@ bool IsGemMoving(const cv::Mat &prevFrame, const cv::Mat &currFrame, const cv::R
   return meanDiff[0] > Config::MOTION_THRESHOLD;
 }
 
-std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat &prevBoard)
+std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat &prevBoard, Config::ClassificationMode mode)
 {
   std::vector<std::vector<Gem>> grid(Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
@@ -366,7 +376,7 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
       if (!gem.isMoving)
       {
         cv::Mat gemRegion = gameBoard(gem.roi);
-        gem.type = ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
+        gem.type = ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType, mode);
         gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
         gem.avgColor = cv::mean(gemRegion);
       }
@@ -532,6 +542,7 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
 }
 
 void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, double drawMs, double displayMs,
+                Config::ClassificationMode classificationMode,
                 int fpsWidth, int captureWidth, int detectWidth, int drawWidth, int displayWidth)
 {
   // Initialize FreeType on first call
@@ -547,18 +558,26 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, do
       << " | Capture: " << std::setprecision(2) << std::setw(captureWidth) << captureMs << "ms"
       << " | Detect: " << std::setw(detectWidth) << detectMs << "ms"
       << " | Draw: " << std::setw(drawWidth) << drawMs << "ms"
-      << " | Display: " << std::setw(displayWidth) << displayMs << "ms";
+      << " | Display: " << std::setw(displayWidth) << displayMs << "ms"
+      << " | Mode: " << (classificationMode == Config::ClassificationMode::COLOR ? "COLOR (c)" : "SHAPE (c)");
   std::string bannerText = oss.str();
 
-  // Draw HSV range legend in banner
+  // Draw HSV range legend in banner (only if in COLOR mode)
   std::vector<std::string> hsvLines;
-  hsvLines.push_back(FormatRedRangeLine());
-  hsvLines.push_back(FormatRangeLine("ORANGE", Config::ORANGE_GEM_HSV_MIN, Config::ORANGE_GEM_HSV_MAX));
-  hsvLines.push_back(FormatRangeLine("YELLOW", Config::YELLOW_GEM_HSV_MIN, Config::YELLOW_GEM_HSV_MAX));
-  hsvLines.push_back(FormatRangeLine("GREEN", Config::GREEN_GEM_HSV_MIN, Config::GREEN_GEM_HSV_MAX));
-  hsvLines.push_back(FormatRangeLine("BLUE", Config::BLUE_GEM_HSV_MIN, Config::BLUE_GEM_HSV_MAX));
-  hsvLines.push_back(FormatRangeLine("PURPLE", Config::PURPLE_GEM_HSV_MIN, Config::PURPLE_GEM_HSV_MAX));
-  hsvLines.push_back(FormatRangeLine("WHITE", Config::WHITE_GEM_HSV_MIN, Config::WHITE_GEM_HSV_MAX));
+  if (classificationMode == Config::ClassificationMode::COLOR)
+  {
+    hsvLines.push_back(FormatRedRangeLine());
+    hsvLines.push_back(FormatRangeLine("ORANGE", Config::ORANGE_GEM_HSV_MIN, Config::ORANGE_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("YELLOW", Config::YELLOW_GEM_HSV_MIN, Config::YELLOW_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("GREEN", Config::GREEN_GEM_HSV_MIN, Config::GREEN_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("BLUE", Config::BLUE_GEM_HSV_MIN, Config::BLUE_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("PURPLE", Config::PURPLE_GEM_HSV_MIN, Config::PURPLE_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("WHITE", Config::WHITE_GEM_HSV_MIN, Config::WHITE_GEM_HSV_MAX));
+  }
+  else
+  {
+    hsvLines.push_back("SHAPE MODE - No color thresholds (press 'c' to toggle)");
+  }
 
   // Draw text with monospace font
   if (freetypeInitialized && ft2)
