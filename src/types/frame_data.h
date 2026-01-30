@@ -1,57 +1,50 @@
 #pragma once
 
-#include <opencv2/opencv.hpp>
-#include <mutex>
-#include <condition_variable>
-#include "window_capture.h"
 #include "config.h"
+#include "window_capture.h"
+#include <condition_variable>
+#include <mutex>
+#include <opencv2/opencv.hpp>
+
+// ============================================================================
+// Buffer State Machine - Each buffer flows through states sequentially
+// ============================================================================
+
+enum class BufferState {
+  FREE,      // Available for capture
+  CAPTURED,  // Raw data captured, ready for processing
+  PROCESSED, // Overlays added, ready for display
+  DISPLAYING // Currently being shown on screen
+};
 
 // ============================================================================
 // Shared State for Threading
 // ============================================================================
 
-struct SharedFrameData
-{
-  // Triple buffers sized for display (banner + game board)
-  // Capture writes to bottom region, banner drawn on top - zero copy display!
-  cv::Mat gameBoardBuffer[3];
-  cv::Mat rawBoardBuffer[3]; // Raw capture frames (no overlays)
-  cv::Mat displayBuffer;     // Dedicated buffer for GUI display (avoids tearing)
-  int captureIndex = 0;
-  int processIndex = 1;
-  int displayIndex = 2;
-  int prevIndex = 2;
+struct SharedFrameData {
+  // Single buffer array - each buffer flows through all pipeline stages
+  cv::Mat frameBuffer[3];
+  BufferState bufferState[3] = {BufferState::FREE, BufferState::FREE,
+                                BufferState::FREE};
 
   std::mutex mutex;
   std::condition_variable cv;
 
   bool shouldExit = false;
-  bool captureDone = false;
-  bool processDone = false;
-  bool displayDone = true; // wait for first processed frame
-  bool hasDisplayReady = false;
-  bool hasProcessedFrame = false;
 
   // Desktop Duplication context
   DuplicationContext *dupContext = nullptr;
 
   // Classification mode toggle
-  Config::ClassificationMode classificationMode = Config::ClassificationMode::COLOR;
-};
+  Config::ClassificationMode classificationMode =
+      Config::ClassificationMode::COLOR;
 
-static void TryRotateBuffers(SharedFrameData &frameData)
-{
-  if (frameData.captureDone && frameData.processDone && frameData.displayDone && frameData.hasProcessedFrame)
-  {
-    int oldDisplay = frameData.displayIndex;
-    frameData.displayIndex = frameData.processIndex;
-    frameData.processIndex = frameData.captureIndex;
-    frameData.captureIndex = oldDisplay;
-    frameData.prevIndex = frameData.displayIndex;
-
-    frameData.captureDone = false;
-    frameData.processDone = false;
-    frameData.displayDone = false;
-    frameData.hasDisplayReady = true;
+  // Find first buffer in given state, returns -1 if none found
+  int findBuffer(BufferState state) const {
+    for (int i = 0; i < 3; i++) {
+      if (bufferState[i] == state)
+        return i;
+    }
+    return -1;
   }
-}
+};

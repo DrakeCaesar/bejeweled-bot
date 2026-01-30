@@ -135,16 +135,13 @@ int main() {
   int captureType = dummyCapture.type();
   int boardType = dummyBoard.type();
 
-  // Triple buffer for game board WITH banner space (zero-copy display!)
+  // Single buffer array - each buffer flows through pipeline stages
   // Buffers are 1224px tall (200px banner + 1024px game)
   for (int i = 0; i < 3; i++) {
-    frameData.gameBoardBuffer[i] = cv::Mat(
-        dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
-    frameData.rawBoardBuffer[i] = cv::Mat(
-        dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
+    frameData.frameBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT,
+                                       dummyBoard.cols, boardType);
+    frameData.bufferState[i] = BufferState::FREE;
   }
-  frameData.displayBuffer = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT,
-                                    dummyBoard.cols, boardType);
 
   std::cout << "Pre-allocated buffers: Board=" << dummyBoard.size()
             << " type=" << boardType << std::endl;
@@ -176,26 +173,24 @@ int main() {
   // Main thread: handle keyboard input and display
   bool running = true;
   while (running) {
-    // Check if display is ready (zero-copy - direct display!)
-    bool shouldDisplay = false;
+    // Find a PROCESSED buffer to display
+    int displayIndex = -1;
     cv::Mat displayLocal;
+    bool shouldDisplay = false;
+
     {
       std::lock_guard<std::mutex> lock(frameData.mutex);
-      if (frameData.hasDisplayReady && !frameData.displayDone) {
-        // Copy the completed frame into a dedicated display buffer
-        frameData.gameBoardBuffer[frameData.displayIndex].copyTo(
-            frameData.displayBuffer);
-        // Clone for display to avoid GUI using a buffer that might be
-        // overwritten
-        displayLocal = frameData.displayBuffer.clone();
-        frameData.displayDone = true;
-        frameData.hasDisplayReady = false;
-        TryRotateBuffers(frameData);
+      displayIndex = frameData.findBuffer(BufferState::PROCESSED);
+      if (displayIndex >= 0) {
+        // Mark as DISPLAYING so no other thread touches it
+        frameData.bufferState[displayIndex] = BufferState::DISPLAYING;
+        // Direct reference - buffer is protected by DISPLAYING state
+        displayLocal = frameData.frameBuffer[displayIndex];
         shouldDisplay = true;
       }
     }
 
-    // Display outside of mutex so process thread isn't blocked
+    // Display outside of mutex for performance
     if (shouldDisplay) {
       auto displayStart = std::chrono::high_resolution_clock::now();
       cv::imshow(Config::DISPLAY_WINDOW_NAME, displayLocal);
@@ -203,6 +198,12 @@ int main() {
       timingInfo.displayMs =
           std::chrono::duration<double, std::milli>(displayEnd - displayStart)
               .count();
+
+      // Mark buffer as FREE (available for capture again)
+      {
+        std::lock_guard<std::mutex> lock(frameData.mutex);
+        frameData.bufferState[displayIndex] = BufferState::FREE;
+      }
       frameData.cv.notify_all();
     }
 
@@ -232,12 +233,13 @@ int main() {
       std::cout << "Window info:" << std::endl;
       {
         std::lock_guard<std::mutex> lock(frameData.mutex);
-        if (!frameData.gameBoardBuffer[frameData.processIndex].empty()) {
-          std::cout << "  Game board size: "
-                    << frameData.gameBoardBuffer[frameData.processIndex].cols
-                    << "x"
-                    << frameData.gameBoardBuffer[frameData.processIndex].rows
-                    << std::endl;
+        // Find any non-empty buffer for size info
+        for (int i = 0; i < 3; i++) {
+          if (!frameData.frameBuffer[i].empty()) {
+            std::cout << "  Game board size: " << frameData.frameBuffer[i].cols
+                      << "x" << frameData.frameBuffer[i].rows << std::endl;
+            break;
+          }
         }
       }
     }
