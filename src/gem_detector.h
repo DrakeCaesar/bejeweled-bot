@@ -36,7 +36,6 @@ struct Gem
   GemType type;
   GemType closestType; // Closest hue match (for debug when no confident match)
   GemState state;
-  bool isMoving;
   bool matchedThreshold;
   cv::Point gridPos;   // Grid position (0-7, 0-7)
   cv::Rect roi;        // Region of interest in image
@@ -67,15 +66,10 @@ cv::Scalar GemTypeToColor(GemType type);
 GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType, Config::ClassificationMode mode = Config::ClassificationMode::COLOR);
 
 /**
- * Check if a gem is moving by comparing current and previous frames
- */
-bool IsGemMoving(const cv::Mat &prevFrame, const cv::Mat &currFrame, const cv::Rect &roi);
-
-/**
  * Detect all gems in the game board grid
  * Returns a 2D vector representing the 8x8 grid
  */
-std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat &prevBoard, Config::ClassificationMode mode = Config::ClassificationMode::COLOR);
+std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, Config::ClassificationMode mode = Config::ClassificationMode::COLOR);
 
 /**
  * Draw debug overlay on the image showing grid and detected gems

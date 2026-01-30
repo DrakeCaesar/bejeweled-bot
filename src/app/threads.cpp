@@ -169,14 +169,12 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
     // Get ROI references for game board region (excluding banner)
     cv::Mat currentFrame = frameData.rawBoardBuffer[localProcessIndex](
         cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
-    cv::Mat prevFrame = frameData.rawBoardBuffer[localPrevIndex](
-        cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
     if (!currentFrame.empty())
     {
-      // Detect gems (using previous frame for motion detection)
+      // Detect gems
       auto detectStart = std::chrono::high_resolution_clock::now();
-      std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, prevFrame, frameData.classificationMode);
+      std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, frameData.classificationMode);
       auto detectEnd = std::chrono::high_resolution_clock::now();
       timingInfo.detectMs = std::chrono::duration<double, std::milli>(detectEnd - detectStart).count();
 

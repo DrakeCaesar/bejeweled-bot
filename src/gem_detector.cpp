@@ -302,37 +302,7 @@ GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemTyp
   return bestType;
 }
 
-bool IsGemMoving(const cv::Mat &prevFrame, const cv::Mat &currFrame, const cv::Rect &roi)
-{
-  if (prevFrame.empty() || currFrame.empty())
-  {
-    return false;
-  }
-
-  // Ensure ROI is within bounds
-  cv::Rect safeRoi = roi & cv::Rect(0, 0, currFrame.cols, currFrame.rows);
-  if (safeRoi.width <= 0 || safeRoi.height <= 0)
-  {
-    return false;
-  }
-
-  cv::Mat prevRegion = prevFrame(safeRoi);
-  cv::Mat currRegion = currFrame(safeRoi);
-
-  // Calculate absolute difference
-  cv::Mat diff;
-  cv::absdiff(prevRegion, currRegion, diff);
-
-  // Convert to grayscale and calculate mean difference
-  cv::Mat grayDiff;
-  cv::cvtColor(diff, grayDiff, cv::COLOR_BGR2GRAY);
-
-  cv::Scalar meanDiff = cv::mean(grayDiff);
-
-  return meanDiff[0] > Config::MOTION_THRESHOLD;
-}
-
-std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat &prevBoard, Config::ClassificationMode mode)
+std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, Config::ClassificationMode mode)
 {
   std::vector<std::vector<Gem>> grid(Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
@@ -365,28 +335,14 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
         gem.closestType = GemType::UNKNOWN;
         gem.bestMatch = 0.0f;
         gem.matchedThreshold = false;
-        gem.isMoving = false;
         continue;
       }
 
-      // Check for motion
-      gem.isMoving = IsGemMoving(prevBoard, gameBoard, gem.roi);
-
-      // Only classify if gem is not moving
-      if (!gem.isMoving)
-      {
-        cv::Mat gemRegion = gameBoard(gem.roi);
-        gem.type = ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType, mode);
-        gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
-        gem.avgColor = cv::mean(gemRegion);
-      }
-      else
-      {
-        gem.type = GemType::UNKNOWN;
-        gem.closestType = GemType::UNKNOWN;
-        gem.bestMatch = 0.0f;
-        gem.matchedThreshold = false;
-      }
+      // Classify gem by color
+      cv::Mat gemRegion = gameBoard(gem.roi);
+      gem.type = ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType, mode);
+      gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
+      gem.avgColor = cv::mean(gemRegion);
     }
   };
 
@@ -435,12 +391,9 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
       // Draw center ROI with offset
       cv::Rect offsetRoi = gem.roi;
       offsetRoi.y += Config::BANNER_HEIGHT;
-      cv::rectangle(image, offsetRoi,
-                    gem.isMoving ? cv::Scalar(0, 0, 255) : cv::Scalar(0, 255, 0),
-                    2);
+      cv::rectangle(image, offsetRoi, cv::Scalar(0, 255, 0), 2);
 
       // Draw gem type label with offset
-      if (!gem.isMoving)
       {
         int textX = col * Config::CELL_SIZE + 5;
         int textY = Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 18;
@@ -508,13 +461,6 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
           cv::putText(image, lines[i], pos, fontFace, fontScale, textColor, thickness, cv::LINE_AA);
         }
       }
-      else if (gem.isMoving)
-      {
-        cv::Point labelPos(col * Config::CELL_SIZE + 5, Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 20);
-        cv::putText(image, "MOVING", labelPos,
-                    cv::FONT_HERSHEY_SIMPLEX, 0.4,
-                    cv::Scalar(0, 0, 255), 1);
-      }
     }
   }
 }
@@ -527,14 +473,7 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid)
     for (int col = 0; col < Config::GRID_SIZE; col++)
     {
       const Gem &gem = grid[row][col];
-      if (gem.isMoving)
-      {
-        std::cout << "  [M]";
-      }
-      else
-      {
-        std::cout << "  [" << GemTypeToString(gem.type).substr(0, 1) << "]";
-      }
+      std::cout << "  [" << GemTypeToString(gem.type).substr(0, 1) << "]";
     }
     std::cout << std::endl;
   }
