@@ -33,11 +33,14 @@ enum class GemState
 struct Gem
 {
   GemType type;
+  GemType closestType; // Closest hue match (for debug when no confident match)
   GemState state;
   bool isMoving;
+  bool matchedThreshold;
   cv::Point gridPos;   // Grid position (0-7, 0-7)
   cv::Rect roi;        // Region of interest in image
   cv::Scalar avgColor; // Average color for debugging
+  float bestMatch;     // Best match ratio [0..1] for debug
 };
 
 // ============================================================================
@@ -56,8 +59,9 @@ cv::Scalar GemTypeToColor(GemType type);
 
 /**
  * Classify a gem based on its color in the provided region
+ * Outputs best match ratio and closest hue match for debug display
  */
-GemType ClassifyGemByColor(const cv::Mat &gemRegion);
+GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType);
 
 /**
  * Check if a gem is moving by comparing current and previous frames

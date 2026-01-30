@@ -3,6 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <cmath>
+#include <algorithm>
 #include <thread>
 #include <vector>
 #include <opencv2/freetype.hpp>
@@ -96,10 +98,43 @@ cv::Scalar GemTypeToColor(GemType type)
   }
 }
 
-GemType ClassifyGemByColor(const cv::Mat &gemRegion)
+namespace
+{
+  float HueDistance(float h1, float h2)
+  {
+    float diff = std::fabs(h1 - h2);
+    return std::min(diff, 180.0f - diff);
+  }
+
+  std::string FormatRangeLine(const std::string &label, const cv::Scalar &minHSV, const cv::Scalar &maxHSV)
+  {
+    std::ostringstream oss;
+    oss << label
+        << " H[" << (int)minHSV[0] << "-" << (int)maxHSV[0] << "]"
+        << " S[" << (int)minHSV[1] << "-" << (int)maxHSV[1] << "]"
+        << " V[" << (int)minHSV[2] << "-" << (int)maxHSV[2] << "]";
+    return oss.str();
+  }
+
+  std::string FormatRedRangeLine()
+  {
+    std::ostringstream oss;
+    oss << "RED H[" << (int)Config::RED_GEM_HSV_MIN_1[0] << "-" << (int)Config::RED_GEM_HSV_MAX_1[0]
+        << "," << (int)Config::RED_GEM_HSV_MIN_2[0] << "-" << (int)Config::RED_GEM_HSV_MAX_2[0] << "]"
+        << " S[" << (int)Config::RED_GEM_HSV_MIN_1[1] << "-" << (int)Config::RED_GEM_HSV_MAX_1[1] << "]"
+        << " V[" << (int)Config::RED_GEM_HSV_MIN_1[2] << "-" << (int)Config::RED_GEM_HSV_MAX_1[2] << "]";
+    return oss.str();
+  }
+}
+
+GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch, GemType *outClosestType)
 {
   if (gemRegion.empty())
   {
+    if (outBestMatch)
+      *outBestMatch = 0.0f;
+    if (outClosestType)
+      *outClosestType = GemType::UNKNOWN;
     return GemType::UNKNOWN;
   }
 
@@ -116,8 +151,20 @@ GemType ClassifyGemByColor(const cv::Mat &gemRegion)
     return (float)matchingPixels / (hsv.rows * hsv.cols);
   };
 
+  auto calculateColorMatchUnion = [&hsv](const cv::Scalar &minHSV1, const cv::Scalar &maxHSV1,
+                                         const cv::Scalar &minHSV2, const cv::Scalar &maxHSV2) -> float
+  {
+    cv::Mat mask1, mask2, mask;
+    cv::inRange(hsv, minHSV1, maxHSV1, mask1);
+    cv::inRange(hsv, minHSV2, maxHSV2, mask2);
+    cv::bitwise_or(mask1, mask2, mask);
+    int matchingPixels = cv::countNonZero(mask);
+    return (float)matchingPixels / (hsv.rows * hsv.cols);
+  };
+
   // Check each gem color
-  float redMatch = calculateColorMatch(Config::RED_GEM_HSV_MIN, Config::RED_GEM_HSV_MAX);
+  float redMatch = calculateColorMatchUnion(Config::RED_GEM_HSV_MIN_1, Config::RED_GEM_HSV_MAX_1,
+                                            Config::RED_GEM_HSV_MIN_2, Config::RED_GEM_HSV_MAX_2);
   float orangeMatch = calculateColorMatch(Config::ORANGE_GEM_HSV_MIN, Config::ORANGE_GEM_HSV_MAX);
   float yellowMatch = calculateColorMatch(Config::YELLOW_GEM_HSV_MIN, Config::YELLOW_GEM_HSV_MAX);
   float greenMatch = calculateColorMatch(Config::GREEN_GEM_HSV_MIN, Config::GREEN_GEM_HSV_MAX);
@@ -126,7 +173,7 @@ GemType ClassifyGemByColor(const cv::Mat &gemRegion)
   float whiteMatch = calculateColorMatch(Config::WHITE_GEM_HSV_MIN, Config::WHITE_GEM_HSV_MAX);
 
   // Find the best match
-  float maxMatch = 0.1f; // Minimum threshold
+  float maxMatch = 0.0f;
   GemType bestType = GemType::UNKNOWN;
 
   if (redMatch > maxMatch)
@@ -163,6 +210,83 @@ GemType ClassifyGemByColor(const cv::Mat &gemRegion)
   {
     maxMatch = whiteMatch;
     bestType = GemType::WHITE;
+  }
+
+  if (outBestMatch)
+    *outBestMatch = maxMatch;
+
+  struct HueTarget
+  {
+    GemType type;
+    float hue;
+  };
+
+  // Determine closest hue match for debug display
+  GemType closestType = bestType;
+  if (maxMatch < Config::COLOR_MATCH_THRESHOLD)
+  {
+    cv::Scalar meanHSV = cv::mean(hsv);
+    float meanH = static_cast<float>(meanHSV[0]);
+    float meanS = static_cast<float>(meanHSV[1]);
+    float meanV = static_cast<float>(meanHSV[2]);
+
+    if (meanS <= Config::WHITE_GEM_HSV_MAX[1] && meanV >= Config::WHITE_GEM_HSV_MIN[2])
+    {
+      closestType = GemType::WHITE;
+    }
+    else
+    {
+      std::vector<HueTarget> targets;
+
+      HueTarget red;
+      red.type = GemType::RED;
+      red.hue = 0.0f;
+      targets.push_back(red);
+
+      HueTarget orange;
+      orange.type = GemType::ORANGE;
+      orange.hue = static_cast<float>((Config::ORANGE_GEM_HSV_MIN[0] + Config::ORANGE_GEM_HSV_MAX[0]) / 2.0);
+      targets.push_back(orange);
+
+      HueTarget yellow;
+      yellow.type = GemType::YELLOW;
+      yellow.hue = static_cast<float>((Config::YELLOW_GEM_HSV_MIN[0] + Config::YELLOW_GEM_HSV_MAX[0]) / 2.0);
+      targets.push_back(yellow);
+
+      HueTarget green;
+      green.type = GemType::GREEN;
+      green.hue = static_cast<float>((Config::GREEN_GEM_HSV_MIN[0] + Config::GREEN_GEM_HSV_MAX[0]) / 2.0);
+      targets.push_back(green);
+
+      HueTarget blue;
+      blue.type = GemType::BLUE;
+      blue.hue = static_cast<float>((Config::BLUE_GEM_HSV_MIN[0] + Config::BLUE_GEM_HSV_MAX[0]) / 2.0);
+      targets.push_back(blue);
+
+      HueTarget purple;
+      purple.type = GemType::PURPLE;
+      purple.hue = static_cast<float>((Config::PURPLE_GEM_HSV_MIN[0] + Config::PURPLE_GEM_HSV_MAX[0]) / 2.0);
+      targets.push_back(purple);
+
+      float bestDist = 1e9f;
+      for (const auto &t : targets)
+      {
+        float dist = HueDistance(meanH, t.hue);
+        if (dist < bestDist)
+        {
+          bestDist = dist;
+          closestType = t.type;
+        }
+      }
+    }
+  }
+
+  if (outClosestType)
+    *outClosestType = closestType;
+
+  if (maxMatch < Config::COLOR_MATCH_THRESHOLD)
+  {
+    return GemType::UNKNOWN;
   }
 
   return bestType;
@@ -228,6 +352,9 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
           gem.roi.y + gem.roi.height > gameBoard.rows)
       {
         gem.type = GemType::UNKNOWN;
+        gem.closestType = GemType::UNKNOWN;
+        gem.bestMatch = 0.0f;
+        gem.matchedThreshold = false;
         gem.isMoving = false;
         continue;
       }
@@ -239,18 +366,21 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard, const cv::Mat
       if (!gem.isMoving)
       {
         cv::Mat gemRegion = gameBoard(gem.roi);
-        gem.type = ClassifyGemByColor(gemRegion);
+        gem.type = ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
+        gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
         gem.avgColor = cv::mean(gemRegion);
       }
       else
       {
         gem.type = GemType::UNKNOWN;
+        gem.closestType = GemType::UNKNOWN;
+        gem.bestMatch = 0.0f;
+        gem.matchedThreshold = false;
       }
     }
   };
 
-  // Use 8 threads to process 8 tiles each (64 total tiles)
-  const int NUM_THREADS = 4;
+  const int NUM_THREADS = 8;
   const int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
   const int TILES_PER_THREAD = TOTAL_TILES / NUM_THREADS;
 
@@ -300,12 +430,73 @@ void DrawDebugOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid)
                     2);
 
       // Draw gem type label with offset
-      if (!gem.isMoving && gem.type != GemType::UNKNOWN)
+      if (!gem.isMoving)
       {
-        cv::Point labelPos(col * Config::CELL_SIZE + 5, Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 20);
-        cv::putText(image, GemTypeToString(gem.type), labelPos,
-                    cv::FONT_HERSHEY_SIMPLEX, 0.4,
-                    GemTypeToColor(gem.type), 1);
+        int textX = col * Config::CELL_SIZE + 5;
+        int textY = Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 18;
+        int lineHeight = 16;
+
+        // Get HSV value for this gem
+        cv::Scalar meanBGR = gem.avgColor;
+        cv::Mat tmpBGR(1, 1, CV_8UC3, meanBGR);
+        cv::Mat tmpHSV;
+        cv::cvtColor(tmpBGR, tmpHSV, cv::COLOR_BGR2HSV);
+        cv::Vec3b hsvVal = tmpHSV.at<cv::Vec3b>(0, 0);
+
+        // Prepare text lines
+        std::vector<std::string> lines;
+        cv::Scalar textColor;
+
+        if (gem.matchedThreshold && gem.type != GemType::UNKNOWN)
+        {
+          lines.push_back(GemTypeToString(gem.type));
+          std::ostringstream line2;
+          line2 << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f) << "%";
+          lines.push_back(line2.str());
+          textColor = GemTypeToColor(gem.type);
+        }
+        else
+        {
+          lines.push_back("CLOSE:");
+          lines.push_back(GemTypeToString(gem.closestType));
+          std::ostringstream line3;
+          line3 << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f) << "%";
+          lines.push_back(line3.str());
+          textColor = (gem.closestType != GemType::UNKNOWN) ? GemTypeToColor(gem.closestType) : cv::Scalar(160, 160, 160);
+        }
+
+        std::ostringstream hsvLine;
+        hsvLine << "H" << (int)hsvVal[0] << " S" << (int)hsvVal[1];
+        lines.push_back(hsvLine.str());
+        std::ostringstream vLine;
+        vLine << "V" << (int)hsvVal[2];
+        lines.push_back(vLine.str());
+
+        // Calculate background size
+        int maxWidth = 0;
+        int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+        double fontScale = 0.45;
+        int thickness = 1;
+        int baseline = 0;
+
+        for (const auto &line : lines)
+        {
+          cv::Size textSize = cv::getTextSize(line, fontFace, fontScale, thickness, &baseline);
+          maxWidth = std::max(maxWidth, textSize.width);
+        }
+
+        int bgPadding = 3;
+        cv::Rect bgRect(textX - bgPadding, textY - 12, maxWidth + bgPadding * 2,
+                        static_cast<int>(lines.size()) * lineHeight + bgPadding * 2);
+        cv::rectangle(image, bgRect, cv::Scalar(20, 20, 20), -1);
+        cv::rectangle(image, bgRect, cv::Scalar(60, 60, 60), 1);
+
+        // Draw text lines with anti-aliasing
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+          cv::Point pos(textX, textY + static_cast<int>(i) * lineHeight);
+          cv::putText(image, lines[i], pos, fontFace, fontScale, textColor, thickness, cv::LINE_AA);
+        }
       }
       else if (gem.isMoving)
       {
@@ -359,13 +550,23 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, do
       << " | Display: " << std::setw(displayWidth) << displayMs << "ms";
   std::string bannerText = oss.str();
 
+  // Draw HSV range legend in banner
+  std::vector<std::string> hsvLines;
+  hsvLines.push_back(FormatRedRangeLine());
+  hsvLines.push_back(FormatRangeLine("ORANGE", Config::ORANGE_GEM_HSV_MIN, Config::ORANGE_GEM_HSV_MAX));
+  hsvLines.push_back(FormatRangeLine("YELLOW", Config::YELLOW_GEM_HSV_MIN, Config::YELLOW_GEM_HSV_MAX));
+  hsvLines.push_back(FormatRangeLine("GREEN", Config::GREEN_GEM_HSV_MIN, Config::GREEN_GEM_HSV_MAX));
+  hsvLines.push_back(FormatRangeLine("BLUE", Config::BLUE_GEM_HSV_MIN, Config::BLUE_GEM_HSV_MAX));
+  hsvLines.push_back(FormatRangeLine("PURPLE", Config::PURPLE_GEM_HSV_MIN, Config::PURPLE_GEM_HSV_MAX));
+  hsvLines.push_back(FormatRangeLine("WHITE", Config::WHITE_GEM_HSV_MIN, Config::WHITE_GEM_HSV_MAX));
+
   // Draw text with monospace font
   if (freetypeInitialized && ft2)
   {
     // Use FreeType2 with monospace font
     ft2->putText(image, bannerText,
-                 cv::Point(10, Config::BANNER_HEIGHT / 2 - 8),
-                 16, // Font height
+                 cv::Point(10, 0),
+                 18, // Font height
                  Config::BANNER_TEXT_COLOR,
                  -1, // Thickness (filled)
                  cv::LINE_AA,
@@ -378,11 +579,23 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs, do
     double fontScale = 1.0;
     int thickness = 1;
     int baseline = 0;
-    cv::Size textSize = cv::getTextSize(bannerText, fontFace, fontScale, thickness, &baseline);
 
     cv::putText(image, bannerText,
-                cv::Point(10, Config::BANNER_HEIGHT / 2 + textSize.height / 2),
+                cv::Point(10, 20),
                 fontFace, fontScale, Config::BANNER_TEXT_COLOR, thickness);
+  }
+
+  // Draw HSV ranges
+  int fontFace = cv::FONT_HERSHEY_PLAIN;
+  double fontScale = 1.0;
+  int thickness = 1;
+  int lineHeight = 16;
+  int startY = 40;
+
+  for (size_t i = 0; i < hsvLines.size(); ++i)
+  {
+    cv::Point pos(10, startY + static_cast<int>(i) * (lineHeight + 5));
+    cv::putText(image, hsvLines[i], pos, fontFace, fontScale, cv::Scalar(180, 180, 180), thickness, cv::LINE_AA);
   }
 
   // Draw separator line below banner

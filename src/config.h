@@ -29,27 +29,32 @@ namespace Config
   const float MOTION_THRESHOLD = 50.0f; // Pixel difference threshold to detect motion
 
   // Color thresholds for gem classification (HSV color space)
-  // These need to be calibrated based on actual game colors
-  const cv::Scalar RED_GEM_HSV_MIN = cv::Scalar(0, 100, 100);
-  const cv::Scalar RED_GEM_HSV_MAX = cv::Scalar(10, 255, 255);
+  // Hue range in OpenCV is 0-179. Red wraps around, so it is split into two ranges.
+  // These are tuned for Bejeweled 3 gem hues.
+  const cv::Scalar RED_GEM_HSV_MIN_1 = cv::Scalar(0, 90, 90);
+  const cv::Scalar RED_GEM_HSV_MAX_1 = cv::Scalar(8, 255, 255);
+  const cv::Scalar RED_GEM_HSV_MIN_2 = cv::Scalar(172, 90, 90);
+  const cv::Scalar RED_GEM_HSV_MAX_2 = cv::Scalar(179, 255, 255);
 
-  const cv::Scalar ORANGE_GEM_HSV_MIN = cv::Scalar(10, 100, 100);
-  const cv::Scalar ORANGE_GEM_HSV_MAX = cv::Scalar(25, 255, 255);
+  const cv::Scalar ORANGE_GEM_HSV_MIN = cv::Scalar(9, 90, 90);
+  const cv::Scalar ORANGE_GEM_HSV_MAX = cv::Scalar(20, 255, 255);
 
-  const cv::Scalar YELLOW_GEM_HSV_MIN = cv::Scalar(25, 100, 100);
-  const cv::Scalar YELLOW_GEM_HSV_MAX = cv::Scalar(35, 255, 255);
+  const cv::Scalar YELLOW_GEM_HSV_MIN = cv::Scalar(21, 90, 90);
+  const cv::Scalar YELLOW_GEM_HSV_MAX = cv::Scalar(34, 255, 255);
 
-  const cv::Scalar GREEN_GEM_HSV_MIN = cv::Scalar(35, 100, 100);
+  const cv::Scalar GREEN_GEM_HSV_MIN = cv::Scalar(35, 80, 80);
   const cv::Scalar GREEN_GEM_HSV_MAX = cv::Scalar(85, 255, 255);
 
-  const cv::Scalar BLUE_GEM_HSV_MIN = cv::Scalar(85, 100, 100);
-  const cv::Scalar BLUE_GEM_HSV_MAX = cv::Scalar(130, 255, 255);
+  const cv::Scalar BLUE_GEM_HSV_MIN = cv::Scalar(90, 80, 80);
+  const cv::Scalar BLUE_GEM_HSV_MAX = cv::Scalar(125, 255, 255);
 
-  const cv::Scalar PURPLE_GEM_HSV_MIN = cv::Scalar(130, 100, 100);
-  const cv::Scalar PURPLE_GEM_HSV_MAX = cv::Scalar(160, 255, 255);
+  const cv::Scalar PURPLE_GEM_HSV_MIN = cv::Scalar(126, 80, 80);
+  const cv::Scalar PURPLE_GEM_HSV_MAX = cv::Scalar(155, 255, 255);
 
   const cv::Scalar WHITE_GEM_HSV_MIN = cv::Scalar(0, 0, 200);
-  const cv::Scalar WHITE_GEM_HSV_MAX = cv::Scalar(180, 30, 255);
+  const cv::Scalar WHITE_GEM_HSV_MAX = cv::Scalar(179, 35, 255);
+
+  const float COLOR_MATCH_THRESHOLD = 0.10f; // Minimum match ratio for a confident detection
 
   // Display settings
   const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
@@ -66,7 +71,7 @@ namespace Config
   const bool BOOST_THREAD_PRIORITY = true; // Reduce FPS drop when window loses focus
 
   // Banner settings
-  const int BANNER_HEIGHT = 40;                               // Height of info banner at top
+  const int BANNER_HEIGHT = 200;                              // Height of info banner at top
   const cv::Scalar BANNER_BG_COLOR = cv::Scalar(40, 40, 40);  // Dark gray background
   const cv::Scalar BANNER_TEXT_COLOR = cv::Scalar(0, 255, 0); // Green text
 } // namespace Config
