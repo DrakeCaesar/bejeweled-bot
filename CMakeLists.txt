@@ -13,8 +13,8 @@ find_package(OpenCV CONFIG REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-# Glob all source files recursively
-file(GLOB_RECURSE SOURCES "src/*.cpp")
+# Glob all source files recursively (re-run CMake on changes)
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 add_executable(bejeweled-bot ${SOURCES})
 
