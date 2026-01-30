@@ -1,0 +1,160 @@
+#include "banner.h"
+#include <iomanip>
+#include <opencv2/freetype.hpp>
+#include <sstream>
+#include <vector>
+
+// ============================================================================
+// FreeType Font Support
+// ============================================================================
+
+namespace {
+
+cv::Ptr<cv::freetype::FreeType2> ft2;
+bool freetypeInitialized = false;
+
+void InitializeFreeType() {
+  if (freetypeInitialized)
+    return;
+
+  try {
+    ft2 = cv::freetype::createFreeType2();
+
+    // Try Fira Code Nerd Font first, then common monospace fallbacks
+    std::vector<std::string> fontPaths = {
+        "C:/Windows/Fonts/FiraCodeNerdFont-Regular.ttf",
+        "C:/Windows/Fonts/FiraCodeNerdFontMono-Regular.ttf",
+        "C:/Windows/Fonts/consola.ttf", // Consolas
+        "C:/Windows/Fonts/cour.ttf",    // Courier New
+    };
+
+    for (const auto &path : fontPaths) {
+      try {
+        ft2->loadFontData(path, 0);
+        freetypeInitialized = true;
+        return;
+      } catch (...) {
+        continue;
+      }
+    }
+  } catch (...) {
+    // FreeType not available, will use built-in font
+  }
+}
+
+// ============================================================================
+// HSV Range Formatting Helpers
+// ============================================================================
+
+std::string FormatRangeLine(const std::string &label, const cv::Scalar &minHSV,
+                            const cv::Scalar &maxHSV) {
+  std::ostringstream oss;
+  oss << label << " H[" << (int)minHSV[0] << "-" << (int)maxHSV[0] << "]"
+      << " S[" << (int)minHSV[1] << "-" << (int)maxHSV[1] << "]"
+      << " V[" << (int)minHSV[2] << "-" << (int)maxHSV[2] << "]";
+  return oss.str();
+}
+
+std::string FormatRedRangeLine() {
+  std::ostringstream oss;
+  oss << "RED H[" << (int)Config::RED_GEM_HSV_MIN_1[0] << "-"
+      << (int)Config::RED_GEM_HSV_MAX_1[0] << ","
+      << (int)Config::RED_GEM_HSV_MIN_2[0] << "-"
+      << (int)Config::RED_GEM_HSV_MAX_2[0] << "]"
+      << " S[" << (int)Config::RED_GEM_HSV_MIN_1[1] << "-"
+      << (int)Config::RED_GEM_HSV_MAX_1[1] << "]"
+      << " V[" << (int)Config::RED_GEM_HSV_MIN_1[2] << "-"
+      << (int)Config::RED_GEM_HSV_MAX_1[2] << "]";
+  return oss.str();
+}
+
+} // namespace
+
+// ============================================================================
+// Banner Drawing
+// ============================================================================
+
+void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs,
+                double drawMs, double displayMs,
+                Config::ClassificationMode classificationMode, int fpsWidth,
+                int captureWidth, int detectWidth, int drawWidth,
+                int displayWidth) {
+  // Initialize FreeType on first call
+  InitializeFreeType();
+
+  // Draw banner background
+  cv::rectangle(image, cv::Rect(0, 0, image.cols, Config::BANNER_HEIGHT),
+                Config::BANNER_BG_COLOR, -1);
+
+  // Create timing text with padding
+  std::ostringstream oss;
+  oss << "FPS: " << std::fixed << std::setprecision(1) << std::setw(fpsWidth)
+      << fps << " | Capture: " << std::setprecision(2)
+      << std::setw(captureWidth) << captureMs << "ms"
+      << " | Detect: " << std::setw(detectWidth) << detectMs << "ms"
+      << " | Draw: " << std::setw(drawWidth) << drawMs << "ms"
+      << " | Display: " << std::setw(displayWidth) << displayMs << "ms"
+      << " | Mode: "
+      << (classificationMode == Config::ClassificationMode::COLOR
+              ? "COLOR (c)"
+              : "SHAPE (c)");
+  std::string bannerText = oss.str();
+
+  // Draw HSV range legend in banner (only if in COLOR mode)
+  std::vector<std::string> hsvLines;
+  if (classificationMode == Config::ClassificationMode::COLOR) {
+    hsvLines.push_back(FormatRedRangeLine());
+    hsvLines.push_back(FormatRangeLine("ORANGE", Config::ORANGE_GEM_HSV_MIN,
+                                       Config::ORANGE_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("YELLOW", Config::YELLOW_GEM_HSV_MIN,
+                                       Config::YELLOW_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("GREEN", Config::GREEN_GEM_HSV_MIN,
+                                       Config::GREEN_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("BLUE", Config::BLUE_GEM_HSV_MIN,
+                                       Config::BLUE_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("PURPLE", Config::PURPLE_GEM_HSV_MIN,
+                                       Config::PURPLE_GEM_HSV_MAX));
+    hsvLines.push_back(FormatRangeLine("WHITE", Config::WHITE_GEM_HSV_MIN,
+                                       Config::WHITE_GEM_HSV_MAX));
+  } else {
+    hsvLines.push_back(
+        "SHAPE MODE - No color thresholds (press 'c' to toggle)");
+  }
+
+  // Draw text with monospace font
+  if (freetypeInitialized && ft2) {
+    // Use FreeType2 with monospace font
+    ft2->putText(image, bannerText, cv::Point(10, 0),
+                 18, // Font height
+                 Config::BANNER_TEXT_COLOR,
+                 -1, // Thickness (filled)
+                 cv::LINE_AA,
+                 false); // Bottom-left origin
+  } else {
+    // Fallback to built-in font (not truly monospace but best we have)
+    int fontFace = cv::FONT_HERSHEY_PLAIN;
+    double fontScale = 1.0;
+    int thickness = 1;
+
+    cv::putText(image, bannerText, cv::Point(10, 20), fontFace, fontScale,
+                Config::BANNER_TEXT_COLOR, thickness);
+  }
+
+  // Draw HSV ranges
+  int fontFace = cv::FONT_HERSHEY_PLAIN;
+  double fontScale = 1.0;
+  int thickness = 1;
+  int lineHeight = 16;
+  int startY = Config::BANNER_HEIGHT;
+
+  for (size_t i = 0; i < hsvLines.size(); ++i) {
+    cv::Point pos(10, startY + static_cast<int>(i) * (lineHeight + 5));
+    cv::putText(image, hsvLines[i], pos, fontFace, fontScale,
+                cv::Scalar(180, 180, 180), thickness, cv::LINE_AA);
+  }
+
+  // Draw separator line below banner
+  cv::line(image, cv::Point(0, Config::BANNER_HEIGHT),
+           cv::Point(image.cols, Config::BANNER_HEIGHT),
+           cv::Scalar(100, 100, 100), 1);
+}
