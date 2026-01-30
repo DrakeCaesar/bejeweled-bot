@@ -161,6 +161,8 @@ struct SharedFrameData
     // Triple buffers sized for display (banner + game board)
     // Capture writes to bottom region, banner drawn on top - zero copy display!
     cv::Mat gameBoardBuffer[3];
+    cv::Mat rawBoardBuffer[3]; // Raw capture frames (no overlays)
+    cv::Mat displayBuffer;     // Dedicated buffer for GUI display (avoids tearing)
     int captureIndex = 0;
     int processIndex = 1;
     int displayIndex = 2;
@@ -261,7 +263,7 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData, TimingInfo &
         }
 
         // Get ROI for game board region (below banner)
-        cv::Mat gameBoardROI = frameData.gameBoardBuffer[localCaptureIndex](
+        cv::Mat gameBoardROI = frameData.rawBoardBuffer[localCaptureIndex](
             cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
         if (useDuplication)
@@ -358,9 +360,9 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
         }
 
         // Get ROI references for game board region (excluding banner)
-        cv::Mat currentFrame = frameData.gameBoardBuffer[localProcessIndex](
+        cv::Mat currentFrame = frameData.rawBoardBuffer[localProcessIndex](
             cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
-        cv::Mat prevFrame = frameData.gameBoardBuffer[localPrevIndex](
+        cv::Mat prevFrame = frameData.rawBoardBuffer[localPrevIndex](
             cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
         if (!currentFrame.empty())
@@ -378,6 +380,11 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
                 std::lock_guard<std::mutex> displayLock(frameData.mutex);
 
                 cv::Mat &fullBuffer = frameData.gameBoardBuffer[localProcessIndex];
+                cv::Mat &rawFullBuffer = frameData.rawBoardBuffer[localProcessIndex];
+
+                // Copy latest raw capture into the display buffer
+                rawFullBuffer(cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT))
+                    .copyTo(fullBuffer(cv::Rect(0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT)));
 
                 // Clear banner area
                 fullBuffer(cv::Rect(0, 0, fullBuffer.cols, Config::BANNER_HEIGHT)).setTo(cv::Scalar(20, 20, 20));
@@ -392,8 +399,6 @@ void ProcessThreadFunc(SharedFrameData &frameData, TimingInfo &timingInfo, float
                 {
                     DrawDebugOverlay(fullBuffer, gemGrid);
                 }
-
-                frameData.hasDisplayReady = true;
             }
 
             auto drawEnd = std::chrono::high_resolution_clock::now();
@@ -563,7 +568,9 @@ int main()
     for (int i = 0; i < 3; i++)
     {
         frameData.gameBoardBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
+        frameData.rawBoardBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
     }
+    frameData.displayBuffer = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT, dummyBoard.cols, boardType);
 
     std::cout << "Pre-allocated buffers: Board=" << dummyBoard.size() << " type=" << boardType << std::endl;
 
@@ -595,12 +602,18 @@ int main()
     {
         // Check if display is ready (zero-copy - direct display!)
         bool shouldDisplay = false;
-        int displayIdx = 0;
+        cv::Mat displayLocal;
         {
             std::lock_guard<std::mutex> lock(frameData.mutex);
             if (frameData.hasDisplayReady && !frameData.displayDone)
             {
-                displayIdx = frameData.displayIndex;
+                // Copy the completed frame into a dedicated display buffer
+                frameData.gameBoardBuffer[frameData.displayIndex].copyTo(frameData.displayBuffer);
+                // Clone for display to avoid GUI using a buffer that might be overwritten
+                displayLocal = frameData.displayBuffer.clone();
+                frameData.displayDone = true;
+                frameData.hasDisplayReady = false;
+                TryRotateBuffers(frameData);
                 shouldDisplay = true;
             }
         }
@@ -609,16 +622,9 @@ int main()
         if (shouldDisplay)
         {
             auto displayStart = std::chrono::high_resolution_clock::now();
-            cv::imshow(Config::DISPLAY_WINDOW_NAME, frameData.gameBoardBuffer[displayIdx]);
+            cv::imshow(Config::DISPLAY_WINDOW_NAME, displayLocal);
             auto displayEnd = std::chrono::high_resolution_clock::now();
             timingInfo.displayMs = std::chrono::duration<double, std::milli>(displayEnd - displayStart).count();
-
-            {
-                std::lock_guard<std::mutex> lock(frameData.mutex);
-                frameData.displayDone = true;
-                frameData.hasDisplayReady = false;
-                TryRotateBuffers(frameData);
-            }
             frameData.cv.notify_all();
         }
 
