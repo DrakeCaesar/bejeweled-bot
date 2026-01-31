@@ -1,5 +1,4 @@
 #include "core/application.h"
-#include "types/timing.h"
 #include <mmsystem.h>
 
 #pragma comment(lib, "winmm.lib")
