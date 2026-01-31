@@ -14,6 +14,7 @@ static int thresholdCTrack =
     thresholdC.load() + 20; // Offset to make range 0-40
 static int morphSizeTrack = morphSize.load();
 static int erodeSizeTrack = erodeSize.load();
+static int debugStageTrack = debugStage.load();
 
 static void OnBlurChange(int value, void *) {
   // Ensure odd value, minimum 1
@@ -45,6 +46,8 @@ static void OnMorphSizeChange(int value, void *) {
 
 static void OnErodeSizeChange(int value, void *) { erodeSize.store(value); }
 
+static void OnDebugStageChange(int value, void *) { debugStage.store(value); }
+
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
   cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
@@ -55,6 +58,8 @@ void CreateTrackbars(const std::string &windowName) {
                      OnMorphSizeChange);
   cv::createTrackbar("Erode Size", windowName, &erodeSizeTrack, 10,
                      OnErodeSizeChange);
+  cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 10,
+                     OnDebugStageChange);
 }
 
 } // namespace ShapeParams
@@ -73,6 +78,7 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
   int block = ShapeParams::blockSize.load();
   int threshC = ShapeParams::thresholdC.load();
   int morph = ShapeParams::morphSize.load();
+  int stage = ShapeParams::debugStage.load();
 
   // Ensure odd values for blur and block size
   blur = (blur < 1) ? 1 : (blur | 1);
@@ -86,14 +92,20 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
 
   // Convert to grayscale
   cv::cvtColor(gemRegion, grayscale, cv::COLOR_BGR2GRAY);
+  if (stage == 1)
+    return grayscale.clone();
 
   // Apply Gaussian blur to reduce noise
   cv::GaussianBlur(grayscale, blurred, cv::Size(blur, blur), 0);
+  if (stage == 2)
+    return blurred.clone();
 
   // Apply adaptive thresholding to create binary mask
   // This handles varying lighting conditions better than fixed threshold
   cv::adaptiveThreshold(blurred, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
                         cv::THRESH_BINARY, block, threshC);
+  if (stage == 3)
+    return binary.clone();
 
   // Apply morphological operations to clean up the edges
   cv::Mat kernel =
@@ -104,16 +116,27 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
 
   // Remove small noise spots
   cv::morphologyEx(binary, binary, cv::MORPH_OPEN, kernel);
+  if (stage == 4)
+    return binary.clone();
 
   // Find contours in the edge image
   // The edges form black lines on white background, so we invert first
   thread_local cv::Mat inverted;
   cv::bitwise_not(binary, inverted);
+  if (stage == 5)
+    return inverted.clone();
 
   thread_local std::vector<std::vector<cv::Point>> contours;
   contours.clear();
-  cv::findContours(inverted, contours, cv::RETR_EXTERNAL,
+  cv::findContours(inverted.clone(), contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
+
+  // Stage 6: Show all contours drawn
+  if (stage == 6) {
+    cv::Mat contourVis = inverted.clone();
+    cv::drawContours(contourVis, contours, -1, cv::Scalar(128), 1);
+    return contourVis;
+  }
 
   // Create output mask (white gem on black background)
   cv::Mat result = cv::Mat::zeros(binary.size(), CV_8UC1);
@@ -155,6 +178,8 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
     // Fill the best contour to create a solid silhouette
     if (bestIdx >= 0) {
       cv::drawContours(result, contours, bestIdx, cv::Scalar(255), cv::FILLED);
+      if (stage == 7)
+        return result.clone();
 
       // Apply morphological opening to remove thin protrusions ("sticks")
       // Use a larger kernel for more aggressive cleanup
@@ -164,6 +189,8 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
 
       // Apply closing to fill any small holes created
       cv::morphologyEx(result, result, cv::MORPH_CLOSE, cleanupKernel);
+      if (stage == 8)
+        return result.clone();
 
       // Apply user-controlled erosion to shrink detected shape
       int erode = ShapeParams::erodeSize.load();
@@ -172,9 +199,12 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
             cv::MORPH_ELLIPSE, cv::Size(erode * 2 + 1, erode * 2 + 1));
         cv::erode(result, result, erodeKernel);
       }
+      if (stage == 9)
+        return result.clone();
     }
   }
 
+  // Stage 10: comparison visualization is handled in overlay.cpp
   return result;
 }
 

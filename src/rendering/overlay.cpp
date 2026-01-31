@@ -1,5 +1,6 @@
 #include "overlay.h"
 #include "../detection/mask_loader.h"
+#include "../detection/shape_classifier.h"
 #include <array>
 #include <iomanip>
 #include <sstream>
@@ -140,15 +141,16 @@ void DrawShapeOverlay(cv::Mat &image,
 
       // Draw the shape mask if available
       if (!gem.shapeMask.empty()) {
-        // Create comparison visualization:
-        // - Green: computed mask only
-        // - Red: reference mask only
-        // - Yellow: overlap (both masks)
         cv::Mat maskColored = cv::Mat::zeros(gem.shapeMask.size(), CV_8UC3);
 
-        // Get reference mask if available
+        // Only show reference mask comparison when debugStage is 0 (final) or
+        // 10
+        int stage = ShapeParams::debugStage.load();
+        bool showComparison = (stage == 0 || stage == 10);
+
+        // Get reference mask if available and comparison is enabled
         cv::Mat refMask;
-        if (isKnown && gem.bestMatchFrame >= 0 &&
+        if (showComparison && isKnown && gem.bestMatchFrame >= 0 &&
             MaskLoader::AreMasksLoaded()) {
           refMask = MaskLoader::GetMask(gem.type, gem.bestMatchFrame);
           // Resize to match computed mask size
@@ -161,17 +163,25 @@ void DrawShapeOverlay(cv::Mat &image,
         for (int y = 0; y < gem.shapeMask.rows; y++) {
           for (int x = 0; x < gem.shapeMask.cols; x++) {
             bool inComputed = gem.shapeMask.at<uchar>(y, x) > 127;
-            bool inRef = !refMask.empty() && refMask.at<uchar>(y, x) > 127;
 
-            if (inComputed && inRef) {
-              // Overlap (good match)
-              maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
-            } else if (inComputed) {
-              // Computed only (extra pixels)
-              maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 255, 0);
-            } else if (inRef) {
-              // Magenta - reference only (missing pixels)
-              maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 0, 255);
+            if (showComparison) {
+              bool inRef = !refMask.empty() && refMask.at<uchar>(y, x) > 127;
+
+              if (inComputed && inRef) {
+                // Overlap (good match)
+                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
+              } else if (inComputed) {
+                // Computed only (extra pixels)
+                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 255, 0);
+              } else if (inRef) {
+                // Magenta - reference only (missing pixels)
+                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 0, 255);
+              }
+            } else {
+              // Debug mode - just show the mask in white
+              if (inComputed) {
+                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 255, 255);
+              }
             }
           }
         }

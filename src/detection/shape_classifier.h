@@ -25,6 +25,11 @@ inline std::atomic<int> morphSize{1};
 // Erosion size for shrinking detected shapes (0-10, 0 = no erosion)
 inline std::atomic<int> erodeSize{6};
 
+// Debug stage to visualize (0=final, 1=grayscale, 2=blurred, 3=threshold,
+// 4=morphed, 5=inverted, 6=contours, 7=filled, 8=cleaned, 9=eroded, 10=vs
+// reference)
+inline std::atomic<int> debugStage{0};
+
 /**
  * Create trackbars for shape parameters in the given window.
  * Call this once after creating the display window.
