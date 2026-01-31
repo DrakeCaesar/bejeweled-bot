@@ -5,4 +5,3 @@ cmake-build-*
 builds/
 build/
 .cache/
-assets/
