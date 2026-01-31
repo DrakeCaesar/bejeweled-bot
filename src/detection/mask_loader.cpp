@@ -192,4 +192,86 @@ const cv::Mat &GetAlphaMask(GemType type, int frameIndex) {
   return s_alphaMasks[gemIndex][frameIndex];
 }
 
+// ============================================================================
+// Scaled Image Cache - Pre-scaled images for current scale setting
+// ============================================================================
+
+static MaskStorage s_scaledMasks;
+static AlphaMaskStorage s_scaledAlphaMasks;
+static int s_cachedScaleInt = 0;  // 0 = not initialized
+static cv::Size s_cachedTargetSize{0, 0};
+
+void EnsureScaledCache(cv::Size targetSize, int scaleInt) {
+  // Already valid and matches?
+  if (scaleInt == s_cachedScaleInt && targetSize == s_cachedTargetSize) {
+    return;
+  }
+  
+  if (!s_loaded) return;
+  
+  s_cachedScaleInt = scaleInt;
+  s_cachedTargetSize = targetSize;
+  
+  float scale = scaleInt / 1000.0f;
+  float centerX = targetSize.width / 2.0f;
+  float centerY = targetSize.height / 2.0f;
+  cv::Mat transform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
+  
+  for (int gemIdx = 0; gemIdx < NUM_GEM_TYPES; gemIdx++) {
+    for (int frame = 0; frame < FRAMES_PER_GEM; frame++) {
+      const cv::Mat &srcMask = s_masks[gemIdx][frame];
+      const cv::Mat &srcAlpha = s_alphaMasks[gemIdx][frame];
+      
+      if (srcMask.empty()) continue;
+      
+      // Resize to target size first
+      cv::Mat resized;
+      if (srcMask.size() != targetSize) {
+        cv::resize(srcMask, resized, targetSize, 0, 0, cv::INTER_LANCZOS4);
+      } else {
+        resized = srcMask;
+      }
+      
+      // Apply scale transformation
+      cv::warpAffine(resized, s_scaledMasks[gemIdx][frame], transform, targetSize,
+                     cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+      
+      // Scale alpha mask
+      if (!srcAlpha.empty()) {
+        cv::Mat resizedAlpha;
+        if (srcAlpha.size() != targetSize) {
+          cv::resize(srcAlpha, resizedAlpha, targetSize, 0, 0, cv::INTER_NEAREST);
+        } else {
+          resizedAlpha = srcAlpha;
+        }
+        cv::warpAffine(resizedAlpha, s_scaledAlphaMasks[gemIdx][frame], transform, targetSize,
+                       cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
+      }
+    }
+  }
+  
+  std::cout << "Rebuilt scaled mask cache: " << targetSize.width << "x" << targetSize.height 
+            << " @ " << (scale * 100.0f) << "%" << std::endl;
+}
+
+const cv::Mat &GetScaledMask(GemType type, int frameIndex) {
+  int gemIndex = GemTypeToIndex(type);
+  if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
+    return s_emptyMask;
+  }
+  // Return cached scaled image (caller must ensure cache is built)
+  const cv::Mat &scaled = s_scaledMasks[gemIndex][frameIndex];
+  return scaled.empty() ? s_masks[gemIndex][frameIndex] : scaled;
+}
+
+const cv::Mat &GetScaledAlphaMask(GemType type, int frameIndex) {
+  int gemIndex = GemTypeToIndex(type);
+  if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
+    return s_emptyMask;
+  }
+  // Return cached scaled mask (caller must ensure cache is built)
+  const cv::Mat &scaled = s_scaledAlphaMasks[gemIndex][frameIndex];
+  return scaled.empty() ? s_alphaMasks[gemIndex][frameIndex] : scaled;
+}
+
 } // namespace MaskLoader

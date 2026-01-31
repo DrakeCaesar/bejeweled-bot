@@ -1,5 +1,6 @@
 #include "gem_detector.h"
 #include "color_classifier.h"
+#include "mask_loader.h"
 #include "shape_classifier.h"
 #include "thread_pool.h"
 #include <iostream>
@@ -15,6 +16,13 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
       Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
   static constexpr int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
+
+  // For shape mode, ensure scaled cache is ready BEFORE parallel processing
+  if (mode == Config::ClassificationMode::SHAPE && MaskLoader::AreMasksLoaded()) {
+    int scaleInt = ShapeParams::refScale.load();
+    cv::Size targetSize(Config::GEM_SHAPE_SIZE, Config::GEM_SHAPE_SIZE);
+    MaskLoader::EnsureScaledCache(targetSize, scaleInt);
+  }
 
   // Get pointer to static grid for lambda capture
   auto *gridPtr = &grid;

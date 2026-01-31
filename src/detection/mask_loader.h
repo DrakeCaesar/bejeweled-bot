@@ -74,4 +74,23 @@ const cv::Mat &GetMask(GemType type, int frameIndex);
  */
 const cv::Mat &GetAlphaMask(GemType type, int frameIndex);
 
+/**
+ * Ensure scaled cache is built for the given parameters.
+ * Call ONCE before parallel processing begins (main thread only).
+ *
+ * @param targetSize Target size for scaled images
+ * @param scaleInt Scale as integer (1000 = 100%)
+ */
+void EnsureScaledCache(cv::Size targetSize, int scaleInt);
+
+/**
+ * Get a pre-scaled reference image. Must call EnsureScaledCache first.
+ */
+const cv::Mat &GetScaledMask(GemType type, int frameIndex);
+
+/**
+ * Get a pre-scaled alpha mask. Must call EnsureScaledCache first.
+ */
+const cv::Mat &GetScaledAlphaMask(GemType type, int frameIndex);
+
 } // namespace MaskLoader

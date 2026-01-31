@@ -41,7 +41,7 @@ inline std::atomic<int> maskOffsetY{6}; // 5 = center (0 offset)
 
 // Reference asset scale (900-1100 maps to 0.900x - 1.100x, step 0.001)
 // Used to compensate for size differences between assets and game rendering
-inline std::atomic<int> refScale{1000}; // 1000 = 1.000x (no scaling)
+inline std::atomic<int> refScale{1085}; // 1085 = 1.085x (8.5% larger)
 
 /**
  * Create trackbars for shape parameters in the given window.

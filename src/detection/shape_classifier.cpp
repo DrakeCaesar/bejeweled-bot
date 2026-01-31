@@ -186,6 +186,7 @@ cv::Mat GetDebugVisualization(const cv::Mat &gemRegion) {
 
 // Calculate color similarity between two images using LAB color space
 // Applies alpha mask to both images to focus comparison on gem pixels only
+// Note: Reference images should be pre-scaled via GetScaledMask/GetScaledAlphaMask
 static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
                                      const cv::Mat &alphaMask = cv::Mat()) {
 if (img1.empty() || img2.empty())
@@ -193,55 +194,15 @@ if (img1.empty() || img2.empty())
 
 // Clone input so we can modify
 cv::Mat i1 = img1.clone();
-cv::Mat i2 = img2;
-cv::Mat mask = alphaMask;
+cv::Mat i2 = img2.clone();
+cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
 
-// Apply scale to reference image and mask using warpAffine for sub-pixel accuracy
-float scale = ShapeParams::refScale.load() / 1000.0f;
-if (std::abs(scale - 1.0f) > 0.0001f) {
-  // Resize reference to match input size first if needed
-  if (i2.size() != i1.size()) {
-    cv::resize(i2, i2, i1.size(), 0, 0, cv::INTER_LANCZOS4);
-  }
-  
-  // Create scaling transformation centered on the image
-  float centerX = i1.cols / 2.0f;
-  float centerY = i1.rows / 2.0f;
-  
-  // Build affine transform: scale centered on image center
-  cv::Mat transform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
-  
-  // Apply to reference image with high-quality interpolation
-  cv::Mat scaledRef;
-  cv::warpAffine(i2, scaledRef, transform, i1.size(), 
-                 cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
-  i2 = scaledRef;
-  
-  // Apply to mask with nearest neighbor (preserve binary values)
-  if (!alphaMask.empty()) {
-    cv::Mat maskToScale = alphaMask;
-    if (alphaMask.size() != i1.size()) {
-      cv::resize(alphaMask, maskToScale, i1.size(), 0, 0, cv::INTER_NEAREST);
-    }
-    cv::Mat scaledMask;
-    cv::warpAffine(maskToScale, scaledMask, transform, i1.size(),
-                   cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
-    mask = scaledMask;
-  }
-} else {
-  // No scaling, just resize if sizes don't match
-  if (img1.size() != img2.size()) {
-    cv::resize(img2, i2, img1.size(), 0, 0, cv::INTER_LANCZOS4);
-  }
-    
-  // Prepare mask - resize to match if provided
-  if (!alphaMask.empty()) {
-    if (alphaMask.size() != i1.size()) {
-      cv::resize(alphaMask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
-    } else {
-      mask = alphaMask.clone();
-    }
-  }
+// Resize reference and mask to match input if needed (scaling is pre-applied in cache)
+if (i2.size() != i1.size()) {
+  cv::resize(i2, i2, i1.size(), 0, 0, cv::INTER_LANCZOS4);
+}
+if (!mask.empty() && mask.size() != i1.size()) {
+  cv::resize(mask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
 }
 
   // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
@@ -413,8 +374,8 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
 
   for (int i = 0; i < numTypes; i++) {
     GemType type = gemTypes[i];
-    const cv::Mat &refImage = MaskLoader::GetMask(type, 0);
-    const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, 0);
+    const cv::Mat &refImage = MaskLoader::GetScaledMask(type, 0);
+    const cv::Mat &alphaMask = MaskLoader::GetScaledAlphaMask(type, 0);
     float score = 0.0f;
 
     if (!refImage.empty()) {
@@ -464,8 +425,8 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
     GemType type = firstFrameScores[i].type;
 
     for (int frame = 1; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
-      const cv::Mat &refImage = MaskLoader::GetMask(type, frame);
-      const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, frame);
+      const cv::Mat &refImage = MaskLoader::GetScaledMask(type, frame);
+      const cv::Mat &alphaMask = MaskLoader::GetScaledAlphaMask(type, frame);
       if (refImage.empty())
         continue;
 
