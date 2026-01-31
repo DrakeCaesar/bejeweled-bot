@@ -16,6 +16,7 @@ enum class GemType {
   BLUE,
   PURPLE,
   WHITE,
+  HYPERCUBE,
   UNKNOWN
 };
 
@@ -23,8 +24,7 @@ enum class GemState {
   NORMAL,
   FLAME,     // For future: flame gem detection
   LIGHTNING, // For future: lightning gem detection
-  STAR,      // For future: star gem detection
-  HYPERCUBE  // For future: hypercube detection
+  STAR       // For future: star gem detection
 };
 
 struct Gem {

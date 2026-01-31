@@ -192,8 +192,8 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
 
   static const GemType gemTypes[] = {
       GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
-      GemType::BLUE, GemType::PURPLE, GemType::WHITE};
-  static const int numTypes = 7;
+      GemType::BLUE, GemType::PURPLE, GemType::WHITE, GemType::HYPERCUBE};
+  static const int numTypes = 8;
 
   float threshold = ShapeParams::matchThreshold.load() / 100.0f;
   GemType bestType = GemType::UNKNOWN;
@@ -201,7 +201,7 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
   int bestFrame = -1;
 
   struct FirstFrameResult { GemType type; float score; };
-  FirstFrameResult firstFrameScores[7];
+  FirstFrameResult firstFrameScores[8];  // Updated for 8 types
 
   // Phase 1: Check first frame of each type
   for (int i = 0; i < numTypes; i++) {
@@ -244,8 +244,9 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
   // Phase 2: Check remaining frames
   for (int i = 0; i < numTypes; i++) {
     GemType type = firstFrameScores[i].type;
+    int frameCount = MaskLoader::GetFrameCount(type);
 
-    for (int frame = 1; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
+    for (int frame = 1; frame < frameCount; frame++) {
       const cv::Mat &refImage = MaskLoader::GetScaledMask(type, frame);
       const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, frame);
       if (refImage.empty()) continue;

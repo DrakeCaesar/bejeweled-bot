@@ -16,6 +16,8 @@ std::string GemTypeToString(GemType type) {
     return "PURPLE";
   case GemType::WHITE:
     return "WHITE";
+  case GemType::HYPERCUBE:
+    return "HYPERCUBE";
   case GemType::EMPTY:
     return "EMPTY";
   default:
@@ -39,6 +41,8 @@ cv::Scalar GemTypeToColor(GemType type) {
     return cv::Scalar(255, 0, 255);
   case GemType::WHITE:
     return cv::Scalar(255, 255, 255);
+  case GemType::HYPERCUBE:
+    return cv::Scalar(200, 200, 200); // Silver/gray
   default:
     return cv::Scalar(128, 128, 128);
   }
