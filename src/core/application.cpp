@@ -1,6 +1,7 @@
 #include "application.h"
 #include "../capture/capture_thread.h"
 #include "../config.h"
+#include "../detection/gem_detector.h"
 #include "../detection/mask_loader.h"
 #include "../detection/process_thread.h"
 #include "../detection/shape_classifier.h"
@@ -39,23 +40,12 @@ bool Application::Initialize() {
   ShapeParams::CreateTrackbars(Config::DISPLAY_WINDOW_NAME);
 
   // Load gem masks for shape classification
-  // Try multiple paths since we might run from different directories
-  bool masksLoaded = false;
-  const char *assetPaths[] = {
-      "../assets",       // Running from build/
-      "../../assets",    // Running from builds/msbuild-vcpkg/Debug/
-      "../../../assets", // Running from deeper build folder
-      "assets",          // Running from project root
-      nullptr};
-
-  for (int i = 0; assetPaths[i] != nullptr && !masksLoaded; i++) {
-    std::cout << "Trying asset path: " << assetPaths[i] << std::endl;
-    masksLoaded = MaskLoader::LoadAllMasks(assetPaths[i]);
-  }
+  // Now running from project root, so use simple path
+  bool masksLoaded = MaskLoader::LoadAllMasks("assets");
 
   if (!masksLoaded) {
-    std::cerr << "Warning: Failed to load gem masks. Shape classification "
-                 "will not work."
+    std::cerr << "Warning: Failed to load gem masks from 'assets' directory. "
+                 "Shape classification will not work."
               << std::endl;
   }
 
@@ -65,6 +55,8 @@ bool Application::Initialize() {
   std::cout << "  'c' - Toggle classification mode (Color/Shape)" << std::endl;
   std::cout << "  'i' - Print window info" << std::endl;
   std::cout << "  'd' - Dump current gem grid to console" << std::endl;
+  std::cout << "  'r' - Start/stop recording frames (100 frames from col 3, row 2)" << std::endl;
+  std::cout << "  's' - Show recording status" << std::endl;
   std::cout << std::endl;
   std::cout << "Note: HSV color thresholds need calibration!" << std::endl;
   std::cout << "      Adjust color constants in config.h if gems aren't "
@@ -286,6 +278,22 @@ void Application::HandleKeyboardInput(int key) {
                   << "x" << frameData_.frameBuffer[i].rows << std::endl;
         break;
       }
+    }
+  } else if (key == 'r' || key == 'R') {
+    if (!IsRecording()) {
+      // Start recording: column 2, row 1, 100 frames
+      StartRecording(2, 1, 100, "recorded_frames");
+      std::cout << "Press 'R' again to stop recording early" << std::endl;
+    } else {
+      StopRecording();
+    }
+  } else if (key == 's' || key == 'S') {
+    if (IsRecording()) {
+      std::cout << "Recording status: " << GetRecordedFrameCount() 
+                << " unique frames captured (checked " << GetTotalFramesChecked() 
+                << " total frames)" << std::endl;
+    } else {
+      std::cout << "Not currently recording. Press 'R' to start." << std::endl;
     }
   }
 }
