@@ -193,17 +193,18 @@ const cv::Mat &GetAlphaMask(GemType type, int frameIndex) {
 }
 
 // ============================================================================
-// Scaled Image Cache - Pre-scaled images for current scale setting
+// Scaled Image Cache - Pre-scaled and blurred images for current settings
 // ============================================================================
 
 static MaskStorage s_scaledMasks;
 static AlphaMaskStorage s_scaledAlphaMasks;
 static int s_cachedScaleInt = 0;  // 0 = not initialized
+static int s_cachedBlurSize = 0;
 static cv::Size s_cachedTargetSize{0, 0};
 
-void EnsureScaledCache(cv::Size targetSize, int scaleInt) {
+void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize) {
   // Already valid and matches?
-  if (scaleInt == s_cachedScaleInt && targetSize == s_cachedTargetSize) {
+  if (scaleInt == s_cachedScaleInt && targetSize == s_cachedTargetSize && blurSize == s_cachedBlurSize) {
     return;
   }
   
@@ -211,11 +212,15 @@ void EnsureScaledCache(cv::Size targetSize, int scaleInt) {
   
   s_cachedScaleInt = scaleInt;
   s_cachedTargetSize = targetSize;
+  s_cachedBlurSize = blurSize;
   
   float scale = scaleInt / 1000.0f;
   float centerX = targetSize.width / 2.0f;
   float centerY = targetSize.height / 2.0f;
   cv::Mat transform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
+  
+  // Ensure blur size is odd and >= 1
+  int blur = (blurSize < 1) ? 1 : (blurSize | 1);
   
   for (int gemIdx = 0; gemIdx < NUM_GEM_TYPES; gemIdx++) {
     for (int frame = 0; frame < FRAMES_PER_GEM; frame++) {
@@ -224,25 +229,30 @@ void EnsureScaledCache(cv::Size targetSize, int scaleInt) {
       
       if (srcMask.empty()) continue;
       
-      // Resize to target size first
+      // Resize color image to target size first
       cv::Mat resized;
       if (srcMask.size() != targetSize) {
         cv::resize(srcMask, resized, targetSize, 0, 0, cv::INTER_LANCZOS4);
       } else {
-        resized = srcMask;
+        resized = srcMask.clone();
+      }
+      
+      // Apply Gaussian blur to match game's softer appearance
+      if (blur > 1) {
+        cv::GaussianBlur(resized, resized, cv::Size(blur, blur), 0);
       }
       
       // Apply scale transformation
       cv::warpAffine(resized, s_scaledMasks[gemIdx][frame], transform, targetSize,
                      cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
       
-      // Scale alpha mask
+      // Scale alpha mask (same transformation, but preserve binary edges)
       if (!srcAlpha.empty()) {
         cv::Mat resizedAlpha;
         if (srcAlpha.size() != targetSize) {
           cv::resize(srcAlpha, resizedAlpha, targetSize, 0, 0, cv::INTER_NEAREST);
         } else {
-          resizedAlpha = srcAlpha;
+          resizedAlpha = srcAlpha.clone();
         }
         cv::warpAffine(resizedAlpha, s_scaledAlphaMasks[gemIdx][frame], transform, targetSize,
                        cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
@@ -251,7 +261,7 @@ void EnsureScaledCache(cv::Size targetSize, int scaleInt) {
   }
   
   std::cout << "Rebuilt scaled mask cache: " << targetSize.width << "x" << targetSize.height 
-            << " @ " << (scale * 100.0f) << "%" << std::endl;
+            << " @ " << (scale * 100.0f) << "%, blur=" << blur << std::endl;
 }
 
 const cv::Mat &GetScaledMask(GemType type, int frameIndex) {

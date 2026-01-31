@@ -36,12 +36,16 @@ inline std::atomic<int> matchThreshold{80};
 
 // Mask offset for alignment fine-tuning (-5 to +5 pixels)
 // Stored as 0-10 range, interpreted as -5 to +5
-inline std::atomic<int> maskOffsetX{6}; // 5 = center (0 offset)
-inline std::atomic<int> maskOffsetY{6}; // 5 = center (0 offset)
+inline std::atomic<int> maskOffsetX{5}; // 5 = center (0 offset)
+inline std::atomic<int> maskOffsetY{5}; // 5 = center (0 offset)
 
 // Reference asset scale (900-1100 maps to 0.900x - 1.100x, step 0.001)
 // Used to compensate for size differences between assets and game rendering
-inline std::atomic<int> refScale{1085}; // 1085 = 1.085x (8.5% larger)
+inline std::atomic<int> refScale{1080}; // 1085 = 1.085x (8.5% larger)
+
+// Reference asset blur (1-15, odd values only)
+// Used to soften reference images to match game's rendering
+inline std::atomic<int> refBlur{5}; // 5 = slight blur to match game
 
 /**
  * Create trackbars for shape parameters in the given window.

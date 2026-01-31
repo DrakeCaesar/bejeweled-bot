@@ -21,6 +21,7 @@ static int matchThresholdTrack = matchThreshold.load();
 static int maskOffsetXTrack = maskOffsetX.load();
 static int maskOffsetYTrack = maskOffsetY.load();
 static int refScaleTrack = refScale.load();
+static int refBlurTrack = refBlur.load();
 
 static void OnBlurChange(int value, void *) {
   // Ensure odd value, minimum 1
@@ -78,6 +79,14 @@ static void OnRefScaleChange(int value, void *) {
   refScale.store(v);
 }
 
+static void OnRefBlurChange(int value, void *) {
+  // Ensure odd value, minimum 1
+  int v = value | 1;
+  if (v < 1)
+    v = 1;
+  refBlur.store(v);
+}
+
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
   cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
@@ -99,6 +108,7 @@ void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1100,
                      OnRefScaleChange);
   cv::setTrackbarMin("Ref Scale %%", windowName, 900);
+  cv::createTrackbar("Ref Blur", windowName, &refBlurTrack, 15, OnRefBlurChange);
 }
 
 } // namespace ShapeParams

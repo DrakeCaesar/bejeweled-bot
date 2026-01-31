@@ -80,8 +80,9 @@ const cv::Mat &GetAlphaMask(GemType type, int frameIndex);
  *
  * @param targetSize Target size for scaled images
  * @param scaleInt Scale as integer (1000 = 100%)
+ * @param blurSize Gaussian blur kernel size to apply to reference images (1 = no blur)
  */
-void EnsureScaledCache(cv::Size targetSize, int scaleInt);
+void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize = 1);
 
 /**
  * Get a pre-scaled reference image. Must call EnsureScaledCache first.

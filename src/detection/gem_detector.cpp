@@ -20,8 +20,9 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
   // For shape mode, ensure scaled cache is ready BEFORE parallel processing
   if (mode == Config::ClassificationMode::SHAPE && MaskLoader::AreMasksLoaded()) {
     int scaleInt = ShapeParams::refScale.load();
+    int blurSize = ShapeParams::refBlur.load();
     cv::Size targetSize(Config::GEM_SHAPE_SIZE, Config::GEM_SHAPE_SIZE);
-    MaskLoader::EnsureScaledCache(targetSize, scaleInt);
+    MaskLoader::EnsureScaledCache(targetSize, scaleInt, blurSize);
   }
 
   // Get pointer to static grid for lambda capture
