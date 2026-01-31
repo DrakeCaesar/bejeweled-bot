@@ -130,7 +130,11 @@ bool CaptureWindowInto(HWND hwnd, cv::Mat &outputBuffer) {
   bi.biClrUsed = 0;
   bi.biClrImportant = 0;
 
-  cv::Mat temp(height, width, CV_8UC4);
+  // Reuse static buffer to avoid repeated allocations
+  thread_local cv::Mat temp;
+  if (temp.rows != height || temp.cols != width || temp.type() != CV_8UC4) {
+    temp.create(height, width, CV_8UC4);
+  }
   GetDIBits(hdcMemory, hBitmap, 0, height, temp.data, (BITMAPINFO *)&bi,
             DIB_RGB_COLORS);
 
@@ -176,7 +180,11 @@ bool CaptureWindowRegionInto(HWND hwnd, int x, int y, int width, int height,
   bi.biClrUsed = 0;
   bi.biClrImportant = 0;
 
-  cv::Mat temp(height, width, CV_8UC4);
+  // Reuse static buffer to avoid repeated allocations
+  thread_local cv::Mat temp;
+  if (temp.rows != height || temp.cols != width || temp.type() != CV_8UC4) {
+    temp.create(height, width, CV_8UC4);
+  }
   GetDIBits(hdcMemory, hBitmap, 0, height, temp.data, (BITMAPINFO *)&bi,
             DIB_RGB_COLORS);
 

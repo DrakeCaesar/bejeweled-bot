@@ -43,7 +43,7 @@ void ProcessThreadFunc(
     if (!currentFrame.empty()) {
       // Detect gems
       auto detectStart = std::chrono::high_resolution_clock::now();
-      std::vector<std::vector<Gem>> gemGrid = DetectGems(currentFrame, mode);
+      std::vector<std::vector<Gem>> &gemGrid = DetectGems(currentFrame, mode);
       auto detectEnd = std::chrono::high_resolution_clock::now();
       timingInfo.detectMs =
           std::chrono::duration<double, std::milli>(detectEnd - detectStart)

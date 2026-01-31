@@ -34,42 +34,47 @@ void DrawDebugOverlay(cv::Mat &image,
         int textY = Config::BANNER_HEIGHT + row * Config::CELL_SIZE + 18;
         int lineHeight = 16;
 
-        // Get HSV value for this gem
+        // Get HSV value for this gem - reuse static buffers
         cv::Scalar meanBGR = gem.avgColor;
-        cv::Mat tmpBGR(1, 1, CV_8UC3, meanBGR);
-        cv::Mat tmpHSV;
+        static thread_local cv::Mat tmpBGR(1, 1, CV_8UC3);
+        static thread_local cv::Mat tmpHSV(1, 1, CV_8UC3);
+        tmpBGR.at<cv::Vec3b>(0, 0) = cv::Vec3b(static_cast<uchar>(meanBGR[0]),
+                                               static_cast<uchar>(meanBGR[1]),
+                                               static_cast<uchar>(meanBGR[2]));
         cv::cvtColor(tmpBGR, tmpHSV, cv::COLOR_BGR2HSV);
         cv::Vec3b hsvVal = tmpHSV.at<cv::Vec3b>(0, 0);
 
-        // Prepare text lines
-        std::vector<std::string> lines;
+        // Prepare text lines - static allocation, reused each iteration
+        static thread_local std::vector<std::string> lines;
+        static thread_local std::ostringstream oss;
+        lines.clear();
         cv::Scalar textColor;
 
         if (gem.matchedThreshold && gem.type != GemType::UNKNOWN) {
           lines.push_back(GemTypeToString(gem.type));
-          std::ostringstream line2;
-          line2 << std::fixed << std::setprecision(0)
-                << (gem.bestMatch * 100.0f) << "%";
-          lines.push_back(line2.str());
+          oss.str("");
+          oss << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f)
+              << "%";
+          lines.push_back(oss.str());
           textColor = GemTypeToColor(gem.type);
         } else {
           lines.push_back("CLOSE:");
           lines.push_back(GemTypeToString(gem.closestType));
-          std::ostringstream line3;
-          line3 << std::fixed << std::setprecision(0)
-                << (gem.bestMatch * 100.0f) << "%";
-          lines.push_back(line3.str());
+          oss.str("");
+          oss << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f)
+              << "%";
+          lines.push_back(oss.str());
           textColor = (gem.closestType != GemType::UNKNOWN)
                           ? GemTypeToColor(gem.closestType)
                           : cv::Scalar(160, 160, 160);
         }
 
-        std::ostringstream hsvLine;
-        hsvLine << "H" << (int)hsvVal[0] << " S" << (int)hsvVal[1];
-        lines.push_back(hsvLine.str());
-        std::ostringstream vLine;
-        vLine << "V" << (int)hsvVal[2];
-        lines.push_back(vLine.str());
+        oss.str("");
+        oss << "H" << (int)hsvVal[0] << " S" << (int)hsvVal[1];
+        lines.push_back(oss.str());
+        oss.str("");
+        oss << "V" << (int)hsvVal[2];
+        lines.push_back(oss.str());
 
         // Calculate background size
         int maxWidth = 0;

@@ -22,7 +22,8 @@ float HueDistance(float h1, float h2) {
 
 float CalculateColorMatch(const cv::Mat &hsv, const cv::Scalar &minHSV,
                           const cv::Scalar &maxHSV) {
-  cv::Mat mask;
+  // Reuse static buffer to avoid repeated allocations
+  thread_local cv::Mat mask;
   cv::inRange(hsv, minHSV, maxHSV, mask);
   int matchingPixels = cv::countNonZero(mask);
   return static_cast<float>(matchingPixels) / (hsv.rows * hsv.cols);
@@ -32,7 +33,8 @@ float CalculateColorMatchUnion(const cv::Mat &hsv, const cv::Scalar &minHSV1,
                                const cv::Scalar &maxHSV1,
                                const cv::Scalar &minHSV2,
                                const cv::Scalar &maxHSV2) {
-  cv::Mat mask1, mask2, mask;
+  // Reuse static buffers to avoid repeated allocations
+  thread_local cv::Mat mask1, mask2, mask;
   cv::inRange(hsv, minHSV1, maxHSV1, mask1);
   cv::inRange(hsv, minHSV2, maxHSV2, mask2);
   cv::bitwise_or(mask1, mask2, mask);
@@ -51,13 +53,14 @@ GemType FindClosestGemByHue(float meanH, float meanS, float meanV) {
     return GemType::WHITE;
   }
 
-  // Define hue targets for each gem type
+  // Define hue targets for each gem type - use static array to avoid
+  // allocations
   struct HueTarget {
     GemType type;
     float hue;
   };
 
-  std::vector<HueTarget> targets = {
+  static const HueTarget targets[] = {
       {GemType::RED, 0.0f},
       {GemType::ORANGE, static_cast<float>((Config::ORANGE_GEM_HSV_MIN[0] +
                                             Config::ORANGE_GEM_HSV_MAX[0]) /
@@ -104,8 +107,8 @@ GemType ClassifyGemByColor(const cv::Mat &gemRegion, float *outBestMatch,
     return GemType::UNKNOWN;
   }
 
-  // Convert to HSV for better color classification
-  cv::Mat hsv;
+  // Reuse static buffer to avoid repeated allocations
+  thread_local cv::Mat hsv;
   cv::cvtColor(gemRegion, hsv, cv::COLOR_BGR2HSV);
 
   // Calculate match percentages for each gem color

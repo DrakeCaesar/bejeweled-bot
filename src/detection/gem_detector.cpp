@@ -8,10 +8,11 @@
 // Grid Detection
 // ============================================================================
 
-std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard,
-                                         Config::ClassificationMode mode) {
-  std::vector<std::vector<Gem>> grid(Config::GRID_SIZE,
-                                     std::vector<Gem>(Config::GRID_SIZE));
+std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
+                                          Config::ClassificationMode mode) {
+  // Static allocation - grid is reused across calls
+  static std::vector<std::vector<Gem>> grid(
+      Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
   // Lambda to process a chunk of tiles
   auto processTiles = [&](int startIdx, int endIdx) {
@@ -63,11 +64,13 @@ std::vector<std::vector<Gem>> DetectGems(const cv::Mat &gameBoard,
     }
   };
 
-  const int NUM_THREADS = 8;
-  const int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
-  const int TILES_PER_THREAD = TOTAL_TILES / NUM_THREADS;
+  static constexpr int NUM_THREADS = 8;
+  static constexpr int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
+  static constexpr int TILES_PER_THREAD = TOTAL_TILES / NUM_THREADS;
 
-  std::vector<std::thread> threads;
+  // Static allocation - threads vector reused across calls
+  static std::vector<std::thread> threads;
+  threads.clear();
   threads.reserve(NUM_THREADS);
 
   for (int t = 0; t < NUM_THREADS; t++) {
