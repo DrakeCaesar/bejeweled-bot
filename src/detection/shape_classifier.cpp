@@ -16,6 +16,7 @@ static int thresholdCTrack =
 static int morphSizeTrack = morphSize.load();
 static int erodeSizeTrack = erodeSize.load();
 static int debugStageTrack = debugStage.load();
+static int matchThresholdTrack = matchThreshold.load();
 
 static void OnBlurChange(int value, void *) {
   // Ensure odd value, minimum 1
@@ -49,6 +50,16 @@ static void OnErodeSizeChange(int value, void *) { erodeSize.store(value); }
 
 static void OnDebugStageChange(int value, void *) { debugStage.store(value); }
 
+static void OnMatchThresholdChange(int value, void *) {
+  // Clamp to 1-100 range
+  int v = value;
+  if (v < 1)
+    v = 1;
+  if (v > 100)
+    v = 100;
+  matchThreshold.store(v);
+}
+
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
   cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
@@ -61,6 +72,8 @@ void CreateTrackbars(const std::string &windowName) {
                      OnErodeSizeChange);
   cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 10,
                      OnDebugStageChange);
+  cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100,
+                     OnMatchThresholdChange);
 }
 
 } // namespace ShapeParams
@@ -283,14 +296,76 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
   static const GemType gemTypes[] = {
       GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
       GemType::BLUE, GemType::PURPLE, GemType::WHITE};
+  static const int numTypes = sizeof(gemTypes) / sizeof(gemTypes[0]);
+
+  // Get threshold as fraction (0.0 - 1.0)
+  float threshold = ShapeParams::matchThreshold.load() / 100.0f;
 
   GemType bestType = GemType::UNKNOWN;
   float bestScore = 0.0f;
   int bestFrame = -1;
 
-  // Compare against all masks for all gem types
-  for (GemType type : gemTypes) {
-    for (int frame = 0; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
+  // ============================================================================
+  // PHASE 1: Check only the first frame (frame 0) of each gem type
+  // If any exceeds threshold, return immediately
+  // ============================================================================
+  struct FirstFrameResult {
+    GemType type;
+    float score;
+  };
+  FirstFrameResult firstFrameScores[7]; // One per gem type
+
+  for (int i = 0; i < numTypes; i++) {
+    GemType type = gemTypes[i];
+    const cv::Mat &mask = MaskLoader::GetMask(type, 0);
+    float score = 0.0f;
+
+    if (!mask.empty()) {
+      score = CalculateIoU(processedMask, mask);
+    }
+
+    firstFrameScores[i] = {type, score};
+
+    // Early exit: if first frame exceeds threshold, we're done
+    if (score >= threshold) {
+      if (outBestMatch)
+        *outBestMatch = score;
+      if (outBestFrame)
+        *outBestFrame = 0;
+      return type;
+    }
+
+    // Track best score so far
+    if (score > bestScore) {
+      bestScore = score;
+      bestType = type;
+      bestFrame = 0;
+    }
+  }
+
+  // ============================================================================
+  // PHASE 2: No first-frame match exceeded threshold
+  // Sort gem types by first-frame score (highest to lowest)
+  // Explore each set's remaining frames in that order until threshold is met
+  // ============================================================================
+
+  // Simple insertion sort (only 7 elements)
+  for (int i = 1; i < numTypes; i++) {
+    FirstFrameResult key = firstFrameScores[i];
+    int j = i - 1;
+    while (j >= 0 && firstFrameScores[j].score < key.score) {
+      firstFrameScores[j + 1] = firstFrameScores[j];
+      j--;
+    }
+    firstFrameScores[j + 1] = key;
+  }
+
+  // Explore remaining frames (1 to FRAMES_PER_GEM-1) for each type in sorted
+  // order
+  for (int i = 0; i < numTypes; i++) {
+    GemType type = firstFrameScores[i].type;
+
+    for (int frame = 1; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
       const cv::Mat &mask = MaskLoader::GetMask(type, frame);
       if (mask.empty())
         continue;
@@ -301,6 +376,15 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
         bestScore = score;
         bestType = type;
         bestFrame = frame;
+      }
+
+      // Early exit if we found a match exceeding threshold
+      if (score >= threshold) {
+        if (outBestMatch)
+          *outBestMatch = bestScore;
+        if (outBestFrame)
+          *outBestFrame = bestFrame;
+        return bestType;
       }
     }
   }

@@ -30,6 +30,10 @@ inline std::atomic<int> erodeSize{6};
 // reference)
 inline std::atomic<int> debugStage{0};
 
+// Match threshold percentage (0-100) - if a match exceeds this, stop searching
+// Early exit optimization: check first frame of each set, then explore in order
+inline std::atomic<int> matchThreshold{99};
+
 /**
  * Create trackbars for shape parameters in the given window.
  * Call this once after creating the display window.
