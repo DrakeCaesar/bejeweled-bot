@@ -13,6 +13,7 @@ static int blockSizeTrack = blockSize.load();
 static int thresholdCTrack =
     thresholdC.load() + 20; // Offset to make range 0-40
 static int morphSizeTrack = morphSize.load();
+static int erodeSizeTrack = erodeSize.load();
 
 static void OnBlurChange(int value, void *) {
   // Ensure odd value, minimum 1
@@ -42,6 +43,8 @@ static void OnMorphSizeChange(int value, void *) {
   morphSize.store(v);
 }
 
+static void OnErodeSizeChange(int value, void *) { erodeSize.store(value); }
+
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
   cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
@@ -50,6 +53,8 @@ void CreateTrackbars(const std::string &windowName) {
                      OnThresholdCChange);
   cv::createTrackbar("Morph Size", windowName, &morphSizeTrack, 9,
                      OnMorphSizeChange);
+  cv::createTrackbar("Erode Size", windowName, &erodeSizeTrack, 10,
+                     OnErodeSizeChange);
 }
 
 } // namespace ShapeParams
@@ -159,6 +164,14 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
 
       // Apply closing to fill any small holes created
       cv::morphologyEx(result, result, cv::MORPH_CLOSE, cleanupKernel);
+
+      // Apply user-controlled erosion to shrink detected shape
+      int erode = ShapeParams::erodeSize.load();
+      if (erode > 0) {
+        cv::Mat erodeKernel = cv::getStructuringElement(
+            cv::MORPH_ELLIPSE, cv::Size(erode * 2 + 1, erode * 2 + 1));
+        cv::erode(result, result, erodeKernel);
+      }
     }
   }
 

@@ -22,6 +22,9 @@ inline std::atomic<int> thresholdC{2};
 // Morphological kernel size (1-9)
 inline std::atomic<int> morphSize{1};
 
+// Erosion size for shrinking detected shapes (0-10, 0 = no erosion)
+inline std::atomic<int> erodeSize{6};
+
 /**
  * Create trackbars for shape parameters in the given window.
  * Call this once after creating the display window.
