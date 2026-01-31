@@ -21,7 +21,7 @@ void InitializeFreeType() {
     ft2 = cv::freetype::createFreeType2();
 
     // Try Fira Code Nerd Font first, then common monospace fallbacks
-    static const char* fontPaths[] = {
+    static const char *fontPaths[] = {
         "C:/Windows/Fonts/FiraCodeNerdFont-Regular.ttf",
         "C:/Windows/Fonts/FiraCodeNerdFontMono-Regular.ttf",
         "C:/Windows/Fonts/consola.ttf", // Consolas
@@ -105,18 +105,24 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs,
   // HSV range lines - computed once at startup, values are config constants
   static const std::vector<std::string> colorHsvLines = {
       FormatRedRangeLine(),
-      FormatRangeLine("ORANGE", Config::ORANGE_GEM_HSV_MIN, Config::ORANGE_GEM_HSV_MAX),
-      FormatRangeLine("YELLOW", Config::YELLOW_GEM_HSV_MIN, Config::YELLOW_GEM_HSV_MAX),
-      FormatRangeLine("GREEN", Config::GREEN_GEM_HSV_MIN, Config::GREEN_GEM_HSV_MAX),
-      FormatRangeLine("BLUE", Config::BLUE_GEM_HSV_MIN, Config::BLUE_GEM_HSV_MAX),
-      FormatRangeLine("PURPLE", Config::PURPLE_GEM_HSV_MIN, Config::PURPLE_GEM_HSV_MAX),
-      FormatRangeLine("WHITE", Config::WHITE_GEM_HSV_MIN, Config::WHITE_GEM_HSV_MAX),
+      FormatRangeLine("ORANGE", Config::ORANGE_GEM_HSV_MIN,
+                      Config::ORANGE_GEM_HSV_MAX),
+      FormatRangeLine("YELLOW", Config::YELLOW_GEM_HSV_MIN,
+                      Config::YELLOW_GEM_HSV_MAX),
+      FormatRangeLine("GREEN", Config::GREEN_GEM_HSV_MIN,
+                      Config::GREEN_GEM_HSV_MAX),
+      FormatRangeLine("BLUE", Config::BLUE_GEM_HSV_MIN,
+                      Config::BLUE_GEM_HSV_MAX),
+      FormatRangeLine("PURPLE", Config::PURPLE_GEM_HSV_MIN,
+                      Config::PURPLE_GEM_HSV_MAX),
+      FormatRangeLine("WHITE", Config::WHITE_GEM_HSV_MIN,
+                      Config::WHITE_GEM_HSV_MAX),
   };
   static const std::vector<std::string> shapeHsvLines = {
-      "SHAPE MODE - No color thresholds (press 'c' to toggle)"
-  };
-  const std::vector<std::string>& hsvLines = 
-      (classificationMode == Config::ClassificationMode::COLOR) ? colorHsvLines : shapeHsvLines;
+      "SHAPE MODE - No color thresholds (press 'c' to toggle)"};
+  const std::vector<std::string> &hsvLines =
+      (classificationMode == Config::ClassificationMode::COLOR) ? colorHsvLines
+                                                                : shapeHsvLines;
 
   // Draw text with monospace font
   if (freetypeInitialized && ft2) {
