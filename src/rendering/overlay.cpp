@@ -1,5 +1,4 @@
 #include "overlay.h"
-#include "../detection/mask_loader.h"
 #include <array>
 #include <iomanip>
 #include <sstream>
@@ -216,69 +215,5 @@ void DrawShapeOverlay(cv::Mat &image,
                     fontScale, textColor, thickness, cv::LINE_AA);
       }
     }
-  }
-
-  // DEBUG: Draw the first 64 loaded masks on top of the grid to verify loading
-  if (MaskLoader::AreMasksLoaded()) {
-    static const GemType gemTypes[] = {
-        GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
-        GemType::BLUE, GemType::PURPLE, GemType::WHITE};
-
-    int maskIdx = 0;
-    for (int row = 0; row < Config::GRID_SIZE && maskIdx < 64; row++) {
-      for (int col = 0; col < Config::GRID_SIZE && maskIdx < 64; col++) {
-        // Calculate which gem type and frame this slot represents
-        int gemTypeIdx = maskIdx / MaskLoader::FRAMES_PER_GEM;
-        int frameIdx = maskIdx % MaskLoader::FRAMES_PER_GEM;
-
-        if (gemTypeIdx >= 7)
-          break;
-
-        const cv::Mat &mask =
-            MaskLoader::GetMask(gemTypes[gemTypeIdx], frameIdx);
-
-        if (!mask.empty()) {
-          // Draw in top-left corner of each cell
-          int cellX = col * Config::CELL_SIZE;
-          int cellY = Config::BANNER_HEIGHT + row * Config::CELL_SIZE;
-
-          // Scale mask to 64x64 for display
-          cv::Mat smallMask;
-          cv::resize(mask, smallMask, cv::Size(64, 64), 0, 0,
-                     cv::INTER_NEAREST);
-
-          cv::Mat maskBGR;
-          cv::cvtColor(smallMask, maskBGR, cv::COLOR_GRAY2BGR);
-
-          // Tint with gem color
-          cv::Scalar color = GemTypeToColor(gemTypes[gemTypeIdx]);
-          for (int y = 0; y < maskBGR.rows; y++) {
-            for (int x = 0; x < maskBGR.cols; x++) {
-              if (smallMask.at<uchar>(y, x) > 127) {
-                maskBGR.at<cv::Vec3b>(y, x) = cv::Vec3b(
-                    static_cast<uchar>(color[0]), static_cast<uchar>(color[1]),
-                    static_cast<uchar>(color[2]));
-              }
-            }
-          }
-
-          // Copy to image
-          cv::Rect destRoi(cellX, cellY, 64, 64);
-          maskBGR.copyTo(image(destRoi));
-
-          // Draw frame number
-          cv::putText(image, std::to_string(frameIdx),
-                      cv::Point(cellX + 2, cellY + 12),
-                      cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(255, 255, 255),
-                      1, cv::LINE_AA);
-        }
-        maskIdx++;
-      }
-    }
-  } else {
-    // Draw warning if masks not loaded
-    cv::putText(
-        image, "MASKS NOT LOADED", cv::Point(10, Config::BANNER_HEIGHT + 30),
-        cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
   }
 }
