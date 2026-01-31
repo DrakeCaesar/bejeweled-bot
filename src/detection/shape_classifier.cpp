@@ -1,5 +1,6 @@
 #include "shape_classifier.h"
 #include "mask_loader.h"
+#include <opencv2/opencv.hpp>
 
 // ============================================================================
 // Trackbar Creation for Real-time Parameter Adjustment
@@ -126,13 +127,20 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
   if (stage == 5)
     return inverted.clone();
 
+  // Close gaps in contours using morphological closing
+  cv::Mat closeKernel =
+      cv::getStructuringElement(cv::MORPH_CROSS, cv::Size(4, 4));
+  cv::morphologyEx(inverted, inverted, cv::MORPH_CLOSE, closeKernel);
+  if (stage == 6)
+    return inverted.clone();
+
   thread_local std::vector<std::vector<cv::Point>> contours;
   contours.clear();
   cv::findContours(inverted.clone(), contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
-  // Stage 6: Show all contours drawn
-  if (stage == 6) {
+  // Stage 7: Show all contours drawn
+  if (stage == 7) {
     cv::Mat contourVis = inverted.clone();
     cv::drawContours(contourVis, contours, -1, cv::Scalar(128), 1);
     return contourVis;
@@ -178,7 +186,7 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
     // Fill the best contour to create a solid silhouette
     if (bestIdx >= 0) {
       cv::drawContours(result, contours, bestIdx, cv::Scalar(255), cv::FILLED);
-      if (stage == 7)
+      if (stage == 8)
         return result.clone();
 
       // Apply morphological opening to remove thin protrusions ("sticks")
@@ -189,7 +197,7 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
 
       // Apply closing to fill any small holes created
       cv::morphologyEx(result, result, cv::MORPH_CLOSE, cleanupKernel);
-      if (stage == 8)
+      if (stage == 9)
         return result.clone();
 
       // Apply user-controlled erosion to shrink detected shape
@@ -199,12 +207,12 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
             cv::MORPH_ELLIPSE, cv::Size(erode * 2 + 1, erode * 2 + 1));
         cv::erode(result, result, erodeKernel);
       }
-      if (stage == 9)
+      if (stage == 10)
         return result.clone();
     }
   }
 
-  // Stage 10: comparison visualization is handled in overlay.cpp
+  // Stage 11: comparison visualization is handled in overlay.cpp
   return result;
 }
 
@@ -225,18 +233,40 @@ static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
     cv::resize(mask2, m2, mask1.size(), 0, 0, cv::INTER_NEAREST);
   }
 
-  // Calculate intersection and union
+  // Calculate the difference (XOR) and erode it to ignore small edge
+  // differences
+  cv::Mat diff;
+  cv::bitwise_xor(m1, m2, diff);
+
+  // Erode the difference to remove small mismatches along edges
+  cv::Mat erodeKernel =
+      cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+  cv::erode(diff, diff, erodeKernel);
+
+  // Calculate intersection and union, then subtract eroded diff from union
   cv::Mat intersection, unionMat;
   cv::bitwise_and(m1, m2, intersection);
   cv::bitwise_or(m1, m2, unionMat);
 
+  // Effective intersection = intersection + eroded away differences
   int intersectCount = cv::countNonZero(intersection);
+  int diffCount = cv::countNonZero(diff);
   int unionCount = cv::countNonZero(unionMat);
 
   if (unionCount == 0)
     return 0.0f;
 
-  return static_cast<float>(intersectCount) / static_cast<float>(unionCount);
+  // Score: intersection / (union - eroded diff) gives better tolerance for edge
+  // noise
+  int effectiveUnion =
+      unionCount -
+      (cv::countNonZero(unionMat) - cv::countNonZero(intersection) - diffCount);
+  if (effectiveUnion <= 0)
+    effectiveUnion = unionCount;
+
+  return static_cast<float>(intersectCount +
+                            (unionCount - intersectCount - diffCount)) /
+         static_cast<float>(unionCount);
 }
 
 GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
