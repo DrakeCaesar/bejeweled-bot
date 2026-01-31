@@ -89,7 +89,7 @@ void CreateTrackbars(const std::string &windowName) {
 } // namespace ShapeParams
 
 // ============================================================================
-// Shape Processing for Mask Comparison
+// Shape Processing - Direct Color Image Comparison
 // ============================================================================
 
 cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
@@ -97,163 +97,55 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
     return cv::Mat();
   }
 
-  // Load current parameters
-  int blur = ShapeParams::blurSize.load();
-  int block = ShapeParams::blockSize.load();
-  int threshC = ShapeParams::thresholdC.load();
-  int morph = ShapeParams::morphSize.load();
   int stage = ShapeParams::debugStage.load();
-
-  // Ensure odd values for blur and block size
+  
+  // Simply return the gem region, optionally with preprocessing
+  // Stage 0: original image
+  if (stage == 0)
+    return gemRegion.clone();
+  
+  int blur = ShapeParams::blurSize.load();
   blur = (blur < 1) ? 1 : (blur | 1);
-  block = (block < 3) ? 3 : (block | 1);
-  morph = (morph < 1) ? 1 : morph;
-
-  // Reuse thread-local buffers to avoid repeated allocations
-  thread_local cv::Mat grayscale;
-  thread_local cv::Mat blurred;
-  thread_local cv::Mat binary;
-
-  // Convert to grayscale
-  cv::cvtColor(gemRegion, grayscale, cv::COLOR_BGR2GRAY);
-  if (stage == 1)
-    return grayscale.clone();
-
-  // Apply Gaussian blur to reduce noise
-  cv::GaussianBlur(grayscale, blurred, cv::Size(blur, blur), 0);
-  if (stage == 2)
-    return blurred.clone();
-
-  // Apply adaptive thresholding to create binary mask
-  // This handles varying lighting conditions better than fixed threshold
-  cv::adaptiveThreshold(blurred, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-                        cv::THRESH_BINARY, block, threshC);
-  if (stage == 3)
-    return binary.clone();
-
-  // Apply morphological operations to clean up the edges
-  cv::Mat kernel =
-      cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(morph, morph));
-
-  // Close small gaps in the edge lines
-  cv::morphologyEx(binary, binary, cv::MORPH_CLOSE, kernel);
-
-  // Remove small noise spots
-  cv::morphologyEx(binary, binary, cv::MORPH_OPEN, kernel);
-  if (stage == 4)
-    return binary.clone();
-
-  // Find contours in the edge image
-  // The edges form black lines on white background, so we invert first
-  thread_local cv::Mat inverted;
-  cv::bitwise_not(binary, inverted);
-  if (stage == 5)
-    return inverted.clone();
-
-  // Close gaps in contours using morphological closing
-  cv::Mat closeKernel =
-      cv::getStructuringElement(cv::MORPH_CROSS, cv::Size(4, 4));
-  cv::morphologyEx(inverted, inverted, cv::MORPH_CLOSE, closeKernel);
-  if (stage == 6)
-    return inverted.clone();
-
-  thread_local std::vector<std::vector<cv::Point>> contours;
-  contours.clear();
-  cv::findContours(inverted.clone(), contours, cv::RETR_EXTERNAL,
-                   cv::CHAIN_APPROX_SIMPLE);
-
-  // Stage 7: Show all contours drawn
-  if (stage == 7) {
-    cv::Mat contourVis = inverted.clone();
-    cv::drawContours(contourVis, contours, -1, cv::Scalar(128), 1);
-    return contourVis;
+  
+  // Stage 1: apply blur if needed
+  if (blur > 1) {
+    thread_local cv::Mat blurred;
+    cv::GaussianBlur(gemRegion, blurred, cv::Size(blur, blur), 0);
+    if (stage == 1)
+      return blurred.clone();
+    return blurred;
   }
-
-  // Create output mask (white gem on black background)
-  cv::Mat result = cv::Mat::zeros(binary.size(), CV_8UC1);
-
-  if (!contours.empty()) {
-    // Find the best contour: largest area that's reasonably centered
-    int centerX = binary.cols / 2;
-    int centerY = binary.rows / 2;
-    int bestIdx = -1;
-    double bestScore = -1;
-
-    for (size_t i = 0; i < contours.size(); i++) {
-      double area = cv::contourArea(contours[i]);
-      if (area < 100)
-        continue; // Skip tiny contours
-
-      // Get contour center
-      cv::Moments m = cv::moments(contours[i]);
-      if (m.m00 == 0)
-        continue;
-      int cx = static_cast<int>(m.m10 / m.m00);
-      int cy = static_cast<int>(m.m01 / m.m00);
-
-      // Distance from image center
-      double dist = std::sqrt((cx - centerX) * (cx - centerX) +
-                              (cy - centerY) * (cy - centerY));
-
-      // Score: prefer large area and central position
-      // Normalize distance (max ~60 pixels from center in 120x120 image)
-      double distScore = 1.0 - std::min(dist / 60.0, 1.0);
-      double score = area * (0.5 + 0.5 * distScore);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = static_cast<int>(i);
-      }
-    }
-
-    // Fill the best contour to create a solid silhouette
-    if (bestIdx >= 0) {
-      cv::drawContours(result, contours, bestIdx, cv::Scalar(255), cv::FILLED);
-      if (stage == 8)
-        return result.clone();
-
-      // Apply morphological opening to remove thin protrusions ("sticks")
-      // Use a larger kernel for more aggressive cleanup
-      cv::Mat cleanupKernel =
-          cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
-      cv::morphologyEx(result, result, cv::MORPH_OPEN, cleanupKernel);
-
-      // Apply closing to fill any small holes created
-      cv::morphologyEx(result, result, cv::MORPH_CLOSE, cleanupKernel);
-      if (stage == 9)
-        return result.clone();
-
-      // Apply user-controlled erosion to shrink detected shape
-      int erode = ShapeParams::erodeSize.load();
-      if (erode > 0) {
-        cv::Mat erodeKernel = cv::getStructuringElement(
-            cv::MORPH_ELLIPSE, cv::Size(erode * 2 + 1, erode * 2 + 1));
-        cv::erode(result, result, erodeKernel);
-      }
-      if (stage == 10)
-        return result.clone();
-    }
-  }
-
-  // Stage 11: comparison visualization is handled in overlay.cpp
-  return result;
+  
+  return gemRegion.clone();
 }
 
 // ============================================================================
-// Shape Classification - Compare against loaded masks
+// Shape Classification - Direct Color Image Comparison
 // ============================================================================
 
-// Calculate Intersection over Union (IoU) between two binary masks
-static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
-  if (mask1.empty() || mask2.empty())
+// Calculate color similarity between two images using LAB color space
+// Applies alpha mask to both images to focus comparison on gem pixels only
+static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
+                                       const cv::Mat &alphaMask = cv::Mat()) {
+  if (img1.empty() || img2.empty())
     return 0.0f;
 
   // Resize if sizes don't match
-  cv::Mat m1 = mask1;
-  cv::Mat m2 = mask2;
+  cv::Mat i1 = img1.clone(); // Clone so we can modify
+  cv::Mat i2 = img2;
 
-  if (mask1.size() != mask2.size()) {
-    cv::resize(mask2, m2, mask1.size(), 0, 0, cv::INTER_NEAREST);
+  if (img1.size() != img2.size()) {
+    cv::resize(img2, i2, img1.size(), 0, 0, cv::INTER_LINEAR);
+  }
+
+  // Prepare mask - resize to match if provided
+  cv::Mat mask;
+  if (!alphaMask.empty()) {
+    if (alphaMask.size() != i1.size()) {
+      cv::resize(alphaMask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
+    } else {
+      mask = alphaMask.clone();
+    }
   }
 
   // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
@@ -261,64 +153,104 @@ static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
   int offsetY = ShapeParams::maskOffsetY.load() - 5;
 
   if (offsetX != 0 || offsetY != 0) {
-    // Create translation matrix and shift the reference mask
-    cv::Mat shiftedMask = cv::Mat::zeros(m2.size(), m2.type());
+    // Create translation matrix and shift the reference image
+    cv::Mat shiftedImg = cv::Mat::zeros(i2.size(), i2.type());
 
     // Calculate source and destination ROIs for the shift
     int srcX = std::max(0, -offsetX);
     int srcY = std::max(0, -offsetY);
     int dstX = std::max(0, offsetX);
     int dstY = std::max(0, offsetY);
-    int width = m2.cols - std::abs(offsetX);
-    int height = m2.rows - std::abs(offsetY);
+    int width = i2.cols - std::abs(offsetX);
+    int height = i2.rows - std::abs(offsetY);
 
     if (width > 0 && height > 0) {
       cv::Rect srcRoi(srcX, srcY, width, height);
       cv::Rect dstRoi(dstX, dstY, width, height);
-      m2(srcRoi).copyTo(shiftedMask(dstRoi));
+      i2(srcRoi).copyTo(shiftedImg(dstRoi));
     }
-    m2 = shiftedMask;
+    i2 = shiftedImg;
+    
+    // Also shift the mask
+    if (!mask.empty()) {
+      cv::Mat shiftedMask = cv::Mat::zeros(mask.size(), mask.type());
+      if (width > 0 && height > 0) {
+        cv::Rect srcRoi(srcX, srcY, width, height);
+        cv::Rect dstRoi(dstX, dstY, width, height);
+        mask(srcRoi).copyTo(shiftedMask(dstRoi));
+      }
+      mask = shiftedMask;
+    }
   }
 
-  // Calculate the difference (XOR) and erode it to ignore small edge
-  // differences
-  cv::Mat diff;
-  cv::bitwise_xor(m1, m2, diff);
+  // Apply mask to BOTH images (set background pixels to black)
+  // This ensures we're comparing the exact same masked region
+  if (!mask.empty()) {
+    for (int y = 0; y < i1.rows; y++) {
+      cv::Vec3b *row1 = i1.ptr<cv::Vec3b>(y);
+      cv::Vec3b *row2 = i2.ptr<cv::Vec3b>(y);
+      const uchar *maskRow = mask.ptr<uchar>(y);
+      
+      for (int x = 0; x < i1.cols; x++) {
+        if (maskRow[x] == 0) {
+          // Background pixel - set to black in both images
+          row1[x] = cv::Vec3b(0, 0, 0);
+          row2[x] = cv::Vec3b(0, 0, 0);
+        }
+      }
+    }
+  }
 
-  // Erode the difference to remove small mismatches along edges
-  cv::Mat erodeKernel =
-      cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-  // cv::erode(diff, diff, erodeKernel);
+  // Convert both images to LAB color space for perceptual comparison
+  thread_local cv::Mat lab1, lab2;
+  cv::cvtColor(i1, lab1, cv::COLOR_BGR2Lab);
+  cv::cvtColor(i2, lab2, cv::COLOR_BGR2Lab);
 
-  // Calculate intersection and union, then subtract eroded diff from union
-  cv::Mat intersection, unionMat;
-  cv::bitwise_and(m1, m2, intersection);
-  cv::bitwise_or(m1, m2, unionMat);
+  // Calculate per-pixel color distance (only on non-black pixels)
+  double totalDistance = 0.0;
+  int pixelCount = 0;
 
-  // Effective intersection = intersection + eroded away differences
-  int intersectCount = cv::countNonZero(intersection);
-  int diffCount = cv::countNonZero(diff);
-  int unionCount = cv::countNonZero(unionMat);
+  for (int y = 0; y < lab1.rows; y++) {
+    const cv::Vec3b *row1 = lab1.ptr<cv::Vec3b>(y);
+    const cv::Vec3b *row2 = lab2.ptr<cv::Vec3b>(y);
 
-  if (unionCount == 0)
+    for (int x = 0; x < lab1.cols; x++) {
+      // Skip black pixels (background)
+      if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) {
+        // This is black in LAB space (L=0, a=128, b=128)
+        continue;
+      }
+
+      float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
+      float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
+      float db = static_cast<float>(row1[x][2]) - static_cast<float>(row2[x][2]);
+
+      // LAB color distance
+      float dist = std::sqrt(dL * dL + da * da + db * db);
+      totalDistance += dist;
+      pixelCount++;
+    }
+  }
+
+  if (pixelCount == 0)
     return 0.0f;
 
-  // Score: intersection / (union - eroded diff) gives better tolerance for edge
-  // noise
-  int effectiveUnion =
-      unionCount -
-      (cv::countNonZero(unionMat) - cv::countNonZero(intersection) - diffCount);
-  if (effectiveUnion <= 0)
-    effectiveUnion = unionCount;
+  // Average distance per pixel
+  double avgDistance = totalDistance / pixelCount;
 
-  return static_cast<float>(intersectCount +
-                            (unionCount - intersectCount - diffCount)) /
-         static_cast<float>(unionCount);
+  // Convert to similarity score (0.0 to 1.0)
+  // Max LAB distance is ~184 for pure black to pure white
+  // Typical gem-to-gem distance is much smaller (< 50)
+  // Normalize and invert: similarity = 1 - (distance / maxExpected)
+  const double maxExpectedDistance = 100.0; // Tunable threshold
+  double similarity = 1.0 - std::min(avgDistance / maxExpectedDistance, 1.0);
+
+  return static_cast<float>(similarity);
 }
 
-GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
+GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
                            int *outBestFrame) {
-  if (processedMask.empty() || !MaskLoader::AreMasksLoaded()) {
+  if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
     if (outBestMatch)
       *outBestMatch = 0.0f;
     if (outBestFrame)
@@ -351,11 +283,12 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
 
   for (int i = 0; i < numTypes; i++) {
     GemType type = gemTypes[i];
-    const cv::Mat &mask = MaskLoader::GetMask(type, 0);
+    const cv::Mat &refImage = MaskLoader::GetMask(type, 0);
+    const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, 0);
     float score = 0.0f;
 
-    if (!mask.empty()) {
-      score = CalculateIoU(processedMask, mask);
+    if (!refImage.empty()) {
+      score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
     }
 
     firstFrameScores[i] = {type, score};
@@ -400,11 +333,12 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
     GemType type = firstFrameScores[i].type;
 
     for (int frame = 1; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
-      const cv::Mat &mask = MaskLoader::GetMask(type, frame);
-      if (mask.empty())
+      const cv::Mat &refImage = MaskLoader::GetMask(type, frame);
+      const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, frame);
+      if (refImage.empty())
         continue;
 
-      float score = CalculateIoU(processedMask, mask);
+      float score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
 
       if (score > bestScore) {
         bestScore = score;
@@ -429,7 +363,7 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
     *outBestFrame = bestFrame;
 
   // Require a minimum match threshold
-  if (bestScore < 0.3f) {
+  if (bestScore < 0.4f) {
     return GemType::UNKNOWN;
   }
 
