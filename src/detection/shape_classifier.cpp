@@ -1,4 +1,5 @@
 #include "shape_classifier.h"
+#include "mask_loader.h"
 
 // ============================================================================
 // Trackbar Creation for Real-time Parameter Adjustment
@@ -165,19 +166,74 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
 }
 
 // ============================================================================
-// Shape Classification (Placeholder for mask comparison)
+// Shape Classification - Compare against loaded masks
 // ============================================================================
 
-GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch) {
-  // Placeholder implementation
-  // This will be replaced with actual mask comparison logic when masks are
-  // loaded
+// Calculate Intersection over Union (IoU) between two binary masks
+static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
+  if (mask1.empty() || mask2.empty())
+    return 0.0f;
 
-  if (outBestMatch) {
-    *outBestMatch = 0.0f;
+  // Resize if sizes don't match
+  cv::Mat m1 = mask1;
+  cv::Mat m2 = mask2;
+
+  if (mask1.size() != mask2.size()) {
+    cv::resize(mask2, m2, mask1.size(), 0, 0, cv::INTER_NEAREST);
   }
 
-  // For now, return UNKNOWN - actual classification will compare against
-  // loaded mask templates for each gem type (7 types x 20 animation frames)
-  return GemType::UNKNOWN;
+  // Calculate intersection and union
+  cv::Mat intersection, unionMat;
+  cv::bitwise_and(m1, m2, intersection);
+  cv::bitwise_or(m1, m2, unionMat);
+
+  int intersectCount = cv::countNonZero(intersection);
+  int unionCount = cv::countNonZero(unionMat);
+
+  if (unionCount == 0)
+    return 0.0f;
+
+  return static_cast<float>(intersectCount) / static_cast<float>(unionCount);
+}
+
+GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch) {
+  if (processedMask.empty() || !MaskLoader::AreMasksLoaded()) {
+    if (outBestMatch)
+      *outBestMatch = 0.0f;
+    return GemType::UNKNOWN;
+  }
+
+  // Gem types to check
+  static const GemType gemTypes[] = {
+      GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
+      GemType::BLUE, GemType::PURPLE, GemType::WHITE};
+
+  GemType bestType = GemType::UNKNOWN;
+  float bestScore = 0.0f;
+
+  // Compare against all masks for all gem types
+  for (GemType type : gemTypes) {
+    for (int frame = 0; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
+      const cv::Mat &mask = MaskLoader::GetMask(type, frame);
+      if (mask.empty())
+        continue;
+
+      float score = CalculateIoU(processedMask, mask);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestType = type;
+      }
+    }
+  }
+
+  if (outBestMatch)
+    *outBestMatch = bestScore;
+
+  // Require a minimum match threshold
+  if (bestScore < 0.3f) {
+    return GemType::UNKNOWN;
+  }
+
+  return bestType;
 }

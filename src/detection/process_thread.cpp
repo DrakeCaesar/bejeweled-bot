@@ -103,17 +103,18 @@ void ProcessThreadFunc(
       frameCount = 0;
       lastFpsUpdateTime = now;
 
-      std::cout << "FPS: " << std::fixed << std::setprecision(1)
-                << std::setw(timingInfo.maxFpsWidth) << timingInfo.avgFps
-                << " | Capture: " << std::setprecision(2)
-                << std::setw(timingInfo.maxCaptureWidth)
-                << timingInfo.avgCaptureMs << "ms"
-                << " | Detect: " << std::setw(timingInfo.maxDetectWidth)
-                << timingInfo.avgDetectMs << "ms"
-                << " | Draw: " << std::setw(timingInfo.maxDrawWidth)
-                << timingInfo.avgDrawMs << "ms"
-                << " | Display: " << std::setw(timingInfo.maxDisplayWidth)
-                << timingInfo.avgDisplayMs << "ms" << std::endl;
+      // Disabled for debugging
+      // std::cout << "FPS: " << std::fixed << std::setprecision(1)
+      //           << std::setw(timingInfo.maxFpsWidth) << timingInfo.avgFps
+      //           << " | Capture: " << std::setprecision(2)
+      //           << std::setw(timingInfo.maxCaptureWidth)
+      //           << timingInfo.avgCaptureMs << "ms"
+      //           << " | Detect: " << std::setw(timingInfo.maxDetectWidth)
+      //           << timingInfo.avgDetectMs << "ms"
+      //           << " | Draw: " << std::setw(timingInfo.maxDrawWidth)
+      //           << timingInfo.avgDrawMs << "ms"
+      //           << " | Display: " << std::setw(timingInfo.maxDisplayWidth)
+      //           << timingInfo.avgDisplayMs << "ms" << std::endl;
     }
   }
 }

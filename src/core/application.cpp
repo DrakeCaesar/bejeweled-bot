@@ -1,6 +1,7 @@
 #include "application.h"
 #include "../capture/capture_thread.h"
 #include "../config.h"
+#include "../detection/mask_loader.h"
 #include "../detection/process_thread.h"
 #include "../detection/shape_classifier.h"
 #include <iostream>
@@ -36,6 +37,27 @@ bool Application::Initialize() {
 
   // Create trackbars for shape classifier parameter adjustment
   ShapeParams::CreateTrackbars(Config::DISPLAY_WINDOW_NAME);
+
+  // Load gem masks for shape classification
+  // Try multiple paths since we might run from different directories
+  bool masksLoaded = false;
+  const char *assetPaths[] = {
+      "../assets",       // Running from build/
+      "../../assets",    // Running from builds/msbuild-vcpkg/Debug/
+      "../../../assets", // Running from deeper build folder
+      "assets",          // Running from project root
+      nullptr};
+
+  for (int i = 0; assetPaths[i] != nullptr && !masksLoaded; i++) {
+    std::cout << "Trying asset path: " << assetPaths[i] << std::endl;
+    masksLoaded = MaskLoader::LoadAllMasks(assetPaths[i]);
+  }
+
+  if (!masksLoaded) {
+    std::cerr << "Warning: Failed to load gem masks. Shape classification "
+                 "will not work."
+              << std::endl;
+  }
 
   // Print controls
   std::cout << "Controls:" << std::endl;
