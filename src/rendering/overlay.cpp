@@ -106,3 +106,53 @@ void DrawDebugOverlay(cv::Mat &image,
     }
   }
 }
+
+// ============================================================================
+// Shape Mode Overlay Drawing
+// ============================================================================
+
+void DrawShapeOverlay(cv::Mat &image,
+                      const std::vector<std::vector<Gem>> &grid) {
+  // Draw grid lines with offset for banner
+  for (int i = 0; i <= Config::GRID_SIZE; i++) {
+    int pos = i * Config::CELL_SIZE;
+    cv::line(image, cv::Point(pos, Config::BANNER_HEIGHT),
+             cv::Point(pos, image.rows), cv::Scalar(100, 100, 100), 1);
+    cv::line(image, cv::Point(0, Config::BANNER_HEIGHT + pos),
+             cv::Point(image.cols, Config::BANNER_HEIGHT + pos),
+             cv::Scalar(100, 100, 100), 1);
+  }
+
+  // Draw processed shape masks on top of each gem
+  for (int row = 0; row < Config::GRID_SIZE; row++) {
+    for (int col = 0; col < Config::GRID_SIZE; col++) {
+      const Gem &gem = grid[row][col];
+
+      // Use shapeRoi (larger) for shape mode display
+      cv::Rect offsetRoi = gem.shapeRoi;
+      offsetRoi.y += Config::BANNER_HEIGHT;
+
+      // Draw the shape mask if available
+      if (!gem.shapeMask.empty()) {
+        // Convert grayscale mask to BGR for overlay
+        cv::Mat maskBGR;
+        cv::cvtColor(gem.shapeMask, maskBGR, cv::COLOR_GRAY2BGR);
+
+        // Resize mask to fit the ROI if needed
+        if (maskBGR.size() != offsetRoi.size()) {
+          cv::resize(maskBGR, maskBGR, offsetRoi.size(), 0, 0,
+                     cv::INTER_NEAREST);
+        }
+
+        // Copy the mask onto the image at the gem's position
+        maskBGR.copyTo(image(offsetRoi));
+
+        // Draw a colored border around the mask to make it visible
+        cv::rectangle(image, offsetRoi, cv::Scalar(0, 200, 0), 2);
+      } else {
+        // Draw outline even if no mask
+        cv::rectangle(image, offsetRoi, cv::Scalar(0, 255, 0), 1);
+      }
+    }
+  }
+}

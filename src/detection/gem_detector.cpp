@@ -1,5 +1,6 @@
 #include "gem_detector.h"
 #include "color_classifier.h"
+#include "shape_classifier.h"
 #include "thread_pool.h"
 #include <iostream>
 
@@ -35,21 +36,37 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
           gem.gridPos = cv::Point(col, row);
           gem.state = GemState::NORMAL;
 
-          // Calculate cell center
+          // Calculate cell position
           int cellX = col * Config::CELL_SIZE;
           int cellY = row * Config::CELL_SIZE;
-          int centerX =
+
+          // Define ROI for color classification (smaller center region)
+          int colorCenterX =
               cellX + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
-          int centerY =
+          int colorCenterY =
               cellY + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
+          gem.roi = cv::Rect(colorCenterX, colorCenterY,
+                             Config::GEM_CENTER_SIZE, Config::GEM_CENTER_SIZE);
 
-          // Define ROI for gem center
-          gem.roi = cv::Rect(centerX, centerY, Config::GEM_CENTER_SIZE,
-                             Config::GEM_CENTER_SIZE);
+          // Define ROI for shape classification (larger to capture full gem)
+          int shapeCenterX =
+              cellX + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
+          int shapeCenterY =
+              cellY + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
+          gem.shapeRoi =
+              cv::Rect(shapeCenterX, shapeCenterY, Config::GEM_SHAPE_SIZE,
+                       Config::GEM_SHAPE_SIZE);
 
-          // Check if ROI is valid
-          if (gem.roi.x + gem.roi.width > gameBoard.cols ||
-              gem.roi.y + gem.roi.height > gameBoard.rows) {
+          // Check if ROIs are valid
+          bool colorRoiValid = gem.roi.x >= 0 && gem.roi.y >= 0 &&
+                               gem.roi.x + gem.roi.width <= gameBoard.cols &&
+                               gem.roi.y + gem.roi.height <= gameBoard.rows;
+          bool shapeRoiValid =
+              gem.shapeRoi.x >= 0 && gem.shapeRoi.y >= 0 &&
+              gem.shapeRoi.x + gem.shapeRoi.width <= gameBoard.cols &&
+              gem.shapeRoi.y + gem.shapeRoi.height <= gameBoard.rows;
+
+          if (!colorRoiValid) {
             gem.type = GemType::UNKNOWN;
             gem.closestType = GemType::UNKNOWN;
             gem.bestMatch = 0.0f;
@@ -57,19 +74,21 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
             continue;
           }
 
-          // Get gem region
+          // Get gem region for color classification
           cv::Mat gemRegion = gameBoard(gem.roi);
           gem.avgColor = cv::mean(gemRegion);
 
           // Classify gem based on mode
-          if (mode == Config::ClassificationMode::SHAPE) {
-            // Shape mode placeholder - returns UNKNOWN
-            gem.type = GemType::UNKNOWN;
+          if (mode == Config::ClassificationMode::SHAPE && shapeRoiValid) {
+            // Shape mode - use larger ROI for shape matching
+            cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
+            gem.shapeMask = ProcessGemForShapeMatching(shapeRegion);
+            gem.type = ClassifyGemByShape(gem.shapeMask, &gem.bestMatch);
             gem.closestType = GemType::UNKNOWN;
-            gem.bestMatch = 0.0f;
-            gem.matchedThreshold = false;
+            gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
           } else {
             // Color classification
+            gem.shapeMask = cv::Mat(); // Clear shape mask in color mode
             gem.type =
                 ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
             gem.matchedThreshold = (gem.type != GemType::UNKNOWN);

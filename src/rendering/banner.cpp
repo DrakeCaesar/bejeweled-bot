@@ -139,7 +139,7 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs,
                       Config::WHITE_GEM_HSV_MAX),
   };
   static const std::vector<std::string> shapeHsvLines = {
-      "SHAPE MODE - No color thresholds (press 'c' to toggle)"};
+      "SHAPE MODE"};
   const std::vector<std::string> &hsvLines =
       (classificationMode == Config::ClassificationMode::COLOR) ? colorHsvLines
                                                                 : shapeHsvLines;

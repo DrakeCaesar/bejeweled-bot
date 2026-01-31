@@ -2,6 +2,7 @@
 #include "../capture/capture_thread.h"
 #include "../config.h"
 #include "../detection/process_thread.h"
+#include "../detection/shape_classifier.h"
 #include <iostream>
 
 // ============================================================================
@@ -32,6 +33,9 @@ bool Application::Initialize() {
   // Create display window
   cv::namedWindow(Config::DISPLAY_WINDOW_NAME,
                   cv::WINDOW_AUTOSIZE | cv::WINDOW_KEEPRATIO);
+
+  // Create trackbars for shape classifier parameter adjustment
+  ShapeParams::CreateTrackbars(Config::DISPLAY_WINDOW_NAME);
 
   // Print controls
   std::cout << "Controls:" << std::endl;

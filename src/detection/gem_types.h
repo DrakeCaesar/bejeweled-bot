@@ -33,9 +33,12 @@ struct Gem {
   GemState state;
   bool matchedThreshold;
   cv::Point gridPos;   // Grid position (0-7, 0-7)
-  cv::Rect roi;        // Region of interest in image
+  cv::Rect roi;        // Region of interest for color classification (smaller)
+  cv::Rect shapeRoi;   // Region of interest for shape classification (larger)
   cv::Scalar avgColor; // Average color for debugging
   float bestMatch;     // Best match ratio [0..1] for debug
+  cv::Mat
+      shapeMask; // Binary mask for shape classification (white gem on black)
 };
 
 // ============================================================================

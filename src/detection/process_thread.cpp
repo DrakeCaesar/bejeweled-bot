@@ -66,7 +66,11 @@ void ProcessThreadFunc(
                  timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
 
       if (Config::SHOW_DEBUG_OVERLAY) {
-        DrawDebugOverlay(buffer, gemGrid);
+        if (mode == Config::ClassificationMode::SHAPE) {
+          DrawShapeOverlay(buffer, gemGrid);
+        } else {
+          DrawDebugOverlay(buffer, gemGrid);
+        }
       }
 
       auto drawEnd = std::chrono::high_resolution_clock::now();

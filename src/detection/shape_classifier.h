@@ -1,0 +1,50 @@
+#pragma once
+
+#include "gem_types.h"
+#include <atomic>
+#include <opencv2/opencv.hpp>
+
+// ============================================================================
+// Shape Classification - Mask-based gem shape detection
+// ============================================================================
+
+// Adjustable parameters for shape processing (thread-safe for trackbar updates)
+namespace ShapeParams {
+// Gaussian blur kernel size (must be odd, 1-15)
+inline std::atomic<int> blurSize{2};
+
+// Adaptive threshold block size (must be odd, 3-51)
+inline std::atomic<int> blockSize{5};
+
+// Adaptive threshold C constant (-20 to 20, controls threshold sensitivity)
+inline std::atomic<int> thresholdC{2};
+
+// Morphological kernel size (1-9)
+inline std::atomic<int> morphSize{1};
+
+/**
+ * Create trackbars for shape parameters in the given window.
+ * Call this once after creating the display window.
+ */
+void CreateTrackbars(const std::string &windowName);
+} // namespace ShapeParams
+
+/**
+ * Process a gem region to create a binary mask suitable for shape matching.
+ * The result is a white-on-black representation of the gem silhouette.
+ *
+ * @param gemRegion The BGR image region containing the gem
+ * @return Binary mask (CV_8UC1) with white gem silhouette on black background
+ */
+cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion);
+
+/**
+ * Classify a gem by comparing its processed shape to reference masks.
+ * (Placeholder for future implementation with actual mask comparison)
+ *
+ * @param processedMask The binary mask from ProcessGemForShapeMatching
+ * @param outBestMatch Optional output for the best match score [0..1]
+ * @return Detected GemType, or UNKNOWN if no confident match
+ */
+GemType ClassifyGemByShape(const cv::Mat &processedMask,
+                           float *outBestMatch = nullptr);
