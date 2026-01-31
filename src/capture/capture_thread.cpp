@@ -1,5 +1,6 @@
 #include "capture_thread.h"
 #include "../config.h"
+#include "../detection/gem_detector.h"
 #include "window_capture.h"
 #include <chrono>
 #include <iostream>
@@ -24,25 +25,28 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
   const auto spinThreshold = std::chrono::microseconds(300);
 
   while (true) {
-    // Pace capture to fixed interval (e.g., every 10 ms)
-    auto nowSteady = std::chrono::steady_clock::now();
-    if (nextCaptureTime < nowSteady) {
-      nextCaptureTime = nowSteady;
-    }
+    // Skip frame pacing when recording for maximum capture speed
+    if (!IsRecording()) {
+      // Pace capture to fixed interval (e.g., every 10 ms)
+      auto nowSteady = std::chrono::steady_clock::now();
+      if (nextCaptureTime < nowSteady) {
+        nextCaptureTime = nowSteady;
+      }
 
-    auto timeToWait = nextCaptureTime - nowSteady;
-    auto sleepUntil = (timeToWait > spinThreshold)
-                          ? (nextCaptureTime - spinThreshold)
-                          : nextCaptureTime;
-    if (sleepUntil > nowSteady) {
-      std::this_thread::sleep_until(sleepUntil);
-    }
+      auto timeToWait = nextCaptureTime - nowSteady;
+      auto sleepUntil = (timeToWait > spinThreshold)
+                            ? (nextCaptureTime - spinThreshold)
+                            : nextCaptureTime;
+      if (sleepUntil > nowSteady) {
+        std::this_thread::sleep_until(sleepUntil);
+      }
 
-    while (std::chrono::steady_clock::now() < nextCaptureTime) {
-      std::this_thread::yield();
-    }
+      while (std::chrono::steady_clock::now() < nextCaptureTime) {
+        std::this_thread::yield();
+      }
 
-    nextCaptureTime += captureInterval;
+      nextCaptureTime += captureInterval;
+    }
 
     // Periodically keep game active
     auto now = std::chrono::high_resolution_clock::now();

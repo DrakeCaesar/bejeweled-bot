@@ -13,6 +13,7 @@
 
 
 
+
 namespace {
   // Recording configuration
   static bool g_recordingEnabled = false;
@@ -26,6 +27,8 @@ namespace {
   static cv::Mat g_previousFrame;
   static cv::Mat g_firstFrame;
   static int g_totalFramesChecked = 0;
+  static int g_framesToSkip = 10;
+  static int g_framesSkipped = 0;
 }
 
 void StartRecording(int col, int row, int maxFrames, const std::string& outputDir) {
@@ -34,6 +37,7 @@ void StartRecording(int col, int row, int maxFrames, const std::string& outputDi
   g_maxFrames = maxFrames;
   g_recordedFrames = 0;
   g_totalFramesChecked = 0;
+  g_framesSkipped = 0;
   g_outputDir = outputDir;
   
   // Clear previous comparison frames
@@ -47,7 +51,8 @@ void StartRecording(int col, int row, int maxFrames, const std::string& outputDi
   
   std::cout << "Started recording: col=" << col << " row=" << row 
             << " maxFrames=" << maxFrames << " output=" << outputDir << std::endl;
-  std::cout << "Will skip duplicate frames and stop if animation loops back to start." << std::endl;
+  std::cout << "Skipping first " << g_framesToSkip << " frames, then capturing unique frames." << std::endl;
+  std::cout << "Will stop if animation loops back to start." << std::endl;
 }
 
 void StopRecording() {
@@ -150,10 +155,19 @@ auto *gridPtr = &grid;
             if (col == g_recordCol && row == g_recordRow) {
               g_totalFramesChecked++;
               
+              // Skip the first N frames to avoid transition artifacts
+              if (g_framesSkipped < g_framesToSkip) {
+                g_framesSkipped++;
+                if (g_framesSkipped == g_framesToSkip) {
+                  std::cout << "Skipped " << g_framesToSkip << " initial frames. Starting capture..." << std::endl;
+                }
+                continue;
+              }
+              
               bool shouldSave = false;
               bool loopDetected = false;
               
-              // First frame - always save
+              // First frame after skip - always save
               if (g_firstFrame.empty()) {
                 g_firstFrame = shapeRegion.clone();
                 g_previousFrame = shapeRegion.clone();
