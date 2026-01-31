@@ -76,7 +76,7 @@ void CreateTrackbars(const std::string &windowName) {
                      OnMorphSizeChange);
   cv::createTrackbar("Erode Size", windowName, &erodeSizeTrack, 10,
                      OnErodeSizeChange);
-  cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 10,
+  cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5,
                      OnDebugStageChange);
   cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100,
                      OnMatchThresholdChange);
@@ -92,28 +92,74 @@ void CreateTrackbars(const std::string &windowName) {
 // Shape Processing - Direct Color Image Comparison
 // ============================================================================
 
+// Thread-local storage for debug visualizations
+namespace {
+  thread_local cv::Mat g_debugRefImage;
+  thread_local cv::Mat g_debugDiffMap;
+  thread_local cv::Mat g_debugMaskedInput;
+  thread_local cv::Mat g_debugMaskedRef;
+  thread_local cv::Mat g_debugBestInput;
+  thread_local cv::Mat g_debugBestRef;
+  thread_local cv::Mat g_debugBestDiffMap;
+}
+
 cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
   if (gemRegion.empty()) {
     return cv::Mat();
   }
 
+  int blur = ShapeParams::blurSize.load();
+  blur = (blur < 1) ? 1 : (blur | 1);
+  
+  // Apply blur if needed
+  if (blur > 1) {
+    cv::Mat blurred;
+    cv::GaussianBlur(gemRegion, blurred, cv::Size(blur, blur), 0);
+    return blurred;
+  }
+  
+  return gemRegion.clone();
+}
+
+cv::Mat GetDebugVisualization(const cv::Mat &gemRegion) {
   int stage = ShapeParams::debugStage.load();
   
-  // Simply return the gem region, optionally with preprocessing
   // Stage 0: original image
   if (stage == 0)
     return gemRegion.clone();
   
-  int blur = ShapeParams::blurSize.load();
-  blur = (blur < 1) ? 1 : (blur | 1);
+  // Stage 1: preprocessed (blurred) image
+  if (stage == 1)
+    return ProcessGemForShapeMatching(gemRegion);
   
-  // Stage 1: apply blur if needed
-  if (blur > 1) {
-    thread_local cv::Mat blurred;
-    cv::GaussianBlur(gemRegion, blurred, cv::Size(blur, blur), 0);
-    if (stage == 1)
-      return blurred.clone();
-    return blurred;
+  // Stage 2: show best matched reference image
+  if (stage == 2) {
+    if (!g_debugBestRef.empty())
+      return g_debugBestRef.clone();
+  }
+  
+  // Stage 3: show side-by-side comparison (input | reference)
+  if (stage == 3) {
+    if (!g_debugBestInput.empty() && !g_debugBestRef.empty()) {
+      cv::Mat sideBySide;
+      cv::hconcat(g_debugBestInput, g_debugBestRef, sideBySide);
+      return sideBySide;
+    }
+  }
+  
+  // Stage 4: show difference heat map
+  if (stage == 4) {
+    if (!g_debugBestDiffMap.empty())
+      return g_debugBestDiffMap.clone();
+  }
+  
+  // Stage 5: show difference heat map overlaid on input
+  if (stage == 5) {
+    if (!g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
+      cv::Mat overlay;
+      cv::addWeighted(g_debugBestInput, 0.5, g_debugBestDiffMap, 0.5, 0, overlay);
+      return overlay;
+    }
   }
   
   return gemRegion.clone();
@@ -201,10 +247,17 @@ static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
     }
   }
 
+  // Store masked images for debug visualization
+  g_debugMaskedInput = i1.clone();
+  g_debugMaskedRef = i2.clone();
+  
   // Convert both images to LAB color space for perceptual comparison
   thread_local cv::Mat lab1, lab2;
   cv::cvtColor(i1, lab1, cv::COLOR_BGR2Lab);
   cv::cvtColor(i2, lab2, cv::COLOR_BGR2Lab);
+
+  // Create difference map for visualization
+  g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
 
   // Calculate per-pixel color distance (only on non-black pixels)
   double totalDistance = 0.0;
@@ -213,6 +266,7 @@ static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
   for (int y = 0; y < lab1.rows; y++) {
     const cv::Vec3b *row1 = lab1.ptr<cv::Vec3b>(y);
     const cv::Vec3b *row2 = lab2.ptr<cv::Vec3b>(y);
+    cv::Vec3b *diffRow = g_debugDiffMap.ptr<cv::Vec3b>(y);
 
     for (int x = 0; x < lab1.cols; x++) {
       // Skip black pixels (background)
@@ -229,6 +283,19 @@ static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
       float dist = std::sqrt(dL * dL + da * da + db * db);
       totalDistance += dist;
       pixelCount++;
+      
+      // Visualize difference as heat map (0 = green/good, high = red/bad)
+      uchar heatValue = static_cast<uchar>(std::min(dist * 2.5f, 255.0f));
+      if (heatValue < 85) {
+        // Green (good match)
+        diffRow[x] = cv::Vec3b(0, 255 - heatValue, 0);
+      } else if (heatValue < 170) {
+        // Yellow (medium match)
+        diffRow[x] = cv::Vec3b(0, 255, heatValue - 85);
+      } else {
+        // Red (poor match)
+        diffRow[x] = cv::Vec3b(0, 255 - (heatValue - 170), 255);
+      }
     }
   }
 
@@ -246,6 +313,13 @@ static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
   double similarity = 1.0 - std::min(avgDistance / maxExpectedDistance, 1.0);
 
   return static_cast<float>(similarity);
+}
+
+// Helper to save current comparison as the best match for debug visualization
+static void SaveAsBestMatch() {
+  g_debugBestInput = g_debugMaskedInput.clone();
+  g_debugBestRef = g_debugMaskedRef.clone();
+  g_debugBestDiffMap = g_debugDiffMap.clone();
 }
 
 GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
@@ -293,6 +367,14 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
 
     firstFrameScores[i] = {type, score};
 
+    // Track best score so far
+    if (score > bestScore) {
+      bestScore = score;
+      bestType = type;
+      bestFrame = 0;
+      SaveAsBestMatch();
+    }
+
     // Early exit: if first frame exceeds threshold, we're done
     if (score >= threshold) {
       if (outBestMatch)
@@ -300,13 +382,6 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
       if (outBestFrame)
         *outBestFrame = 0;
       return type;
-    }
-
-    // Track best score so far
-    if (score > bestScore) {
-      bestScore = score;
-      bestType = type;
-      bestFrame = 0;
     }
   }
 
@@ -344,6 +419,7 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
         bestScore = score;
         bestType = type;
         bestFrame = frame;
+        SaveAsBestMatch();
       }
 
       // Early exit if we found a match exceeding threshold

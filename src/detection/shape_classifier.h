@@ -56,6 +56,23 @@ void CreateTrackbars(const std::string &windowName);
 cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion);
 
 /**
+ * Get debug visualization for a gem region.
+ * Must be called AFTER ClassifyGemByShape to get the best match data.
+ *
+ * Debug stages:
+ *   0 = original image
+ *   1 = preprocessed (blurred)
+ *   2 = best matched reference image
+ *   3 = side-by-side (input | reference)
+ *   4 = difference heat map
+ *   5 = heat map overlaid on input
+ *
+ * @param gemRegion The original BGR image region containing the gem
+ * @return Visualization image based on current debug stage
+ */
+cv::Mat GetDebugVisualization(const cv::Mat &gemRegion);
+
+/**
  * Classify a gem by comparing its processed shape to reference masks.
  *
  * @param processedMask The binary mask from ProcessGemForShapeMatching
