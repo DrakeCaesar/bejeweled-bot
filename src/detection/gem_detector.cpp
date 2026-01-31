@@ -1,8 +1,7 @@
 #include "gem_detector.h"
 #include "color_classifier.h"
+#include "thread_pool.h"
 #include <iostream>
-#include <thread>
-#include <vector>
 
 // ============================================================================
 // Grid Detection
@@ -14,76 +13,69 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
   static std::vector<std::vector<Gem>> grid(
       Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
-  // Lambda to process a chunk of tiles
-  auto processTiles = [&](int startIdx, int endIdx) {
-    for (int idx = startIdx; idx < endIdx; idx++) {
-      int row = idx / Config::GRID_SIZE;
-      int col = idx % Config::GRID_SIZE;
-
-      Gem &gem = grid[row][col];
-      gem.gridPos = cv::Point(col, row);
-      gem.state = GemState::NORMAL;
-
-      // Calculate cell center
-      int cellX = col * Config::CELL_SIZE;
-      int cellY = row * Config::CELL_SIZE;
-      int centerX = cellX + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
-      int centerY = cellY + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
-
-      // Define ROI for gem center
-      gem.roi = cv::Rect(centerX, centerY, Config::GEM_CENTER_SIZE,
-                         Config::GEM_CENTER_SIZE);
-
-      // Check if ROI is valid
-      if (gem.roi.x + gem.roi.width > gameBoard.cols ||
-          gem.roi.y + gem.roi.height > gameBoard.rows) {
-        gem.type = GemType::UNKNOWN;
-        gem.closestType = GemType::UNKNOWN;
-        gem.bestMatch = 0.0f;
-        gem.matchedThreshold = false;
-        continue;
-      }
-
-      // Get gem region
-      cv::Mat gemRegion = gameBoard(gem.roi);
-      gem.avgColor = cv::mean(gemRegion);
-
-      // Classify gem based on mode
-      if (mode == Config::ClassificationMode::SHAPE) {
-        // Shape mode placeholder - returns UNKNOWN
-        gem.type = GemType::UNKNOWN;
-        gem.closestType = GemType::UNKNOWN;
-        gem.bestMatch = 0.0f;
-        gem.matchedThreshold = false;
-      } else {
-        // Color classification
-        gem.type =
-            ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
-        gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
-      }
-    }
-  };
-
-  static constexpr int NUM_THREADS = 8;
   static constexpr int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
-  static constexpr int TILES_PER_THREAD = TOTAL_TILES / NUM_THREADS;
 
-  // Static allocation - threads vector reused across calls
-  static std::vector<std::thread> threads;
-  threads.clear();
-  threads.reserve(NUM_THREADS);
+  // Get pointer to static grid for lambda capture
+  auto *gridPtr = &grid;
 
-  for (int t = 0; t < NUM_THREADS; t++) {
-    int startIdx = t * TILES_PER_THREAD;
-    int endIdx =
-        (t == NUM_THREADS - 1) ? TOTAL_TILES : (t + 1) * TILES_PER_THREAD;
-    threads.emplace_back(processTiles, startIdx, endIdx);
-  }
+  // Use persistent thread pool - no thread creation per frame
+  StaticThreadPool::Instance().ParallelFor(
+      [&gameBoard, gridPtr, mode](int threadIndex, int numThreads) {
+        int tilesPerThread = TOTAL_TILES / numThreads;
+        int startIdx = threadIndex * tilesPerThread;
+        int endIdx = (threadIndex == numThreads - 1)
+                         ? TOTAL_TILES
+                         : (threadIndex + 1) * tilesPerThread;
 
-  // Wait for all threads to complete
-  for (auto &thread : threads) {
-    thread.join();
-  }
+        for (int idx = startIdx; idx < endIdx; idx++) {
+          int row = idx / Config::GRID_SIZE;
+          int col = idx % Config::GRID_SIZE;
+
+          Gem &gem = (*gridPtr)[row][col];
+          gem.gridPos = cv::Point(col, row);
+          gem.state = GemState::NORMAL;
+
+          // Calculate cell center
+          int cellX = col * Config::CELL_SIZE;
+          int cellY = row * Config::CELL_SIZE;
+          int centerX =
+              cellX + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
+          int centerY =
+              cellY + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
+
+          // Define ROI for gem center
+          gem.roi = cv::Rect(centerX, centerY, Config::GEM_CENTER_SIZE,
+                             Config::GEM_CENTER_SIZE);
+
+          // Check if ROI is valid
+          if (gem.roi.x + gem.roi.width > gameBoard.cols ||
+              gem.roi.y + gem.roi.height > gameBoard.rows) {
+            gem.type = GemType::UNKNOWN;
+            gem.closestType = GemType::UNKNOWN;
+            gem.bestMatch = 0.0f;
+            gem.matchedThreshold = false;
+            continue;
+          }
+
+          // Get gem region
+          cv::Mat gemRegion = gameBoard(gem.roi);
+          gem.avgColor = cv::mean(gemRegion);
+
+          // Classify gem based on mode
+          if (mode == Config::ClassificationMode::SHAPE) {
+            // Shape mode placeholder - returns UNKNOWN
+            gem.type = GemType::UNKNOWN;
+            gem.closestType = GemType::UNKNOWN;
+            gem.bestMatch = 0.0f;
+            gem.matchedThreshold = false;
+          } else {
+            // Color classification
+            gem.type =
+                ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
+            gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
+          }
+        }
+      });
 
   return grid;
 }

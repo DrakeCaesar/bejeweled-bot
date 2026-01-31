@@ -49,25 +49,45 @@ void InitializeFreeType() {
 std::string FormatRangeLine(const std::string &label, const cv::Scalar &minHSV,
                             const cv::Scalar &maxHSV) {
   std::ostringstream oss;
-  oss << label << " H[" << (int)minHSV[0] << "-" << (int)maxHSV[0] << "]"
-      << " S[" << (int)minHSV[1] << "-" << (int)maxHSV[1] << "]"
-      << " V[" << (int)minHSV[2] << "-" << (int)maxHSV[2] << "]";
+
+  constexpr int LABEL_WIDTH = 14;
+  constexpr int VAL_WIDTH = 3;
+
+  oss << std::left << std::setw(LABEL_WIDTH) << label << std::right << " H["
+      << std::setw(VAL_WIDTH) << static_cast<int>(minHSV[0]) << "-"
+      << std::setw(VAL_WIDTH) << static_cast<int>(maxHSV[0]) << "]"
+      << " S[" << std::setw(VAL_WIDTH) << static_cast<int>(minHSV[1]) << "-"
+      << std::setw(VAL_WIDTH) << static_cast<int>(maxHSV[1]) << "]"
+      << " V[" << std::setw(VAL_WIDTH) << static_cast<int>(minHSV[2]) << "-"
+      << std::setw(VAL_WIDTH) << static_cast<int>(maxHSV[2]) << "]";
+
   return oss.str();
 }
 
 std::string FormatRedRangeLine() {
   std::ostringstream oss;
-  oss << "RED H[" << (int)Config::RED_GEM_HSV_MIN_1[0] << "-"
-      << (int)Config::RED_GEM_HSV_MAX_1[0] << ","
-      << (int)Config::RED_GEM_HSV_MIN_2[0] << "-"
-      << (int)Config::RED_GEM_HSV_MAX_2[0] << "]"
-      << " S[" << (int)Config::RED_GEM_HSV_MIN_1[1] << "-"
-      << (int)Config::RED_GEM_HSV_MAX_1[1] << "]"
-      << " V[" << (int)Config::RED_GEM_HSV_MIN_1[2] << "-"
-      << (int)Config::RED_GEM_HSV_MAX_1[2] << "]";
+
+  constexpr int LABEL_WIDTH = 6;
+  constexpr int VAL_WIDTH = 3;
+
+  oss << std::left << std::setw(LABEL_WIDTH) << "RED" << std::right << " H["
+      << std::setw(VAL_WIDTH) << static_cast<int>(Config::RED_GEM_HSV_MIN_1[0])
+      << "-" << std::setw(VAL_WIDTH)
+      << static_cast<int>(Config::RED_GEM_HSV_MAX_1[0]) << ","
+      << std::setw(VAL_WIDTH) << static_cast<int>(Config::RED_GEM_HSV_MIN_2[0])
+      << "-" << std::setw(VAL_WIDTH)
+      << static_cast<int>(Config::RED_GEM_HSV_MAX_2[0]) << "]"
+      << " S[" << std::setw(VAL_WIDTH)
+      << static_cast<int>(Config::RED_GEM_HSV_MIN_1[1]) << "-"
+      << std::setw(VAL_WIDTH) << static_cast<int>(Config::RED_GEM_HSV_MAX_1[1])
+      << "]"
+      << " V[" << std::setw(VAL_WIDTH)
+      << static_cast<int>(Config::RED_GEM_HSV_MIN_1[2]) << "-"
+      << std::setw(VAL_WIDTH) << static_cast<int>(Config::RED_GEM_HSV_MAX_1[2])
+      << "]";
+
   return oss.str();
 }
-
 } // namespace
 
 // ============================================================================
@@ -144,16 +164,28 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs,
   }
 
   // Draw HSV ranges
-  int fontFace = cv::FONT_HERSHEY_PLAIN;
-  double fontScale = 1.0;
-  int thickness = 1;
   int lineHeight = 16;
-  int startY = Config::BANNER_HEIGHT;
+  int startY = 40;
 
   for (size_t i = 0; i < hsvLines.size(); ++i) {
     cv::Point pos(10, startY + static_cast<int>(i) * (lineHeight + 5));
-    cv::putText(image, hsvLines[i], pos, fontFace, fontScale,
-                cv::Scalar(180, 180, 180), thickness, cv::LINE_AA);
+
+    if (freetypeInitialized && ft2) {
+      // Use FreeType2 with monospace font
+      ft2->putText(image, hsvLines[i], pos,
+                   14, // Font height
+                   cv::Scalar(180, 180, 180),
+                   -1, // Thickness (filled)
+                   cv::LINE_AA,
+                   false); // Bottom-left origin
+    } else {
+      // Fallback to built-in font
+      int fontFace = cv::FONT_HERSHEY_PLAIN;
+      double fontScale = 1.0;
+      int thickness = 1;
+      cv::putText(image, hsvLines[i], pos, fontFace, fontScale,
+                  cv::Scalar(180, 180, 180), thickness, cv::LINE_AA);
+    }
   }
 
   // Draw separator line below banner

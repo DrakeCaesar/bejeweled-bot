@@ -1,4 +1,5 @@
 #include "overlay.h"
+#include <array>
 #include <iomanip>
 #include <sstream>
 
@@ -44,26 +45,26 @@ void DrawDebugOverlay(cv::Mat &image,
         cv::cvtColor(tmpBGR, tmpHSV, cv::COLOR_BGR2HSV);
         cv::Vec3b hsvVal = tmpHSV.at<cv::Vec3b>(0, 0);
 
-        // Prepare text lines - static allocation, reused each iteration
-        static thread_local std::vector<std::string> lines;
+        // Prepare text lines - static allocation with fixed-size array
+        static thread_local std::array<std::string, 5> lines;
         static thread_local std::ostringstream oss;
-        lines.clear();
+        int lineCount = 0;
         cv::Scalar textColor;
 
         if (gem.matchedThreshold && gem.type != GemType::UNKNOWN) {
-          lines.push_back(GemTypeToString(gem.type));
+          lines[lineCount++] = GemTypeToString(gem.type);
           oss.str("");
           oss << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f)
               << "%";
-          lines.push_back(oss.str());
+          lines[lineCount++] = oss.str();
           textColor = GemTypeToColor(gem.type);
         } else {
-          lines.push_back("CLOSE:");
-          lines.push_back(GemTypeToString(gem.closestType));
+          lines[lineCount++] = "CLOSE:";
+          lines[lineCount++] = GemTypeToString(gem.closestType);
           oss.str("");
           oss << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f)
               << "%";
-          lines.push_back(oss.str());
+          lines[lineCount++] = oss.str();
           textColor = (gem.closestType != GemType::UNKNOWN)
                           ? GemTypeToColor(gem.closestType)
                           : cv::Scalar(160, 160, 160);
@@ -71,10 +72,10 @@ void DrawDebugOverlay(cv::Mat &image,
 
         oss.str("");
         oss << "H" << (int)hsvVal[0] << " S" << (int)hsvVal[1];
-        lines.push_back(oss.str());
+        lines[lineCount++] = oss.str();
         oss.str("");
         oss << "V" << (int)hsvVal[2];
-        lines.push_back(oss.str());
+        lines[lineCount++] = oss.str();
 
         // Calculate background size
         int maxWidth = 0;
@@ -83,22 +84,21 @@ void DrawDebugOverlay(cv::Mat &image,
         int thickness = 1;
         int baseline = 0;
 
-        for (const auto &line : lines) {
-          cv::Size textSize =
-              cv::getTextSize(line, fontFace, fontScale, thickness, &baseline);
+        for (int i = 0; i < lineCount; i++) {
+          cv::Size textSize = cv::getTextSize(lines[i], fontFace, fontScale,
+                                              thickness, &baseline);
           maxWidth = std::max(maxWidth, textSize.width);
         }
 
         int bgPadding = 3;
         cv::Rect bgRect(textX - bgPadding, textY - 12, maxWidth + bgPadding * 2,
-                        static_cast<int>(lines.size()) * lineHeight +
-                            bgPadding * 2);
+                        lineCount * lineHeight + bgPadding * 2);
         cv::rectangle(image, bgRect, cv::Scalar(20, 20, 20), -1);
         cv::rectangle(image, bgRect, cv::Scalar(60, 60, 60), 1);
 
         // Draw text lines with anti-aliasing
-        for (size_t i = 0; i < lines.size(); ++i) {
-          cv::Point pos(textX, textY + static_cast<int>(i) * lineHeight);
+        for (int i = 0; i < lineCount; i++) {
+          cv::Point pos(textX, textY + i * lineHeight);
           cv::putText(image, lines[i], pos, fontFace, fontScale, textColor,
                       thickness, cv::LINE_AA);
         }
