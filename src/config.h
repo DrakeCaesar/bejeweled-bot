@@ -83,7 +83,7 @@ const bool BOOST_THREAD_PRIORITY =
     true; // Reduce FPS drop when window loses focus
 
 // Banner settings
-const int BANNER_HEIGHT = 200; // Height of info banner at top
+const int BANNER_HEIGHT = 100; // Height of info banner at top
 const cv::Scalar BANNER_BG_COLOR =
     cv::Scalar(40, 40, 40); // Dark gray background
 const cv::Scalar BANNER_TEXT_COLOR = cv::Scalar(0, 255, 0); // Green text

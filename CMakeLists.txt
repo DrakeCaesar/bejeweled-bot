@@ -33,18 +33,19 @@ add_executable(bejeweled-bot ${SOURCES})
 
 target_link_libraries(bejeweled-bot PRIVATE ${OpenCV_LIBS})
 target_include_directories(bejeweled-bot PRIVATE
-  ${OpenCV_INCLUDE_DIRS}
-  ${CMAKE_SOURCE_DIR}/src
+    ${OpenCV_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 # Performance optimizations
-if(MSVC OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+if(MSVC)
+    target_compile_options(bejeweled-bot PRIVATE
+        /MP${num_jobs}
+        $<$<CONFIG:Release>:/O2 /Ob2 /DNDEBUG>
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(bejeweled-bot PRIVATE
         $<$<CONFIG:Release>:-O3 -march=native -ffast-math>
         $<$<CONFIG:Debug>:-O0>
     )
-    # Enable multi-core compilation for MSVC
-    if(MSVC)
-    target_compile_options(bejeweled-bot PRIVATE "/MP${num_jobs}")
-    endif()
 endif()

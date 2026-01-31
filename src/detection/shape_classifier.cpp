@@ -89,18 +89,79 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
   cv::adaptiveThreshold(blurred, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
                         cv::THRESH_BINARY, block, threshC);
 
-  // Apply morphological operations to clean up the mask
+  // Apply morphological operations to clean up the edges
   cv::Mat kernel =
       cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(morph, morph));
 
-  // Close small gaps in the gem shape
+  // Close small gaps in the edge lines
   cv::morphologyEx(binary, binary, cv::MORPH_CLOSE, kernel);
 
   // Remove small noise spots
   cv::morphologyEx(binary, binary, cv::MORPH_OPEN, kernel);
 
-  // Return a clone since binary uses thread-local storage
-  return binary.clone();
+  // Find contours in the edge image
+  // The edges form black lines on white background, so we invert first
+  thread_local cv::Mat inverted;
+  cv::bitwise_not(binary, inverted);
+
+  thread_local std::vector<std::vector<cv::Point>> contours;
+  contours.clear();
+  cv::findContours(inverted, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+
+  // Create output mask (white gem on black background)
+  cv::Mat result = cv::Mat::zeros(binary.size(), CV_8UC1);
+
+  if (!contours.empty()) {
+    // Find the best contour: largest area that's reasonably centered
+    int centerX = binary.cols / 2;
+    int centerY = binary.rows / 2;
+    int bestIdx = -1;
+    double bestScore = -1;
+
+    for (size_t i = 0; i < contours.size(); i++) {
+      double area = cv::contourArea(contours[i]);
+      if (area < 100)
+        continue; // Skip tiny contours
+
+      // Get contour center
+      cv::Moments m = cv::moments(contours[i]);
+      if (m.m00 == 0)
+        continue;
+      int cx = static_cast<int>(m.m10 / m.m00);
+      int cy = static_cast<int>(m.m01 / m.m00);
+
+      // Distance from image center
+      double dist = std::sqrt((cx - centerX) * (cx - centerX) +
+                              (cy - centerY) * (cy - centerY));
+
+      // Score: prefer large area and central position
+      // Normalize distance (max ~60 pixels from center in 120x120 image)
+      double distScore = 1.0 - std::min(dist / 60.0, 1.0);
+      double score = area * (0.5 + 0.5 * distScore);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = static_cast<int>(i);
+      }
+    }
+
+    // Fill the best contour to create a solid silhouette
+    if (bestIdx >= 0) {
+      cv::drawContours(result, contours, bestIdx, cv::Scalar(255), cv::FILLED);
+
+      // Apply morphological opening to remove thin protrusions ("sticks")
+      // Use a larger kernel for more aggressive cleanup
+      cv::Mat cleanupKernel =
+          cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
+      cv::morphologyEx(result, result, cv::MORPH_OPEN, cleanupKernel);
+
+      // Apply closing to fill any small holes created
+      cv::morphologyEx(result, result, cv::MORPH_CLOSE, cleanupKernel);
+    }
+  }
+
+  return result;
 }
 
 // ============================================================================
