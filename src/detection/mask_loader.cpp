@@ -71,7 +71,7 @@ bool LoadMasksForGem(const std::string &assetsPath, GemType type) {
   }
 
   // Load the alpha mask sprite sheet
-  std::string maskPath = assetsPath + "/masks/" + filename;
+  std::string maskPath = assetsPath + "/mask/" + filename;
   cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
   if (maskSheet.empty()) {
     std::cerr << "Failed to load alpha mask: " << maskPath << std::endl;
