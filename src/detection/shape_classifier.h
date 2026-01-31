@@ -32,12 +32,16 @@ inline std::atomic<int> debugStage{0};
 
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching
 // Early exit optimization: check first frame of each set, then explore in order
-inline std::atomic<int> matchThreshold{98};
+inline std::atomic<int> matchThreshold{80};
 
 // Mask offset for alignment fine-tuning (-5 to +5 pixels)
 // Stored as 0-10 range, interpreted as -5 to +5
 inline std::atomic<int> maskOffsetX{6}; // 5 = center (0 offset)
 inline std::atomic<int> maskOffsetY{6}; // 5 = center (0 offset)
+
+// Reference asset scale (900-1100 maps to 0.900x - 1.100x, step 0.001)
+// Used to compensate for size differences between assets and game rendering
+inline std::atomic<int> refScale{1000}; // 1000 = 1.000x (no scaling)
 
 /**
  * Create trackbars for shape parameters in the given window.

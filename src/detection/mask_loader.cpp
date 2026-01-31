@@ -149,12 +149,12 @@ bool LoadMasksForGem(const std::string &assetsPath, GemType type) {
 }
 
 bool LoadAllMasks(const std::string &assetsPath) {
-bool success = true;
+  bool success = true;
 
-// Load masks for each gem type
-static const GemType gemTypes[] = {
-    GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
-    GemType::BLUE, GemType::PURPLE, GemType::WHITE};
+  // Load masks for each gem type
+  static const GemType gemTypes[] = {
+      GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
+      GemType::BLUE, GemType::PURPLE, GemType::WHITE};
 
   for (GemType type : gemTypes) {
     if (!LoadMasksForGem(assetsPath, type)) {

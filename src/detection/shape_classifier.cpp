@@ -1,5 +1,6 @@
 #include "shape_classifier.h"
 #include "mask_loader.h"
+#include <cmath>
 #include <opencv2/opencv.hpp>
 
 // ============================================================================
@@ -19,6 +20,7 @@ static int debugStageTrack = debugStage.load();
 static int matchThresholdTrack = matchThreshold.load();
 static int maskOffsetXTrack = maskOffsetX.load();
 static int maskOffsetYTrack = maskOffsetY.load();
+static int refScaleTrack = refScale.load();
 
 static void OnBlurChange(int value, void *) {
   // Ensure odd value, minimum 1
@@ -66,6 +68,16 @@ static void OnMaskOffsetXChange(int value, void *) { maskOffsetX.store(value); }
 
 static void OnMaskOffsetYChange(int value, void *) { maskOffsetY.store(value); }
 
+static void OnRefScaleChange(int value, void *) {
+  // Clamp to 980-1020 range (98.0% - 102.0%)
+  int v = value;
+  if (v < 980)
+    v = 980;
+  if (v > 1020)
+    v = 1020;
+  refScale.store(v);
+}
+
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
   cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
@@ -84,6 +96,9 @@ void CreateTrackbars(const std::string &windowName) {
                      OnMaskOffsetXChange);
   cv::createTrackbar("Mask Offset Y", windowName, &maskOffsetYTrack, 10,
                      OnMaskOffsetYChange);
+  cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1020,
+                     OnRefScaleChange);
+  cv::setTrackbarMin("Ref Scale %%", windowName, 980);
 }
 
 } // namespace ShapeParams
@@ -172,20 +187,64 @@ cv::Mat GetDebugVisualization(const cv::Mat &gemRegion) {
 // Calculate color similarity between two images using LAB color space
 // Applies alpha mask to both images to focus comparison on gem pixels only
 static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
-                                       const cv::Mat &alphaMask = cv::Mat()) {
-  if (img1.empty() || img2.empty())
-    return 0.0f;
+                                     const cv::Mat &alphaMask = cv::Mat()) {
+if (img1.empty() || img2.empty())
+  return 0.0f;
 
-  // Resize if sizes don't match
-  cv::Mat i1 = img1.clone(); // Clone so we can modify
-  cv::Mat i2 = img2;
+// Clone input so we can modify
+cv::Mat i1 = img1.clone();
+cv::Mat i2 = img2;
+cv::Mat mask = alphaMask;
 
+// Apply scale to reference image and mask (high precision: 980-1020 = 0.980x-1.020x)
+float scale = ShapeParams::refScale.load() / 1000.0f;
+if (std::abs(scale - 1.0f) > 0.0001f) {
+  // Scale the reference image using high-quality Lanczos interpolation
+  int scaledW = static_cast<int>(std::round(i2.cols * scale));
+  int scaledH = static_cast<int>(std::round(i2.rows * scale));
+  cv::Mat scaledRef;
+  cv::resize(i2, scaledRef, cv::Size(scaledW, scaledH), 0, 0, cv::INTER_LINEAR);
+    
+  // Center crop or pad to match input size
+  cv::Mat finalRef = cv::Mat::zeros(i1.size(), i2.type());
+  int offsetX = (scaledW - i1.cols) / 2;
+  int offsetY = (scaledH - i1.rows) / 2;
+    
+  // Calculate source and destination ROIs
+  int srcX = std::max(0, offsetX);
+  int srcY = std::max(0, offsetY);
+  int dstX = std::max(0, -offsetX);
+  int dstY = std::max(0, -offsetY);
+  int copyW = std::min(scaledW - srcX, i1.cols - dstX);
+  int copyH = std::min(scaledH - srcY, i1.rows - dstY);
+    
+  if (copyW > 0 && copyH > 0) {
+    cv::Rect srcRoi(srcX, srcY, copyW, copyH);
+    cv::Rect dstRoi(dstX, dstY, copyW, copyH);
+    scaledRef(srcRoi).copyTo(finalRef(dstRoi));
+  }
+  i2 = finalRef;
+    
+  // Also scale the mask using nearest neighbor (preserve binary values)
+  if (!alphaMask.empty()) {
+    cv::Mat scaledMask;
+    cv::resize(alphaMask, scaledMask, cv::Size(scaledW, scaledH), 0, 0, cv::INTER_NEAREST);
+    cv::Mat finalMask = cv::Mat::zeros(i1.size(), alphaMask.type());
+      
+    if (copyW > 0 && copyH > 0) {
+      cv::Rect srcRoi(srcX, srcY, copyW, copyH);
+      cv::Rect dstRoi(dstX, dstY, copyW, copyH);
+      scaledMask(srcRoi).copyTo(finalMask(dstRoi));
+    }
+    mask = finalMask;
+  }
+} else {
+  // No scaling, just resize if sizes don't match
   if (img1.size() != img2.size()) {
     cv::resize(img2, i2, img1.size(), 0, 0, cv::INTER_LINEAR);
   }
-
+    
   // Prepare mask - resize to match if provided
-  cv::Mat mask;
   if (!alphaMask.empty()) {
     if (alphaMask.size() != i1.size()) {
       cv::resize(alphaMask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
@@ -193,6 +252,7 @@ static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
       mask = alphaMask.clone();
     }
   }
+}
 
   // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
   int offsetX = ShapeParams::maskOffsetX.load() - 5;
@@ -284,17 +344,23 @@ static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
       totalDistance += dist;
       pixelCount++;
       
-      // Visualize difference as heat map (0 = green/good, high = red/bad)
-      uchar heatValue = static_cast<uchar>(std::min(dist * 2.5f, 255.0f));
-      if (heatValue < 85) {
-        // Green (good match)
-        diffRow[x] = cv::Vec3b(0, 255 - heatValue, 0);
-      } else if (heatValue < 170) {
-        // Yellow (medium match)
-        diffRow[x] = cv::Vec3b(0, 255, heatValue - 85);
+      // Visualize difference as heat map (black = good match, bright = difference)
+      // Only show pixels with significant differences
+      if (dist < 10.0f) {
+        // Good match - show as dark/black
+        diffRow[x] = cv::Vec3b(0, 0, 0);
       } else {
-        // Red (poor match)
-        diffRow[x] = cv::Vec3b(0, 255 - (heatValue - 170), 255);
+        // Scale difference: 10-100 distance maps to visible colors
+        float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
+        uchar intensity = static_cast<uchar>(normalized * 255.0f);
+        
+        if (normalized < 0.5f) {
+          // Yellow for moderate differences
+          diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
+        } else {
+          // Red for large differences
+          diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
+        }
       }
     }
   }
