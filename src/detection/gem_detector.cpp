@@ -1,5 +1,4 @@
 #include "gem_detector.h"
-#include "color_classifier.h"
 #include "mask_loader.h"
 #include "shape_classifier.h"
 #include "thread_pool.h"
@@ -10,15 +9,15 @@
 // ============================================================================
 
 std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
-                                          Config::ClassificationMode mode) {
+                                          Config::ClassificationMode) {
   // Static allocation - grid is reused across calls
   static std::vector<std::vector<Gem>> grid(
       Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
 
   static constexpr int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
 
-  // For shape mode, ensure scaled cache is ready BEFORE parallel processing
-  if (mode == Config::ClassificationMode::SHAPE && MaskLoader::AreMasksLoaded()) {
+  // Ensure scaled cache is ready BEFORE parallel processing
+  if (MaskLoader::AreMasksLoaded()) {
     int scaleInt = ShapeParams::refScale.load();
     int blurSize = ShapeParams::refBlur.load();
     cv::Size targetSize(Config::GEM_SHAPE_SIZE, Config::GEM_SHAPE_SIZE);
@@ -30,7 +29,7 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
 
   // Use persistent thread pool - no thread creation per frame
   StaticThreadPool::Instance().ParallelFor(
-      [&gameBoard, gridPtr, mode](int threadIndex, int numThreads) {
+      [&gameBoard, gridPtr](int threadIndex, int numThreads) {
         int tilesPerThread = TOTAL_TILES / numThreads;
         int startIdx = threadIndex * tilesPerThread;
         int endIdx = (threadIndex == numThreads - 1)
@@ -49,15 +48,7 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
           int cellX = col * Config::CELL_SIZE;
           int cellY = row * Config::CELL_SIZE;
 
-          // Define ROI for color classification (smaller center region)
-          int colorCenterX =
-              cellX + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
-          int colorCenterY =
-              cellY + (Config::CELL_SIZE - Config::GEM_CENTER_SIZE) / 2;
-          gem.roi = cv::Rect(colorCenterX, colorCenterY,
-                             Config::GEM_CENTER_SIZE, Config::GEM_CENTER_SIZE);
-
-          // Define ROI for shape classification (larger to capture full gem)
+          // Define ROI for shape classification
           int shapeCenterX =
               cellX + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
           int shapeCenterY =
@@ -65,17 +56,15 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
           gem.shapeRoi =
               cv::Rect(shapeCenterX, shapeCenterY, Config::GEM_SHAPE_SIZE,
                        Config::GEM_SHAPE_SIZE);
+          gem.roi = gem.shapeRoi;
 
-          // Check if ROIs are valid
-          bool colorRoiValid = gem.roi.x >= 0 && gem.roi.y >= 0 &&
-                               gem.roi.x + gem.roi.width <= gameBoard.cols &&
-                               gem.roi.y + gem.roi.height <= gameBoard.rows;
-          bool shapeRoiValid =
+          // Check if ROI is valid
+          bool roiValid =
               gem.shapeRoi.x >= 0 && gem.shapeRoi.y >= 0 &&
               gem.shapeRoi.x + gem.shapeRoi.width <= gameBoard.cols &&
               gem.shapeRoi.y + gem.shapeRoi.height <= gameBoard.rows;
 
-          if (!colorRoiValid) {
+          if (!roiValid) {
             gem.type = GemType::UNKNOWN;
             gem.closestType = GemType::UNKNOWN;
             gem.bestMatch = 0.0f;
@@ -83,29 +72,17 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
             continue;
           }
 
-          // Get gem region for color classification
-          cv::Mat gemRegion = gameBoard(gem.roi);
-          gem.avgColor = cv::mean(gemRegion);
+          // Get gem region
+          cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
+          gem.avgColor = cv::mean(shapeRegion);
 
-          // Classify gem based on mode
-          if (mode == Config::ClassificationMode::SHAPE && shapeRoiValid) {
-            // Shape mode - use larger ROI for shape matching
-            cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
-            cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
-            gem.type = ClassifyGemByShape(processed, &gem.bestMatch,
-                                          &gem.bestMatchFrame);
-            // Get debug visualization AFTER classification (uses best match data)
-            gem.shapeMask = GetDebugVisualization(shapeRegion);
-            gem.closestType = GemType::UNKNOWN;
-            gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
-          } else {
-            // Color classification
-            gem.shapeMask = cv::Mat(); // Clear shape mask in color mode
-            gem.bestMatchFrame = -1;
-            gem.type =
-                ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
-            gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
-          }
+          // Classify gem using shape matching
+          cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
+          gem.type = ClassifyGemByShape(processed, &gem.bestMatch,
+                                        &gem.bestMatchFrame);
+          gem.shapeMask = GetDebugVisualization(shapeRegion);
+          gem.closestType = GemType::UNKNOWN;
+          gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
         }
       });
 

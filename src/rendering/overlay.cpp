@@ -193,25 +193,6 @@ void DrawShapeOverlay(cv::Mat &image,
                            cv::INTER_LINEAR);
               }
               
-              // Apply offset if needed
-              int offsetX = ShapeParams::maskOffsetX.load() - 5;
-              int offsetY = ShapeParams::maskOffsetY.load() - 5;
-              if (offsetX != 0 || offsetY != 0) {
-                cv::Mat shiftedImg = cv::Mat::zeros(refImage.size(), refImage.type());
-                int srcX = std::max(0, -offsetX);
-                int srcY = std::max(0, -offsetY);
-                int dstX = std::max(0, offsetX);
-                int dstY = std::max(0, offsetY);
-                int width = refImage.cols - std::abs(offsetX);
-                int height = refImage.rows - std::abs(offsetY);
-                if (width > 0 && height > 0) {
-                  cv::Rect srcRoi(srcX, srcY, width, height);
-                  cv::Rect dstRoi(dstX, dstY, width, height);
-                  refImage(srcRoi).copyTo(shiftedImg(dstRoi));
-                }
-                refImage = shiftedImg;
-              }
-              
               // Create side-by-side comparison
               int w = capturedGem.cols;
               int h = capturedGem.rows;
@@ -258,27 +239,6 @@ void DrawShapeOverlay(cv::Mat &image,
             if (!refMask.empty() && refMask.size() != gem.shapeMask.size()) {
               cv::resize(refMask, refMask, gem.shapeMask.size(), 0, 0,
                          cv::INTER_NEAREST);
-            }
-            // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
-            if (!refMask.empty()) {
-              int offsetX = ShapeParams::maskOffsetX.load() - 5;
-              int offsetY = ShapeParams::maskOffsetY.load() - 5;
-              if (offsetX != 0 || offsetY != 0) {
-                cv::Mat shiftedMask =
-                    cv::Mat::zeros(refMask.size(), refMask.type());
-                int srcX = std::max(0, -offsetX);
-                int srcY = std::max(0, -offsetY);
-                int dstX = std::max(0, offsetX);
-                int dstY = std::max(0, offsetY);
-                int width = refMask.cols - std::abs(offsetX);
-                int height = refMask.rows - std::abs(offsetY);
-                if (width > 0 && height > 0) {
-                  cv::Rect srcRoi(srcX, srcY, width, height);
-                  cv::Rect dstRoi(dstX, dstY, width, height);
-                  refMask(srcRoi).copyTo(shiftedMask(dstRoi));
-                }
-                refMask = shiftedMask;
-              }
             }
           }
 

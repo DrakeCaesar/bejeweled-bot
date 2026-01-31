@@ -193,18 +193,18 @@ const cv::Mat &GetAlphaMask(GemType type, int frameIndex) {
 }
 
 // ============================================================================
-// Scaled Image Cache - Pre-scaled and blurred images for current settings
+// Scaled Color Image Cache - Pre-scaled color images for current settings
 // ============================================================================
 
 static MaskStorage s_scaledMasks;
-static AlphaMaskStorage s_scaledAlphaMasks;
 static int s_cachedScaleInt = 0;  // 0 = not initialized
 static int s_cachedBlurSize = 0;
 static cv::Size s_cachedTargetSize{0, 0};
 
 void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize) {
   // Already valid and matches?
-  if (scaleInt == s_cachedScaleInt && targetSize == s_cachedTargetSize && blurSize == s_cachedBlurSize) {
+  if (scaleInt == s_cachedScaleInt && targetSize == s_cachedTargetSize && 
+      blurSize == s_cachedBlurSize) {
     return;
   }
   
@@ -217,7 +217,7 @@ void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize) {
   float scale = scaleInt / 1000.0f;
   float centerX = targetSize.width / 2.0f;
   float centerY = targetSize.height / 2.0f;
-  cv::Mat transform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
+  cv::Mat colorTransform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
   
   // Ensure blur size is odd and >= 1
   int blur = (blurSize < 1) ? 1 : (blurSize | 1);
@@ -225,7 +225,6 @@ void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize) {
   for (int gemIdx = 0; gemIdx < NUM_GEM_TYPES; gemIdx++) {
     for (int frame = 0; frame < FRAMES_PER_GEM; frame++) {
       const cv::Mat &srcMask = s_masks[gemIdx][frame];
-      const cv::Mat &srcAlpha = s_alphaMasks[gemIdx][frame];
       
       if (srcMask.empty()) continue;
       
@@ -242,25 +241,13 @@ void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize) {
         cv::GaussianBlur(resized, resized, cv::Size(blur, blur), 0);
       }
       
-      // Apply scale transformation
-      cv::warpAffine(resized, s_scaledMasks[gemIdx][frame], transform, targetSize,
+      // Apply scale transformation to color image
+      cv::warpAffine(resized, s_scaledMasks[gemIdx][frame], colorTransform, targetSize,
                      cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
-      
-      // Scale alpha mask (same transformation, but preserve binary edges)
-      if (!srcAlpha.empty()) {
-        cv::Mat resizedAlpha;
-        if (srcAlpha.size() != targetSize) {
-          cv::resize(srcAlpha, resizedAlpha, targetSize, 0, 0, cv::INTER_NEAREST);
-        } else {
-          resizedAlpha = srcAlpha.clone();
-        }
-        cv::warpAffine(resizedAlpha, s_scaledAlphaMasks[gemIdx][frame], transform, targetSize,
-                       cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
-      }
     }
   }
   
-  std::cout << "Rebuilt scaled mask cache: " << targetSize.width << "x" << targetSize.height 
+  std::cout << "Rebuilt color cache: " << targetSize.width << "x" << targetSize.height 
             << " @ " << (scale * 100.0f) << "%, blur=" << blur << std::endl;
 }
 
@@ -269,19 +256,8 @@ const cv::Mat &GetScaledMask(GemType type, int frameIndex) {
   if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
     return s_emptyMask;
   }
-  // Return cached scaled image (caller must ensure cache is built)
   const cv::Mat &scaled = s_scaledMasks[gemIndex][frameIndex];
   return scaled.empty() ? s_masks[gemIndex][frameIndex] : scaled;
-}
-
-const cv::Mat &GetScaledAlphaMask(GemType type, int frameIndex) {
-  int gemIndex = GemTypeToIndex(type);
-  if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
-    return s_emptyMask;
-  }
-  // Return cached scaled mask (caller must ensure cache is built)
-  const cv::Mat &scaled = s_scaledAlphaMasks[gemIndex][frameIndex];
-  return scaled.empty() ? s_alphaMasks[gemIndex][frameIndex] : scaled;
 }
 
 } // namespace MaskLoader

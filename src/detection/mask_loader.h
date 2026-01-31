@@ -77,21 +77,17 @@ const cv::Mat &GetAlphaMask(GemType type, int frameIndex);
 /**
  * Ensure scaled cache is built for the given parameters.
  * Call ONCE before parallel processing begins (main thread only).
+ * Only scales color images - alpha masks are used as-is via GetAlphaMask.
  *
- * @param targetSize Target size for scaled images
- * @param scaleInt Scale as integer (1000 = 100%)
+ * @param targetSize Target size for scaled color images
+ * @param scaleInt Scale as integer for color images (1000 = 100%)
  * @param blurSize Gaussian blur kernel size to apply to reference images (1 = no blur)
  */
 void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize = 1);
 
 /**
- * Get a pre-scaled reference image. Must call EnsureScaledCache first.
+ * Get a pre-scaled reference color image. Must call EnsureScaledCache first.
  */
 const cv::Mat &GetScaledMask(GemType type, int frameIndex);
-
-/**
- * Get a pre-scaled alpha mask. Must call EnsureScaledCache first.
- */
-const cv::Mat &GetScaledAlphaMask(GemType type, int frameIndex);
 
 } // namespace MaskLoader

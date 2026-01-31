@@ -10,103 +10,37 @@
 namespace ShapeParams {
 
 // Trackbar backing variables (OpenCV requires int pointers)
-static int blurSizeTrack = blurSize.load();
-static int blockSizeTrack = blockSize.load();
-static int thresholdCTrack =
-    thresholdC.load() + 20; // Offset to make range 0-40
-static int morphSizeTrack = morphSize.load();
-static int erodeSizeTrack = erodeSize.load();
 static int debugStageTrack = debugStage.load();
 static int matchThresholdTrack = matchThreshold.load();
-static int maskOffsetXTrack = maskOffsetX.load();
-static int maskOffsetYTrack = maskOffsetY.load();
 static int refScaleTrack = refScale.load();
 static int refBlurTrack = refBlur.load();
-
-static void OnBlurChange(int value, void *) {
-  // Ensure odd value, minimum 1
-  int v = value | 1;
-  if (v < 1)
-    v = 1;
-  blurSize.store(v);
-}
-
-static void OnBlockSizeChange(int value, void *) {
-  // Ensure odd value, minimum 3
-  int v = value | 1;
-  if (v < 3)
-    v = 3;
-  blockSize.store(v);
-}
-
-static void OnThresholdCChange(int value, void *) {
-  // Convert from 0-40 range to -20 to +20
-  thresholdC.store(value - 20);
-}
-
-static void OnMorphSizeChange(int value, void *) {
-  int v = value;
-  if (v < 1)
-    v = 1;
-  morphSize.store(v);
-}
-
-static void OnErodeSizeChange(int value, void *) { erodeSize.store(value); }
 
 static void OnDebugStageChange(int value, void *) { debugStage.store(value); }
 
 static void OnMatchThresholdChange(int value, void *) {
-  // Clamp to 1-100 range
   int v = value;
-  if (v < 1)
-    v = 1;
-  if (v > 100)
-    v = 100;
+  if (v < 1) v = 1;
+  if (v > 100) v = 100;
   matchThreshold.store(v);
 }
 
-static void OnMaskOffsetXChange(int value, void *) { maskOffsetX.store(value); }
-
-static void OnMaskOffsetYChange(int value, void *) { maskOffsetY.store(value); }
-
 static void OnRefScaleChange(int value, void *) {
-  // Clamp to 900-1100 range (90.0% - 110.0%)
   int v = value;
-  if (v < 900)
-    v = 900;
-  if (v > 1100)
-    v = 1100;
+  if (v < 900) v = 900;
+  if (v > 1100) v = 1100;
   refScale.store(v);
 }
 
 static void OnRefBlurChange(int value, void *) {
-  // Ensure odd value, minimum 1
   int v = value | 1;
-  if (v < 1)
-    v = 1;
+  if (v < 1) v = 1;
   refBlur.store(v);
 }
 
 void CreateTrackbars(const std::string &windowName) {
-  cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
-  cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
-                     OnBlockSizeChange);
-  cv::createTrackbar("Threshold C", windowName, &thresholdCTrack, 40,
-                     OnThresholdCChange);
-  cv::createTrackbar("Morph Size", windowName, &morphSizeTrack, 9,
-                     OnMorphSizeChange);
-  cv::createTrackbar("Erode Size", windowName, &erodeSizeTrack, 10,
-                     OnErodeSizeChange);
-  cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5,
-                     OnDebugStageChange);
-  cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100,
-                     OnMatchThresholdChange);
-  cv::createTrackbar("Mask Offset X", windowName, &maskOffsetXTrack, 10,
-                     OnMaskOffsetXChange);
-  cv::createTrackbar("Mask Offset Y", windowName, &maskOffsetYTrack, 10,
-                     OnMaskOffsetYChange);
-  cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1100,
-                     OnRefScaleChange);
+  cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5, OnDebugStageChange);
+  cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100, OnMatchThresholdChange);
+  cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1100, OnRefScaleChange);
   cv::setTrackbarMin("Ref Scale %%", windowName, 900);
   cv::createTrackbar("Ref Blur", windowName, &refBlurTrack, 15, OnRefBlurChange);
 }
@@ -119,10 +53,9 @@ void CreateTrackbars(const std::string &windowName) {
 
 // Thread-local storage for debug visualizations
 namespace {
-  thread_local cv::Mat g_debugRefImage;
-  thread_local cv::Mat g_debugDiffMap;
   thread_local cv::Mat g_debugMaskedInput;
   thread_local cv::Mat g_debugMaskedRef;
+  thread_local cv::Mat g_debugDiffMap;
   thread_local cv::Mat g_debugBestInput;
   thread_local cv::Mat g_debugBestRef;
   thread_local cv::Mat g_debugBestDiffMap;
@@ -132,135 +65,60 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
   if (gemRegion.empty()) {
     return cv::Mat();
   }
-
-  int blur = ShapeParams::blurSize.load();
-  blur = (blur < 1) ? 1 : (blur | 1);
-  
-  // Apply blur if needed
-  if (blur > 1) {
-    cv::Mat blurred;
-    cv::GaussianBlur(gemRegion, blurred, cv::Size(blur, blur), 0);
-    return blurred;
-  }
-  
   return gemRegion.clone();
 }
 
 cv::Mat GetDebugVisualization(const cv::Mat &gemRegion) {
   int stage = ShapeParams::debugStage.load();
   
-  // Stage 0: original image
-  if (stage == 0)
-    return gemRegion.clone();
-  
-  // Stage 1: preprocessed (blurred) image
-  if (stage == 1)
-    return ProcessGemForShapeMatching(gemRegion);
-  
-  // Stage 2: show best matched reference image
-  if (stage == 2) {
-    if (!g_debugBestRef.empty())
-      return g_debugBestRef.clone();
+  if (stage == 0) return gemRegion.clone();
+  if (stage == 1) return gemRegion.clone();
+  if (stage == 2 && !g_debugBestRef.empty()) return g_debugBestRef.clone();
+  if (stage == 3 && !g_debugBestInput.empty() && !g_debugBestRef.empty()) {
+    cv::Mat sideBySide;
+    cv::hconcat(g_debugBestInput, g_debugBestRef, sideBySide);
+    return sideBySide;
   }
-  
-  // Stage 3: show side-by-side comparison (input | reference)
-  if (stage == 3) {
-    if (!g_debugBestInput.empty() && !g_debugBestRef.empty()) {
-      cv::Mat sideBySide;
-      cv::hconcat(g_debugBestInput, g_debugBestRef, sideBySide);
-      return sideBySide;
-    }
-  }
-  
-  // Stage 4: show difference heat map
-  if (stage == 4) {
-    if (!g_debugBestDiffMap.empty())
-      return g_debugBestDiffMap.clone();
-  }
-  
-  // Stage 5: show difference heat map overlaid on input
-  if (stage == 5) {
-    if (!g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
-      cv::Mat overlay;
-      cv::addWeighted(g_debugBestInput, 0.5, g_debugBestDiffMap, 0.5, 0, overlay);
-      return overlay;
-    }
+  if (stage == 4 && !g_debugBestDiffMap.empty()) return g_debugBestDiffMap.clone();
+  if (stage == 5 && !g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
+    cv::Mat overlay;
+    cv::addWeighted(g_debugBestInput, 0.5, g_debugBestDiffMap, 0.5, 0, overlay);
+    return overlay;
   }
   
   return gemRegion.clone();
 }
 
 // ============================================================================
-// Shape Classification - Direct Color Image Comparison
+// Color Similarity Calculation
 // ============================================================================
 
-// Calculate color similarity between two images using LAB color space
-// Applies alpha mask to both images to focus comparison on gem pixels only
-// Note: Reference images should be pre-scaled via GetScaledMask/GetScaledAlphaMask
 static float CalculateColorSimilarity(const cv::Mat &img1, const cv::Mat &img2,
                                      const cv::Mat &alphaMask = cv::Mat()) {
-if (img1.empty() || img2.empty())
-  return 0.0f;
+  if (img1.empty() || img2.empty()) return 0.0f;
 
-// Clone input so we can modify
-cv::Mat i1 = img1.clone();
-cv::Mat i2 = img2.clone();
-cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
+  cv::Mat i1 = img1.clone();
+  cv::Mat i2 = img2.clone();
+  cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
 
-// Resize reference and mask to match input if needed (scaling is pre-applied in cache)
-if (i2.size() != i1.size()) {
-  cv::resize(i2, i2, i1.size(), 0, 0, cv::INTER_LANCZOS4);
-}
-if (!mask.empty() && mask.size() != i1.size()) {
-  cv::resize(mask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
-}
-
-  // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
-  int offsetX = ShapeParams::maskOffsetX.load() - 5;
-  int offsetY = ShapeParams::maskOffsetY.load() - 5;
-
-  if (offsetX != 0 || offsetY != 0) {
-    // Create translation matrix and shift the reference image
-    cv::Mat shiftedImg = cv::Mat::zeros(i2.size(), i2.type());
-
-    // Calculate source and destination ROIs for the shift
-    int srcX = std::max(0, -offsetX);
-    int srcY = std::max(0, -offsetY);
-    int dstX = std::max(0, offsetX);
-    int dstY = std::max(0, offsetY);
-    int width = i2.cols - std::abs(offsetX);
-    int height = i2.rows - std::abs(offsetY);
-
-    if (width > 0 && height > 0) {
-      cv::Rect srcRoi(srcX, srcY, width, height);
-      cv::Rect dstRoi(dstX, dstY, width, height);
-      i2(srcRoi).copyTo(shiftedImg(dstRoi));
-    }
-    i2 = shiftedImg;
-    
-    // Also shift the mask
-    if (!mask.empty()) {
-      cv::Mat shiftedMask = cv::Mat::zeros(mask.size(), mask.type());
-      if (width > 0 && height > 0) {
-        cv::Rect srcRoi(srcX, srcY, width, height);
-        cv::Rect dstRoi(dstX, dstY, width, height);
-        mask(srcRoi).copyTo(shiftedMask(dstRoi));
-      }
-      mask = shiftedMask;
-    }
+  // Resize reference to match input if needed (scaling already applied in cache)
+  if (i2.size() != i1.size()) {
+    cv::resize(i2, i2, i1.size(), 0, 0, cv::INTER_LANCZOS4);
+  }
+  
+  // Resize mask to match input if needed
+  if (!mask.empty() && mask.size() != i1.size()) {
+    cv::resize(mask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
   }
 
-  // Apply mask to BOTH images (set background pixels to black)
-  // This ensures we're comparing the exact same masked region
+  // Apply mask to BOTH images
   if (!mask.empty()) {
     for (int y = 0; y < i1.rows; y++) {
       cv::Vec3b *row1 = i1.ptr<cv::Vec3b>(y);
       cv::Vec3b *row2 = i2.ptr<cv::Vec3b>(y);
       const uchar *maskRow = mask.ptr<uchar>(y);
-      
       for (int x = 0; x < i1.cols; x++) {
         if (maskRow[x] == 0) {
-          // Background pixel - set to black in both images
           row1[x] = cv::Vec3b(0, 0, 0);
           row2[x] = cv::Vec3b(0, 0, 0);
         }
@@ -268,19 +126,15 @@ if (!mask.empty() && mask.size() != i1.size()) {
     }
   }
 
-  // Store masked images for debug visualization
   g_debugMaskedInput = i1.clone();
   g_debugMaskedRef = i2.clone();
   
-  // Convert both images to LAB color space for perceptual comparison
   thread_local cv::Mat lab1, lab2;
   cv::cvtColor(i1, lab1, cv::COLOR_BGR2Lab);
   cv::cvtColor(i2, lab2, cv::COLOR_BGR2Lab);
 
-  // Create difference map for visualization
   g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
 
-  // Calculate per-pixel color distance (only on non-black pixels)
   double totalDistance = 0.0;
   int pixelCount = 0;
 
@@ -290,59 +144,38 @@ if (!mask.empty() && mask.size() != i1.size()) {
     cv::Vec3b *diffRow = g_debugDiffMap.ptr<cv::Vec3b>(y);
 
     for (int x = 0; x < lab1.cols; x++) {
-      // Skip black pixels (background)
-      if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) {
-        // This is black in LAB space (L=0, a=128, b=128)
-        continue;
-      }
+      if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) continue;
 
       float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
       float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
       float db = static_cast<float>(row1[x][2]) - static_cast<float>(row2[x][2]);
 
-      // LAB color distance
       float dist = std::sqrt(dL * dL + da * da + db * db);
       totalDistance += dist;
       pixelCount++;
       
-      // Visualize difference as heat map (black = good match, bright = difference)
-      // Only show pixels with significant differences
       if (dist < 10.0f) {
-        // Good match - show as dark/black
         diffRow[x] = cv::Vec3b(0, 0, 0);
       } else {
-        // Scale difference: 10-100 distance maps to visible colors
         float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
         uchar intensity = static_cast<uchar>(normalized * 255.0f);
-        
         if (normalized < 0.5f) {
-          // Yellow for moderate differences
           diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
         } else {
-          // Red for large differences
           diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
         }
       }
     }
   }
 
-  if (pixelCount == 0)
-    return 0.0f;
+  if (pixelCount == 0) return 0.0f;
 
-  // Average distance per pixel
   double avgDistance = totalDistance / pixelCount;
-
-  // Convert to similarity score (0.0 to 1.0)
-  // Max LAB distance is ~184 for pure black to pure white
-  // Typical gem-to-gem distance is much smaller (< 50)
-  // Normalize and invert: similarity = 1 - (distance / maxExpected)
-  const double maxExpectedDistance = 100.0; // Tunable threshold
-  double similarity = 1.0 - std::min(avgDistance / maxExpectedDistance, 1.0);
+  double similarity = 1.0 - std::min(avgDistance / 100.0, 1.0);
 
   return static_cast<float>(similarity);
 }
 
-// Helper to save current comparison as the best match for debug visualization
 static void SaveAsBestMatch() {
   g_debugBestInput = g_debugMaskedInput.clone();
   g_debugBestRef = g_debugMaskedRef.clone();
@@ -352,40 +185,29 @@ static void SaveAsBestMatch() {
 GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
                            int *outBestFrame) {
   if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
-    if (outBestMatch)
-      *outBestMatch = 0.0f;
-    if (outBestFrame)
-      *outBestFrame = -1;
+    if (outBestMatch) *outBestMatch = 0.0f;
+    if (outBestFrame) *outBestFrame = -1;
     return GemType::UNKNOWN;
   }
 
-  // Gem types to check
   static const GemType gemTypes[] = {
-      GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
+      GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
       GemType::BLUE, GemType::PURPLE, GemType::WHITE};
-  static const int numTypes = sizeof(gemTypes) / sizeof(gemTypes[0]);
+  static const int numTypes = 7;
 
-  // Get threshold as fraction (0.0 - 1.0)
   float threshold = ShapeParams::matchThreshold.load() / 100.0f;
-
   GemType bestType = GemType::UNKNOWN;
   float bestScore = 0.0f;
   int bestFrame = -1;
 
-  // ============================================================================
-  // PHASE 1: Check only the first frame (frame 0) of each gem type
-  // If any exceeds threshold, return immediately
-  // ============================================================================
-  struct FirstFrameResult {
-    GemType type;
-    float score;
-  };
-  FirstFrameResult firstFrameScores[7]; // One per gem type
+  struct FirstFrameResult { GemType type; float score; };
+  FirstFrameResult firstFrameScores[7];
 
+  // Phase 1: Check first frame of each type
   for (int i = 0; i < numTypes; i++) {
     GemType type = gemTypes[i];
     const cv::Mat &refImage = MaskLoader::GetScaledMask(type, 0);
-    const cv::Mat &alphaMask = MaskLoader::GetScaledAlphaMask(type, 0);
+    const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, 0);
     float score = 0.0f;
 
     if (!refImage.empty()) {
@@ -394,7 +216,6 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
 
     firstFrameScores[i] = {type, score};
 
-    // Track best score so far
     if (score > bestScore) {
       bestScore = score;
       bestType = type;
@@ -402,23 +223,14 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
       SaveAsBestMatch();
     }
 
-    // Early exit: if first frame exceeds threshold, we're done
     if (score >= threshold) {
-      if (outBestMatch)
-        *outBestMatch = score;
-      if (outBestFrame)
-        *outBestFrame = 0;
+      if (outBestMatch) *outBestMatch = score;
+      if (outBestFrame) *outBestFrame = 0;
       return type;
     }
   }
 
-  // ============================================================================
-  // PHASE 2: No first-frame match exceeded threshold
-  // Sort gem types by first-frame score (highest to lowest)
-  // Explore each set's remaining frames in that order until threshold is met
-  // ============================================================================
-
-  // Simple insertion sort (only 7 elements)
+  // Sort by first-frame score
   for (int i = 1; i < numTypes; i++) {
     FirstFrameResult key = firstFrameScores[i];
     int j = i - 1;
@@ -429,16 +241,14 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
     firstFrameScores[j + 1] = key;
   }
 
-  // Explore remaining frames (1 to FRAMES_PER_GEM-1) for each type in sorted
-  // order
+  // Phase 2: Check remaining frames
   for (int i = 0; i < numTypes; i++) {
     GemType type = firstFrameScores[i].type;
 
     for (int frame = 1; frame < MaskLoader::FRAMES_PER_GEM; frame++) {
       const cv::Mat &refImage = MaskLoader::GetScaledMask(type, frame);
-      const cv::Mat &alphaMask = MaskLoader::GetScaledAlphaMask(type, frame);
-      if (refImage.empty())
-        continue;
+      const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(type, frame);
+      if (refImage.empty()) continue;
 
       float score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
 
@@ -449,26 +259,18 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage, float *outBestMatch,
         SaveAsBestMatch();
       }
 
-      // Early exit if we found a match exceeding threshold
       if (score >= threshold) {
-        if (outBestMatch)
-          *outBestMatch = bestScore;
-        if (outBestFrame)
-          *outBestFrame = bestFrame;
+        if (outBestMatch) *outBestMatch = bestScore;
+        if (outBestFrame) *outBestFrame = bestFrame;
         return bestType;
       }
     }
   }
 
-  if (outBestMatch)
-    *outBestMatch = bestScore;
-  if (outBestFrame)
-    *outBestFrame = bestFrame;
+  if (outBestMatch) *outBestMatch = bestScore;
+  if (outBestFrame) *outBestFrame = bestFrame;
 
-  // Require a minimum match threshold
-  if (bestScore < 0.4f) {
-    return GemType::UNKNOWN;
-  }
+  if (bestScore < 0.4f) return GemType::UNKNOWN;
 
   return bestType;
 }
