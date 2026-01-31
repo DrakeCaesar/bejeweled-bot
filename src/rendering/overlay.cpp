@@ -1,4 +1,5 @@
 #include "overlay.h"
+#include "../detection/mask_loader.h"
 #include <array>
 #include <iomanip>
 #include <sstream>
@@ -139,29 +140,40 @@ void DrawShapeOverlay(cv::Mat &image,
 
       // Draw the shape mask if available
       if (!gem.shapeMask.empty()) {
-        // Convert grayscale mask to colored version based on detected type
-        cv::Mat maskColored;
+        // Create comparison visualization:
+        // - Green: computed mask only
+        // - Red: reference mask only
+        // - Yellow: overlap (both masks)
+        cv::Mat maskColored = cv::Mat::zeros(gem.shapeMask.size(), CV_8UC3);
 
-        if (isKnown) {
-          // Create a colored mask using the gem's color
-          cv::Mat maskBGR;
-          cv::cvtColor(gem.shapeMask, maskBGR, cv::COLOR_GRAY2BGR);
+        // Get reference mask if available
+        cv::Mat refMask;
+        if (isKnown && gem.bestMatchFrame >= 0 &&
+            MaskLoader::AreMasksLoaded()) {
+          refMask = MaskLoader::GetMask(gem.type, gem.bestMatchFrame);
+          // Resize to match computed mask size
+          if (!refMask.empty() && refMask.size() != gem.shapeMask.size()) {
+            cv::resize(refMask, refMask, gem.shapeMask.size(), 0, 0,
+                       cv::INTER_NEAREST);
+          }
+        }
 
-          // Blend the gem color with the white mask
-          maskColored = cv::Mat::zeros(maskBGR.size(), CV_8UC3);
-          for (int y = 0; y < maskBGR.rows; y++) {
-            for (int x = 0; x < maskBGR.cols; x++) {
-              if (gem.shapeMask.at<uchar>(y, x) > 127) {
-                maskColored.at<cv::Vec3b>(y, x) =
-                    cv::Vec3b(static_cast<uchar>(gemColor[0]),
-                              static_cast<uchar>(gemColor[1]),
-                              static_cast<uchar>(gemColor[2]));
-              }
+        for (int y = 0; y < gem.shapeMask.rows; y++) {
+          for (int x = 0; x < gem.shapeMask.cols; x++) {
+            bool inComputed = gem.shapeMask.at<uchar>(y, x) > 127;
+            bool inRef = !refMask.empty() && refMask.at<uchar>(y, x) > 127;
+
+            if (inComputed && inRef) {
+              // Overlap (good match)
+              maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
+            } else if (inComputed) {
+              // Computed only (extra pixels)
+              maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 255, 0);
+            } else if (inRef) {
+              // Magenta - reference only (missing pixels)
+              maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 0, 255);
             }
           }
-        } else {
-          // Keep white mask for unknown gems
-          cv::cvtColor(gem.shapeMask, maskColored, cv::COLOR_GRAY2BGR);
         }
 
         // Resize mask to fit the ROI if needed

@@ -37,6 +37,7 @@ struct Gem {
   cv::Rect shapeRoi;   // Region of interest for shape classification (larger)
   cv::Scalar avgColor; // Average color for debugging
   float bestMatch;     // Best match ratio [0..1] for debug
+  int bestMatchFrame;  // Best matching frame index (0-19) for shape mode
   cv::Mat
       shapeMask; // Binary mask for shape classification (white gem on black)
 };

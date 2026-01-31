@@ -37,7 +37,7 @@ struct SharedFrameData {
 
   // Classification mode toggle
   Config::ClassificationMode classificationMode =
-      Config::ClassificationMode::COLOR;
+      Config::ClassificationMode::SHAPE;
 
   // Find first buffer in given state, returns -1 if none found
   int findBuffer(BufferState state) const {

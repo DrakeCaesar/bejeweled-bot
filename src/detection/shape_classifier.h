@@ -40,11 +40,12 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion);
 
 /**
  * Classify a gem by comparing its processed shape to reference masks.
- * (Placeholder for future implementation with actual mask comparison)
  *
  * @param processedMask The binary mask from ProcessGemForShapeMatching
  * @param outBestMatch Optional output for the best match score [0..1]
+ * @param outBestFrame Optional output for the best matching frame index (0-19)
  * @return Detected GemType, or UNKNOWN if no confident match
  */
 GemType ClassifyGemByShape(const cv::Mat &processedMask,
-                           float *outBestMatch = nullptr);
+                           float *outBestMatch = nullptr,
+                           int *outBestFrame = nullptr);

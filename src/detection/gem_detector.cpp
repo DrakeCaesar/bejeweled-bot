@@ -83,12 +83,14 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
             // Shape mode - use larger ROI for shape matching
             cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
             gem.shapeMask = ProcessGemForShapeMatching(shapeRegion);
-            gem.type = ClassifyGemByShape(gem.shapeMask, &gem.bestMatch);
+            gem.type = ClassifyGemByShape(gem.shapeMask, &gem.bestMatch,
+                                          &gem.bestMatchFrame);
             gem.closestType = GemType::UNKNOWN;
             gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
           } else {
             // Color classification
             gem.shapeMask = cv::Mat(); // Clear shape mask in color mode
+            gem.bestMatchFrame = -1;
             gem.type =
                 ClassifyGemByColor(gemRegion, &gem.bestMatch, &gem.closestType);
             gem.matchedThreshold = (gem.type != GemType::UNKNOWN);

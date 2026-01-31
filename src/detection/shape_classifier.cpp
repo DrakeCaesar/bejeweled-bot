@@ -196,10 +196,13 @@ static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
   return static_cast<float>(intersectCount) / static_cast<float>(unionCount);
 }
 
-GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch) {
+GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch,
+                           int *outBestFrame) {
   if (processedMask.empty() || !MaskLoader::AreMasksLoaded()) {
     if (outBestMatch)
       *outBestMatch = 0.0f;
+    if (outBestFrame)
+      *outBestFrame = -1;
     return GemType::UNKNOWN;
   }
 
@@ -210,6 +213,7 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch) {
 
   GemType bestType = GemType::UNKNOWN;
   float bestScore = 0.0f;
+  int bestFrame = -1;
 
   // Compare against all masks for all gem types
   for (GemType type : gemTypes) {
@@ -223,12 +227,15 @@ GemType ClassifyGemByShape(const cv::Mat &processedMask, float *outBestMatch) {
       if (score > bestScore) {
         bestScore = score;
         bestType = type;
+        bestFrame = frame;
       }
     }
   }
 
   if (outBestMatch)
     *outBestMatch = bestScore;
+  if (outBestFrame)
+    *outBestFrame = bestFrame;
 
   // Require a minimum match threshold
   if (bestScore < 0.3f) {
