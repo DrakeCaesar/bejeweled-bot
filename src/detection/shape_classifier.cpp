@@ -69,12 +69,12 @@ static void OnMaskOffsetXChange(int value, void *) { maskOffsetX.store(value); }
 static void OnMaskOffsetYChange(int value, void *) { maskOffsetY.store(value); }
 
 static void OnRefScaleChange(int value, void *) {
-  // Clamp to 980-1020 range (98.0% - 102.0%)
+  // Clamp to 900-1100 range (90.0% - 110.0%)
   int v = value;
-  if (v < 980)
-    v = 980;
-  if (v > 1020)
-    v = 1020;
+  if (v < 900)
+    v = 900;
+  if (v > 1100)
+    v = 1100;
   refScale.store(v);
 }
 
@@ -96,9 +96,9 @@ void CreateTrackbars(const std::string &windowName) {
                      OnMaskOffsetXChange);
   cv::createTrackbar("Mask Offset Y", windowName, &maskOffsetYTrack, 10,
                      OnMaskOffsetYChange);
-  cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1020,
+  cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1100,
                      OnRefScaleChange);
-  cv::setTrackbarMin("Ref Scale %%", windowName, 980);
+  cv::setTrackbarMin("Ref Scale %%", windowName, 900);
 }
 
 } // namespace ShapeParams
@@ -196,52 +196,42 @@ cv::Mat i1 = img1.clone();
 cv::Mat i2 = img2;
 cv::Mat mask = alphaMask;
 
-// Apply scale to reference image and mask (high precision: 980-1020 = 0.980x-1.020x)
+// Apply scale to reference image and mask using warpAffine for sub-pixel accuracy
 float scale = ShapeParams::refScale.load() / 1000.0f;
 if (std::abs(scale - 1.0f) > 0.0001f) {
-  // Scale the reference image using high-quality Lanczos interpolation
-  int scaledW = static_cast<int>(std::round(i2.cols * scale));
-  int scaledH = static_cast<int>(std::round(i2.rows * scale));
-  cv::Mat scaledRef;
-  cv::resize(i2, scaledRef, cv::Size(scaledW, scaledH), 0, 0, cv::INTER_LINEAR);
-    
-  // Center crop or pad to match input size
-  cv::Mat finalRef = cv::Mat::zeros(i1.size(), i2.type());
-  int offsetX = (scaledW - i1.cols) / 2;
-  int offsetY = (scaledH - i1.rows) / 2;
-    
-  // Calculate source and destination ROIs
-  int srcX = std::max(0, offsetX);
-  int srcY = std::max(0, offsetY);
-  int dstX = std::max(0, -offsetX);
-  int dstY = std::max(0, -offsetY);
-  int copyW = std::min(scaledW - srcX, i1.cols - dstX);
-  int copyH = std::min(scaledH - srcY, i1.rows - dstY);
-    
-  if (copyW > 0 && copyH > 0) {
-    cv::Rect srcRoi(srcX, srcY, copyW, copyH);
-    cv::Rect dstRoi(dstX, dstY, copyW, copyH);
-    scaledRef(srcRoi).copyTo(finalRef(dstRoi));
+  // Resize reference to match input size first if needed
+  if (i2.size() != i1.size()) {
+    cv::resize(i2, i2, i1.size(), 0, 0, cv::INTER_LANCZOS4);
   }
-  i2 = finalRef;
-    
-  // Also scale the mask using nearest neighbor (preserve binary values)
+  
+  // Create scaling transformation centered on the image
+  float centerX = i1.cols / 2.0f;
+  float centerY = i1.rows / 2.0f;
+  
+  // Build affine transform: scale centered on image center
+  cv::Mat transform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
+  
+  // Apply to reference image with high-quality interpolation
+  cv::Mat scaledRef;
+  cv::warpAffine(i2, scaledRef, transform, i1.size(), 
+                 cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+  i2 = scaledRef;
+  
+  // Apply to mask with nearest neighbor (preserve binary values)
   if (!alphaMask.empty()) {
-    cv::Mat scaledMask;
-    cv::resize(alphaMask, scaledMask, cv::Size(scaledW, scaledH), 0, 0, cv::INTER_NEAREST);
-    cv::Mat finalMask = cv::Mat::zeros(i1.size(), alphaMask.type());
-      
-    if (copyW > 0 && copyH > 0) {
-      cv::Rect srcRoi(srcX, srcY, copyW, copyH);
-      cv::Rect dstRoi(dstX, dstY, copyW, copyH);
-      scaledMask(srcRoi).copyTo(finalMask(dstRoi));
+    cv::Mat maskToScale = alphaMask;
+    if (alphaMask.size() != i1.size()) {
+      cv::resize(alphaMask, maskToScale, i1.size(), 0, 0, cv::INTER_NEAREST);
     }
-    mask = finalMask;
+    cv::Mat scaledMask;
+    cv::warpAffine(maskToScale, scaledMask, transform, i1.size(),
+                   cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(0));
+    mask = scaledMask;
   }
 } else {
   // No scaling, just resize if sizes don't match
   if (img1.size() != img2.size()) {
-    cv::resize(img2, i2, img1.size(), 0, 0, cv::INTER_LINEAR);
+    cv::resize(img2, i2, img1.size(), 0, 0, cv::INTER_LANCZOS4);
   }
     
   // Prepare mask - resize to match if provided
