@@ -158,6 +158,27 @@ void DrawShapeOverlay(cv::Mat &image,
             cv::resize(refMask, refMask, gem.shapeMask.size(), 0, 0,
                        cv::INTER_NEAREST);
           }
+          // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
+          if (!refMask.empty()) {
+            int offsetX = ShapeParams::maskOffsetX.load() - 5;
+            int offsetY = ShapeParams::maskOffsetY.load() - 5;
+            if (offsetX != 0 || offsetY != 0) {
+              cv::Mat shiftedMask =
+                  cv::Mat::zeros(refMask.size(), refMask.type());
+              int srcX = std::max(0, -offsetX);
+              int srcY = std::max(0, -offsetY);
+              int dstX = std::max(0, offsetX);
+              int dstY = std::max(0, offsetY);
+              int width = refMask.cols - std::abs(offsetX);
+              int height = refMask.rows - std::abs(offsetY);
+              if (width > 0 && height > 0) {
+                cv::Rect srcRoi(srcX, srcY, width, height);
+                cv::Rect dstRoi(dstX, dstY, width, height);
+                refMask(srcRoi).copyTo(shiftedMask(dstRoi));
+              }
+              refMask = shiftedMask;
+            }
+          }
         }
 
         for (int y = 0; y < gem.shapeMask.rows; y++) {

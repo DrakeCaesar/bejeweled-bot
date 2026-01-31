@@ -32,7 +32,12 @@ inline std::atomic<int> debugStage{0};
 
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching
 // Early exit optimization: check first frame of each set, then explore in order
-inline std::atomic<int> matchThreshold{99};
+inline std::atomic<int> matchThreshold{98};
+
+// Mask offset for alignment fine-tuning (-5 to +5 pixels)
+// Stored as 0-10 range, interpreted as -5 to +5
+inline std::atomic<int> maskOffsetX{6}; // 5 = center (0 offset)
+inline std::atomic<int> maskOffsetY{6}; // 5 = center (0 offset)
 
 /**
  * Create trackbars for shape parameters in the given window.

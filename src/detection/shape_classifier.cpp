@@ -17,6 +17,8 @@ static int morphSizeTrack = morphSize.load();
 static int erodeSizeTrack = erodeSize.load();
 static int debugStageTrack = debugStage.load();
 static int matchThresholdTrack = matchThreshold.load();
+static int maskOffsetXTrack = maskOffsetX.load();
+static int maskOffsetYTrack = maskOffsetY.load();
 
 static void OnBlurChange(int value, void *) {
   // Ensure odd value, minimum 1
@@ -60,6 +62,10 @@ static void OnMatchThresholdChange(int value, void *) {
   matchThreshold.store(v);
 }
 
+static void OnMaskOffsetXChange(int value, void *) { maskOffsetX.store(value); }
+
+static void OnMaskOffsetYChange(int value, void *) { maskOffsetY.store(value); }
+
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Blur Size", windowName, &blurSizeTrack, 15, OnBlurChange);
   cv::createTrackbar("Block Size", windowName, &blockSizeTrack, 51,
@@ -74,6 +80,10 @@ void CreateTrackbars(const std::string &windowName) {
                      OnDebugStageChange);
   cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100,
                      OnMatchThresholdChange);
+  cv::createTrackbar("Mask Offset X", windowName, &maskOffsetXTrack, 10,
+                     OnMaskOffsetXChange);
+  cv::createTrackbar("Mask Offset Y", windowName, &maskOffsetYTrack, 10,
+                     OnMaskOffsetYChange);
 }
 
 } // namespace ShapeParams
@@ -246,6 +256,30 @@ static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
     cv::resize(mask2, m2, mask1.size(), 0, 0, cv::INTER_NEAREST);
   }
 
+  // Apply mask offset (slider range 0-10 maps to -5 to +5 pixels)
+  int offsetX = ShapeParams::maskOffsetX.load() - 5;
+  int offsetY = ShapeParams::maskOffsetY.load() - 5;
+
+  if (offsetX != 0 || offsetY != 0) {
+    // Create translation matrix and shift the reference mask
+    cv::Mat shiftedMask = cv::Mat::zeros(m2.size(), m2.type());
+
+    // Calculate source and destination ROIs for the shift
+    int srcX = std::max(0, -offsetX);
+    int srcY = std::max(0, -offsetY);
+    int dstX = std::max(0, offsetX);
+    int dstY = std::max(0, offsetY);
+    int width = m2.cols - std::abs(offsetX);
+    int height = m2.rows - std::abs(offsetY);
+
+    if (width > 0 && height > 0) {
+      cv::Rect srcRoi(srcX, srcY, width, height);
+      cv::Rect dstRoi(dstX, dstY, width, height);
+      m2(srcRoi).copyTo(shiftedMask(dstRoi));
+    }
+    m2 = shiftedMask;
+  }
+
   // Calculate the difference (XOR) and erode it to ignore small edge
   // differences
   cv::Mat diff;
@@ -254,7 +288,7 @@ static float CalculateIoU(const cv::Mat &mask1, const cv::Mat &mask2) {
   // Erode the difference to remove small mismatches along edges
   cv::Mat erodeKernel =
       cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-  cv::erode(diff, diff, erodeKernel);
+  // cv::erode(diff, diff, erodeKernel);
 
   // Calculate intersection and union, then subtract eroded diff from union
   cv::Mat intersection, unionMat;
