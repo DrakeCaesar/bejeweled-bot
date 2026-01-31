@@ -161,15 +161,22 @@ auto *gridPtr = &grid;
               }
               // Check if frame is different from the last saved frame
               else {
-                double diff = cv::norm(shapeRegion, g_previousFrame, cv::NORM_L2);
-                double threshold = 100.0; // Adjust if needed - lower = more sensitive
+                // XOR comparison - fast and simple
+                cv::Mat xorResult;
+                cv::bitwise_xor(shapeRegion, g_previousFrame, xorResult);
+                int nonZeroPixels = cv::countNonZero(xorResult.reshape(1));
                 
-                if (diff > threshold) {
+                // Threshold: number of changed pixels (out of 128x128x3 = 49,152)
+                int threshold = 35000; // Adjust if needed - lower = more sensitive
+                
+                if (nonZeroPixels > threshold) {
                   // Frame is different from previous saved frame
                   // Check if it loops back to first frame
-                  double diffFromFirst = cv::norm(shapeRegion, g_firstFrame, cv::NORM_L2);
+                  cv::Mat xorFirst;
+                  cv::bitwise_xor(shapeRegion, g_firstFrame, xorFirst);
+                  int nonZeroFirst = cv::countNonZero(xorFirst.reshape(1));
                   
-                  if (diffFromFirst < threshold && g_recordedFrames > 0) {
+                  if (nonZeroFirst < threshold && g_recordedFrames > 0) {
                     // Frame matches first frame - animation loop detected
                     loopDetected = true;
                     std::cout << "Animation loop detected! Frame " << g_totalFramesChecked 
