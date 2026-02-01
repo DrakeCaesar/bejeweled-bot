@@ -8,3 +8,4 @@ build/
 recorded_frames/
 /bejeweled-bot.exe
 /*.dll
+/.output.txt
