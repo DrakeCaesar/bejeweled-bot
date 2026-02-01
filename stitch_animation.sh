@@ -89,7 +89,7 @@ process_frame() {
     
     # Blur the mask and save to temp
     BLURRED_MASK="$2/blurred_${FRAME_NUM}.png"
-    magick "$MASK_FILE" -blur 0x2 "$BLURRED_MASK"
+    magick "$MASK_FILE" -blur 0x1 "$BLURRED_MASK"
     
     # Apply blurred mask to color image (set background to black)
     MASKED_FILE="$2/masked_${FRAME_NUM}.png"

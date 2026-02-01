@@ -44,6 +44,8 @@ set_target_properties(bejeweled-bot PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
+    INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+    INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE
 )
 target_include_directories(bejeweled-bot PRIVATE
     ${OpenCV_INCLUDE_DIRS}
@@ -54,11 +56,17 @@ target_include_directories(bejeweled-bot PRIVATE
 if(MSVC)
     target_compile_options(bejeweled-bot PRIVATE
         /MP${num_jobs}
-        $<$<CONFIG:Release>:/O2 /Ob2 /DNDEBUG>
+        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /DNDEBUG>
+    )
+    target_link_options(bejeweled-bot PRIVATE
+        $<$<CONFIG:Release>:/LTCG>
     )
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(bejeweled-bot PRIVATE
-        $<$<CONFIG:Release>:-O3 -march=native -ffast-math>
+        $<$<CONFIG:Release>:-O3 -march=native -ffast-math -flto -funroll-loops>
         $<$<CONFIG:Debug>:-O0>
+    )
+    target_link_options(bejeweled-bot PRIVATE
+        $<$<CONFIG:Release>:-flto>
     )
 endif()
