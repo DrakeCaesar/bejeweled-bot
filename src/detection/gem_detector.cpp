@@ -144,6 +144,28 @@ void StopRecording() {
         // Convert GrabCut mask to binary mask (foreground and probably foreground)
         cv::Mat binaryMask;
         binaryMask = (mask == cv::GC_FGD) | (mask == cv::GC_PR_FGD);
+        binaryMask.convertTo(binaryMask, CV_8UC1, 255.0);
+
+        // Enforce convexity using the largest contour's convex hull
+        std::vector<std::vector<cv::Point>> contours;
+        cv::findContours(binaryMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+        if (!contours.empty()) {
+          size_t largestIdx = 0;
+          double largestArea = 0.0;
+          for (size_t c = 0; c < contours.size(); ++c) {
+            double area = cv::contourArea(contours[c]);
+            if (area > largestArea) {
+              largestArea = area;
+              largestIdx = c;
+            }
+          }
+
+          std::vector<cv::Point> hull;
+          cv::convexHull(contours[largestIdx], hull);
+          binaryMask = cv::Mat::zeros(binaryMask.size(), CV_8UC1);
+          std::vector<std::vector<cv::Point>> hulls = { hull };
+          cv::drawContours(binaryMask, hulls, 0, cv::Scalar(255), cv::FILLED);
+        }
         
         // Save original frame
         std::ostringstream filename;
@@ -153,8 +175,8 @@ void StopRecording() {
 
         // Save mask frame
         std::ostringstream maskFilename;
-        maskFilename << g_outputDir << "/frame_" << std::setw(4) << std::setfill('0')
-            << i << "_mask.png";
+        maskFilename << g_outputDir << "/mask_" << std::setw(4) << std::setfill('0')
+            << i << ".png";
         cv::imwrite(maskFilename.str(), binaryMask);
 
         if ((i + 1) % 10 == 0 || i == g_uniqueFramesBuffer.size() - 1) {
