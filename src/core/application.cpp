@@ -192,8 +192,8 @@ void Application::StartThreads() {
 
   if (Config::BOOST_THREAD_PRIORITY) {
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-    SetThreadPriority(captureThread_.native_handle(), THREAD_PRIORITY_HIGHEST);
-    SetThreadPriority(processThread_.native_handle(),
+    SetThreadPriority((HANDLE)captureThread_.native_handle(), THREAD_PRIORITY_HIGHEST);
+    SetThreadPriority((HANDLE)processThread_.native_handle(),
                       THREAD_PRIORITY_ABOVE_NORMAL);
   }
 }
