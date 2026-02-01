@@ -11,21 +11,20 @@
 // ============================================================================
 
 namespace MaskLoader {
-// Constants for reference image grid layout
-    constexpr int MASK_COLS = 5; // 5 columns in standard sprite sheets
-    constexpr int MASK_ROWS = 4; // 4 rows in standard sprite sheets
-    constexpr int FRAMES_PER_GEM = 20; // Total frames per standard gem (5 * 4)
-    constexpr int SPRITE_WIDTH = 640; // Standard sprite width
-    constexpr int SPRITE_HEIGHT = 512; // Standard sprite height
-    constexpr int FRAME_WIDTH = 128; // Width of each frame (640 / 5)
-    constexpr int FRAME_HEIGHT = 128; // Height of each frame (512 / 4)
+    constexpr int MASK_COLS = 5;
+    constexpr int MASK_ROWS = 4;
+    constexpr int FRAMES_PER_GEM = 20;
+    constexpr int SPRITE_WIDTH = 640;
+    constexpr int SPRITE_HEIGHT = 512;
+    constexpr int FRAME_WIDTH = 128;
+    constexpr int FRAME_HEIGHT = 128;
 
 // Hypercube has different dimensions
-    constexpr int HYPERCUBE_COLS = 6; // 6 columns
-    constexpr int HYPERCUBE_ROWS = 5; // 5 rows
-    constexpr int HYPERCUBE_FRAMES = 30; // 6 * 5 frames
-    constexpr int HYPERCUBE_SPRITE_WIDTH = 768;
-    constexpr int HYPERCUBE_SPRITE_HEIGHT = 640;
+    constexpr int HYPERCUBE_COLS = 10;
+    constexpr int HYPERCUBE_ROWS = 6;
+    constexpr int HYPERCUBE_FRAMES = 60;
+    constexpr int HYPERCUBE_SPRITE_WIDTH = 1200;
+    constexpr int HYPERCUBE_SPRITE_HEIGHT = 720;
     constexpr int HYPERCUBE_FRAME_WIDTH = 128;
     constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
 
