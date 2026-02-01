@@ -89,7 +89,7 @@ process_frame() {
     
     # Blur the mask and save to temp
     BLURRED_MASK="$2/blurred_${FRAME_NUM}.png"
-    magick "$MASK_FILE" -blur 0x1 "$BLURRED_MASK"
+    magick "$MASK_FILE" -blur 0x2 "$BLURRED_MASK"
     
     # Apply blurred mask to color image (set background to black)
     MASKED_FILE="$2/masked_${FRAME_NUM}.png"
@@ -102,12 +102,11 @@ export TEMP_DIR
 # Run up to 4 parallel jobs
 printf '%s\n' "${FRAMES_TO_PROCESS[@]}" | xargs -P 8 -I {} bash -c "process_frame '{}' '$TEMP_DIR'"
 
-# Rebuild file lists from temp directory
-for file in "$TEMP_DIR"/blurred_*.png; do
-    MASK_LIST="$MASK_LIST $file"
-done
-for file in "$TEMP_DIR"/masked_*.png; do
-    MASKED_FRAME_LIST="$MASKED_FRAME_LIST $file"
+# Rebuild file lists in correct order (not alphabetical)
+for frame_info in "${FRAMES_TO_PROCESS[@]}"; do
+    IFS=':' read i FRAME_NUM COLOR_FILE MASK_FILE <<< "$frame_info"
+    MASK_LIST="$MASK_LIST $TEMP_DIR/blurred_${FRAME_NUM}.png"
+    MASKED_FRAME_LIST="$MASKED_FRAME_LIST $TEMP_DIR/masked_${FRAME_NUM}.png"
 done
 
 if [ $FRAME_COUNT -eq 0 ]; then
