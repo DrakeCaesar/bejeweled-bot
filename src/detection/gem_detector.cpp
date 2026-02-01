@@ -166,12 +166,20 @@ void StopRecording() {
           std::vector<std::vector<cv::Point>> hulls = { hull };
           cv::drawContours(binaryMask, hulls, 0, cv::Scalar(255), cv::FILLED);
         }
+
+        // Erode mask slightly (1px) after convex hull
+        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+        cv::erode(binaryMask, binaryMask, kernel, cv::Point(-1, -1), 1);
+
+        // Apply mask to color frame (background to black)
+        cv::Mat maskedFrame = frame.clone();
+        maskedFrame.setTo(cv::Scalar(0, 0, 0), binaryMask == 0);
         
-        // Save original frame
+        // Save masked color frame
         std::ostringstream filename;
         filename << g_outputDir << "/frame_" << std::setw(4) << std::setfill('0')
             << i << ".png";
-        cv::imwrite(filename.str(), frame);
+        cv::imwrite(filename.str(), maskedFrame);
 
         // Save mask frame
         std::ostringstream maskFilename;
