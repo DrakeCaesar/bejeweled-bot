@@ -56,10 +56,16 @@ read COLS ROWS <<< $(calculate_grid $TOTAL_FRAMES)
 echo "Using grid: ${COLS}x${ROWS}"
 
 # Build file list starting from START_FRAME (loop back to 0000)
+# Process frames in parallel
 FRAME_LIST=""
 MASK_LIST=""
+MASKED_FRAME_LIST=""
 FRAME_COUNT=0
 TARGET_FRAMES=$((COLS * ROWS))
+TEMP_DIR=$(mktemp -d)
+
+# Create array of frames to process
+declare -a FRAMES_TO_PROCESS
 
 for ((j = 0; j < TARGET_FRAMES; j++)); do
     i=$(( (START_FRAME + j) % TOTAL_FRAMES ))
@@ -68,12 +74,40 @@ for ((j = 0; j < TARGET_FRAMES; j++)); do
     MASK_FILE="$RECORDED_DIR/mask_${FRAME_NUM}.png"
     
     if [ -f "$COLOR_FILE" ] && [ -f "$MASK_FILE" ]; then
-        FRAME_LIST="$FRAME_LIST $COLOR_FILE"
-        MASK_LIST="$MASK_LIST $MASK_FILE"
-        FRAME_COUNT=$((FRAME_COUNT + 1))
+        FRAMES_TO_PROCESS+=("$i:$FRAME_NUM:$COLOR_FILE:$MASK_FILE")
     else
         echo "Warning: Missing frame pair for index $i"
     fi
+done
+
+FRAME_COUNT=${#FRAMES_TO_PROCESS[@]}
+
+# Process function for parallel execution
+process_frame() {
+    local IFS=':'
+    read i FRAME_NUM COLOR_FILE MASK_FILE <<< "$1"
+    
+    # Blur the mask and save to temp
+    BLURRED_MASK="$2/blurred_${FRAME_NUM}.png"
+    magick "$MASK_FILE" -blur 0x1 "$BLURRED_MASK"
+    
+    # Apply blurred mask to color image (set background to black)
+    MASKED_FILE="$2/masked_${FRAME_NUM}.png"
+    magick "$COLOR_FILE" "$BLURRED_MASK" -compose CopyOpacity -composite -background black -alpha remove "$MASKED_FILE"
+}
+
+export -f process_frame
+export TEMP_DIR
+
+# Run up to 4 parallel jobs
+printf '%s\n' "${FRAMES_TO_PROCESS[@]}" | xargs -P 8 -I {} bash -c "process_frame '{}' '$TEMP_DIR'"
+
+# Rebuild file lists from temp directory
+for file in "$TEMP_DIR"/blurred_*.png; do
+    MASK_LIST="$MASK_LIST $file"
+done
+for file in "$TEMP_DIR"/masked_*.png; do
+    MASKED_FRAME_LIST="$MASKED_FRAME_LIST $file"
 done
 
 if [ $FRAME_COUNT -eq 0 ]; then
@@ -84,9 +118,14 @@ fi
 echo "Stitching $FRAME_COUNT frames into grid..."
 
 # Use ImageMagick montage to create grid
-magick montage $FRAME_LIST -tile ${COLS}x${ROWS} -geometry +0+0 "$COLOR_OUT_DIR/$OUTPUT_NAME.png"
+# Color grid with mask applied
+magick montage $MASKED_FRAME_LIST -tile ${COLS}x${ROWS} -geometry +0+0 "$COLOR_OUT_DIR/$OUTPUT_NAME.png"
+# Mask grid (unmodified)
 magick montage $MASK_LIST -tile ${COLS}x${ROWS} -geometry +0+0 "$MASK_OUT_DIR/$OUTPUT_NAME.png"
 
+# Clean up temp directory
+rm -rf "$TEMP_DIR"
+
 echo "Done!"
-echo "Color grid saved to: $COLOR_OUT_DIR/$OUTPUT_NAME.png"
+echo "Masked color grid saved to: $COLOR_OUT_DIR/$OUTPUT_NAME.png"
 echo "Mask grid saved to: $MASK_OUT_DIR/$OUTPUT_NAME.png"
