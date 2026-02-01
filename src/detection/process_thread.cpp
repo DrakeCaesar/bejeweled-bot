@@ -41,42 +41,59 @@ void ProcessThreadFunc(
         0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
     if (!currentFrame.empty()) {
-      // Detect gems
-      auto detectStart = std::chrono::high_resolution_clock::now();
-      std::vector<std::vector<Gem>> &gemGrid = DetectGems(currentFrame, mode);
-      auto detectEnd = std::chrono::high_resolution_clock::now();
-      timingInfo.detectMs =
-          std::chrono::duration<double, std::milli>(detectEnd - detectStart)
-              .count();
+      bool recording = IsRecording();
 
-      // Draw overlays directly onto the buffer (in-place, zero-copy!)
-      auto drawStart = std::chrono::high_resolution_clock::now();
+      if (!recording) {
+        // Detect gems
+        auto detectStart = std::chrono::high_resolution_clock::now();
+        std::vector<std::vector<Gem>> &gemGrid = DetectGems(currentFrame, mode);
+        auto detectEnd = std::chrono::high_resolution_clock::now();
+        timingInfo.detectMs =
+            std::chrono::duration<double, std::milli>(detectEnd - detectStart)
+                .count();
 
-      cv::Mat &buffer = frameData.frameBuffer[bufferIndex];
+        // Draw overlays directly onto the buffer (in-place, zero-copy!)
+        auto drawStart = std::chrono::high_resolution_clock::now();
 
-      // Clear banner area
-      buffer(cv::Rect(0, 0, buffer.cols, Config::BANNER_HEIGHT))
-          .setTo(cv::Scalar(20, 20, 20));
+        cv::Mat &buffer = frameData.frameBuffer[bufferIndex];
 
-      // Draw banner and overlay directly on buffer
-      DrawBanner(buffer, timingInfo.avgFps, timingInfo.avgCaptureMs,
-                 timingInfo.avgDetectMs, timingInfo.avgDrawMs,
-                 timingInfo.avgDisplayMs, mode, timingInfo.maxFpsWidth,
-                 timingInfo.maxCaptureWidth, timingInfo.maxDetectWidth,
-                 timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
+        // Clear banner area
+        buffer(cv::Rect(0, 0, buffer.cols, Config::BANNER_HEIGHT))
+            .setTo(cv::Scalar(20, 20, 20));
 
-      if (Config::SHOW_DEBUG_OVERLAY) {
-        if (mode == Config::ClassificationMode::SHAPE) {
-          DrawShapeOverlay(buffer, gemGrid);
-        } else {
-          DrawDebugOverlay(buffer, gemGrid);
+        // Draw banner and overlay directly on buffer
+        DrawBanner(buffer, timingInfo.avgFps, timingInfo.avgCaptureMs,
+                   timingInfo.avgDetectMs, timingInfo.avgDrawMs,
+                   timingInfo.avgDisplayMs, mode, timingInfo.maxFpsWidth,
+                   timingInfo.maxCaptureWidth, timingInfo.maxDetectWidth,
+                   timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
+
+        if (Config::SHOW_DEBUG_OVERLAY) {
+          if (mode == Config::ClassificationMode::SHAPE) {
+            DrawShapeOverlay(buffer, gemGrid);
+          } else {
+            DrawDebugOverlay(buffer, gemGrid);
+          }
         }
-      }
 
-      auto drawEnd = std::chrono::high_resolution_clock::now();
-      timingInfo.drawMs =
-          std::chrono::duration<double, std::milli>(drawEnd - drawStart)
-              .count();
+        auto drawEnd = std::chrono::high_resolution_clock::now();
+        timingInfo.drawMs =
+            std::chrono::duration<double, std::milli>(drawEnd - drawStart)
+                .count();
+      } else {
+        // When recording, skip processing but still update the banner to show status
+        cv::Mat &buffer = frameData.frameBuffer[bufferIndex];
+        buffer(cv::Rect(0, 0, buffer.cols, Config::BANNER_HEIGHT))
+            .setTo(cv::Scalar(20, 50, 20)); // Slightly green background for recording
+
+        // Simple status message on banner
+        std::string status = "RECORDING: " + std::to_string(GetRecordedFrameCount()) + " frames";
+        cv::putText(buffer, status, cv::Point(20, 35), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 255, 255), 2);
+        
+        timingInfo.detectMs = 0;
+        timingInfo.drawMs = 0;
+      }
     }
 
     // Mark buffer as PROCESSED (ready for display)

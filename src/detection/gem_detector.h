@@ -63,3 +63,11 @@ int GetRecordedFrameCount();
  * Get the total number of frames checked (including duplicates).
  */
 int GetTotalFramesChecked();
+
+/**
+ * Update recording logic with a new frame.
+ * Should be called once per capture cycle when recording is enabled.
+ * 
+ * @param gameBoard The full game board image
+ */
+void UpdateRecording(const cv::Mat& gameBoard);

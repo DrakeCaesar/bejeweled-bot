@@ -1,11 +1,9 @@
 {
-  "name": "opencv-test",
+  "name": "bejeweled-bot",
   "version-string": "1.0.0",
-  "builtin-baseline": "bc994510d2eb11aac7b43b03f67a7751d5bfe0e4",
   "dependencies": [
     {
       "name": "opencv",
-      "version>=": "4.11.0",
       "features": ["contrib", "freetype"]
     }
   ]

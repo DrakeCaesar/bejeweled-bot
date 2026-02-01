@@ -77,6 +77,103 @@ int GetTotalFramesChecked() {
   return g_totalFramesChecked;
 }
 
+void UpdateRecording(const cv::Mat &gameBoard) {
+  if (!g_recordingEnabled || gameBoard.empty()) {
+    return;
+  }
+
+  // Calculate cell position
+  int cellX = g_recordCol * Config::CELL_SIZE;
+  int cellY = g_recordRow * Config::CELL_SIZE;
+
+  // Define ROI for shape classification
+  int shapeCenterX = cellX + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
+  int shapeCenterY = cellY + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
+  cv::Rect shapeRoi(shapeCenterX, shapeCenterY, Config::GEM_SHAPE_SIZE,
+                    Config::GEM_SHAPE_SIZE);
+
+  // Check if ROI is valid
+  bool roiValid = shapeRoi.x >= 0 && shapeRoi.y >= 0 &&
+                  shapeRoi.x + shapeRoi.width <= gameBoard.cols &&
+                  shapeRoi.y + shapeRoi.height <= gameBoard.rows;
+
+  if (!roiValid) {
+    return;
+  }
+
+  // Get gem region
+  cv::Mat shapeRegion = gameBoard(shapeRoi);
+
+  g_totalFramesChecked++;
+
+  // Skip the first N frames to avoid transition artifacts
+  if (g_framesSkipped < g_framesToSkip) {
+    g_framesSkipped++;
+    if (g_framesSkipped == g_framesToSkip) {
+      std::cout << "Skipped " << g_framesToSkip
+                << " initial frames. Starting capture..." << std::endl;
+    }
+    return;
+  }
+
+  bool shouldSave = false;
+
+  // First frame after skip - always save
+  if (g_firstFrame.empty()) {
+    g_firstFrame = shapeRegion.clone();
+    g_previousFrame = shapeRegion.clone();
+    shouldSave = true;
+  }
+  // Check if frame is different from the last saved frame
+  else {
+    // XOR comparison - fast and simple
+    cv::Mat xorResult;
+    cv::bitwise_xor(shapeRegion, g_previousFrame, xorResult);
+    int nonZeroPixels = cv::countNonZero(xorResult.reshape(1));
+
+    // Threshold: number of changed pixels (out of 128x128x3 = 49,152)
+    int threshold = 35000; // Adjust if needed - lower = more sensitive
+
+    if (nonZeroPixels > threshold) {
+      // Frame is different from previous saved frame
+      // Check if it loops back to first frame
+      cv::Mat xorFirst;
+      cv::bitwise_xor(shapeRegion, g_firstFrame, xorFirst);
+      int nonZeroFirst = cv::countNonZero(xorFirst.reshape(1));
+
+      if (nonZeroFirst < threshold && g_recordedFrames > 0) {
+        // Frame matches first frame - animation loop detected
+        std::cout << "Animation loop detected! Frame " << g_totalFramesChecked
+                  << " matches first frame. Stopping recording." << std::endl;
+        std::cout << "Captured " << g_recordedFrames
+                  << " unique frames from complete animation cycle."
+                  << std::endl;
+        g_recordingEnabled = false;
+      } else {
+        // Frame is unique - save it
+        shouldSave = true;
+      }
+    }
+    // else: frame is same as previous saved frame, skip it
+  }
+
+  if (shouldSave && g_recordedFrames < g_maxFrames) {
+    std::ostringstream filename;
+    filename << g_outputDir << "/frame_" << std::setw(4) << std::setfill('0')
+             << g_recordedFrames << ".png";
+    cv::imwrite(filename.str(), shapeRegion);
+    g_previousFrame = shapeRegion.clone(); // Update to this saved frame
+    g_recordedFrames++;
+
+    if (g_recordedFrames >= g_maxFrames) {
+      std::cout << "Recording complete! Saved " << g_maxFrames << " unique frames (checked "
+                << g_totalFramesChecked << " total frames) to " << g_outputDir
+                << std::endl;
+      g_recordingEnabled = false;
+    }
+  }
+}
+
 // ============================================================================
 // Grid Detection
 // ============================================================================
@@ -148,88 +245,6 @@ auto *gridPtr = &grid;
           // Get gem region
           cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
           gem.avgColor = cv::mean(shapeRegion);
-
-          // Recording mode: skip ALL processing and only record target position
-          if (g_recordingEnabled) {
-            // Only process frames from the target position
-            if (col == g_recordCol && row == g_recordRow) {
-              g_totalFramesChecked++;
-              
-              // Skip the first N frames to avoid transition artifacts
-              if (g_framesSkipped < g_framesToSkip) {
-                g_framesSkipped++;
-                if (g_framesSkipped == g_framesToSkip) {
-                  std::cout << "Skipped " << g_framesToSkip << " initial frames. Starting capture..." << std::endl;
-                }
-                continue;
-              }
-              
-              bool shouldSave = false;
-              bool loopDetected = false;
-              
-              // First frame after skip - always save
-              if (g_firstFrame.empty()) {
-                g_firstFrame = shapeRegion.clone();
-                g_previousFrame = shapeRegion.clone();
-                shouldSave = true;
-              }
-              // Check if frame is different from the last saved frame
-              else {
-                // XOR comparison - fast and simple
-                cv::Mat xorResult;
-                cv::bitwise_xor(shapeRegion, g_previousFrame, xorResult);
-                int nonZeroPixels = cv::countNonZero(xorResult.reshape(1));
-                
-                // Threshold: number of changed pixels (out of 128x128x3 = 49,152)
-                int threshold = 35000; // Adjust if needed - lower = more sensitive
-                
-                if (nonZeroPixels > threshold) {
-                  // Frame is different from previous saved frame
-                  // Check if it loops back to first frame
-                  cv::Mat xorFirst;
-                  cv::bitwise_xor(shapeRegion, g_firstFrame, xorFirst);
-                  int nonZeroFirst = cv::countNonZero(xorFirst.reshape(1));
-                  
-                  if (nonZeroFirst < threshold && g_recordedFrames > 0) {
-                    // Frame matches first frame - animation loop detected
-                    loopDetected = true;
-                    std::cout << "Animation loop detected! Frame " << g_totalFramesChecked 
-                             << " matches first frame. Stopping recording." << std::endl;
-                    std::cout << "Captured " << g_recordedFrames 
-                             << " unique frames from complete animation cycle." << std::endl;
-                    g_recordingEnabled = false;
-                  } else {
-                    // Frame is unique - save it
-                    shouldSave = true;
-                  }
-                }
-                // else: frame is same as previous saved frame, skip it
-              }
-              
-              if (shouldSave && g_recordedFrames < g_maxFrames) {
-                std::ostringstream filename;
-                filename << g_outputDir << "/frame_" 
-                         << std::setw(4) << std::setfill('0') << g_recordedFrames << ".png";
-                cv::imwrite(filename.str(), shapeRegion);
-                g_previousFrame = shapeRegion.clone(); // Update to this saved frame
-                g_recordedFrames++;
-                
-                if (g_recordedFrames >= g_maxFrames) {
-                  std::cout << "Recording complete! Saved " << g_maxFrames 
-                           << " unique frames (checked " << g_totalFramesChecked 
-                           << " total frames) to " << g_outputDir << std::endl;
-                  g_recordingEnabled = false;
-                }
-              }
-            }
-            // Skip classification for ALL gems while recording
-            gem.type = GemType::UNKNOWN;
-            gem.closestType = GemType::UNKNOWN;
-            gem.bestMatch = 0.0f;
-            gem.matchedThreshold = false;
-            gem.shapeMask = cv::Mat();
-            continue;
-          }
 
           // Normal mode: classify gem using shape matching
           cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);

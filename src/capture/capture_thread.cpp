@@ -62,26 +62,60 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
     {
       std::unique_lock<std::mutex> lock(frameData.mutex);
 
-      // Wait for a FREE buffer or exit signal
-      frameData.cv.wait(lock, [&] {
-        if (frameData.shouldExit)
-          return true;
+      if (IsRecording()) {
+        // When recording, try to find a FREE buffer but don't wait long.
+        // If no FREE buffer, use the oldest DISPLAYING or PROCESSED one to keep recording moving,
+        // or just use a temporary buffer.
         bufferIndex = frameData.findBuffer(BufferState::FREE);
-        return bufferIndex >= 0;
-      });
+        
+        if (bufferIndex < 0) {
+            // If we are recording and no FREE buffer, we might be blocked by the display thread.
+            // Let's wait a tiny bit then try again, or just wait normally.
+            // To ensure we don't miss frames, we SHOULD wait for a buffer, 
+            // but the processing thread is now much faster (skips work), 
+            // so FREE buffers should be available quickly.
+            frameData.cv.wait_for(lock, std::chrono::milliseconds(5), [&] {
+                if (frameData.shouldExit) return true;
+                bufferIndex = frameData.findBuffer(BufferState::FREE);
+                return bufferIndex >= 0;
+            });
+        }
+      } else {
+        // Normal mode: wait indefinitely for a FREE buffer
+        frameData.cv.wait(lock, [&] {
+          if (frameData.shouldExit)
+            return true;
+          bufferIndex = frameData.findBuffer(BufferState::FREE);
+          return bufferIndex >= 0;
+        });
+      }
 
-      if (frameData.shouldExit)
-        break;
+      if (frameData.shouldExit || bufferIndex < 0) {
+        if (frameData.shouldExit) break;
+        // If we still have no buffer and we are recording, 
+        // we can still capture into a temporary Mat just for recording.
+      }
     }
 
-    // Capture into the buffer (outside mutex for performance)
+    // Capture logic
     auto captureStart = std::chrono::high_resolution_clock::now();
+    bool captureSuccess = false;
+    cv::Mat tempBuffer;
+    cv::Mat* targetMat = nullptr;
+
+    if (bufferIndex >= 0) {
+        targetMat = &frameData.frameBuffer[bufferIndex];
+    } else {
+        // Emergency buffer for recording if all shared buffers are busy
+        // Use CV_8UC3 as established in window_capture.cpp
+        tempBuffer = cv::Mat(Config::BOARD_HEIGHT + Config::BANNER_HEIGHT, 
+                             Config::BOARD_WIDTH, CV_8UC3); 
+        targetMat = &tempBuffer;
+    }
 
     // Get ROI for game board region (below banner)
-    cv::Mat gameBoardROI = frameData.frameBuffer[bufferIndex](cv::Rect(
+    cv::Mat gameBoardROI = (*targetMat)(cv::Rect(
         0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
-
-    bool captureSuccess = false;
 
     if (useDuplication) {
       // Convert window-relative coordinates to screen-absolute coordinates
@@ -117,7 +151,7 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
     }
 
     // Mark buffer as CAPTURED (ready for processing)
-    {
+    if (bufferIndex >= 0) {
       std::lock_guard<std::mutex> lock(frameData.mutex);
       if (frameData.shouldExit)
         break;
@@ -127,6 +161,14 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
               .count();
       frameData.bufferState[bufferIndex] = BufferState::CAPTURED;
     }
-    frameData.cv.notify_all();
+
+    // Process recording if enabled (outside mutex, syncs with capture)
+    if (IsRecording()) {
+        UpdateRecording(gameBoardROI);
+    }
+
+    if (bufferIndex >= 0) {
+        frameData.cv.notify_all();
+    }
   }
 }
