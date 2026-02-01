@@ -131,7 +131,7 @@ void StopRecording() {
         cv::Mat bgModel, fgModel;
 
         // Initialize with a rectangle (slightly smaller than frame to assume border is background)
-        cv::Rect rect(2, 2, frame.cols - 4, frame.rows - 4);
+        cv::Rect rect(1, 1, frame.cols - 2, frame.rows - 2);
         
         // Run GrabCut (1 iteration is usually enough for a starting mask)
         try {
