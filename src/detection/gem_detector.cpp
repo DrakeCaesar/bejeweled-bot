@@ -14,9 +14,9 @@
 namespace {
   // Recording configuration
   bool g_recordingEnabled = false;
-  int g_recordCol = 2;
-  int g_recordRow = 1;
-  int g_maxFrames = 1000;
+  int g_recordCol = 0;
+  int g_recordRow = 0;
+  int g_maxFrames = 0;
   int g_recordedFrames = 0;
   std::string g_outputDir = "recorded_frames";
 

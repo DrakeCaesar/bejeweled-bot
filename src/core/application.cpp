@@ -5,7 +5,31 @@
 #include "../detection/mask_loader.h"
 #include "../detection/process_thread.h"
 #include "../detection/shape_classifier.h"
+#include "../rendering/overlay.h"
 #include <iostream>
+
+namespace {
+  // Recording UI controls (trackbars)
+  int g_recordColTrack = 0;
+  int g_recordRowTrack = 0;
+
+  void OnMouse(int event, int x, int y, int, void*) {
+    if (event != cv::EVENT_LBUTTONDOWN) return;
+    if (y < Config::BANNER_HEIGHT) return;
+
+    int col = x / Config::CELL_SIZE;
+    int row = (y - Config::BANNER_HEIGHT) / Config::CELL_SIZE;
+
+    if (col < 0 || col >= Config::GRID_SIZE || row < 0 || row >= Config::GRID_SIZE) {
+      return;
+    }
+
+    g_recordColTrack = col;
+    g_recordRowTrack = row;
+    SetSelectedCell(col, row);
+  }
+
+}
 
 // ============================================================================
 // Application Implementation
@@ -39,6 +63,11 @@ bool Application::Initialize() {
   // Create trackbars for shape classifier parameter adjustment
   ShapeParams::CreateTrackbars(Config::DISPLAY_WINDOW_NAME);
 
+  // Mouse click selection for recording cell
+  cv::setMouseCallback(Config::DISPLAY_WINDOW_NAME, OnMouse, nullptr);
+
+  // Recording controls
+
   // Load gem masks for shape classification
   // Now running from project root, so use simple path
   bool masksLoaded = MaskLoader::LoadAllMasks("assets");
@@ -55,7 +84,7 @@ bool Application::Initialize() {
   std::cout << "  'c' - Toggle classification mode (Color/Shape)" << std::endl;
   std::cout << "  'i' - Print window info" << std::endl;
   std::cout << "  'd' - Dump current gem grid to console" << std::endl;
-  std::cout << "  'r' - Start/stop recording frames (200 frames from col 2, row 1)" << std::endl;
+  std::cout << "  'r' - Start/stop recording frames (uses Rec Col/Row/Frames)" << std::endl;
   std::cout << "  's' - Show recording status" << std::endl;
   std::cout << std::endl;
   std::cout << "Note: HSV color thresholds need calibration!" << std::endl;
@@ -281,8 +310,7 @@ void Application::HandleKeyboardInput(int key) {
   }
   else if (key == 'r' || key == 'R') {
     if (!IsRecording()) {
-      // Start recording: column 2, row 1, 200 frames
-      StartRecording(2, 1, 1000, "recorded_frames");
+      StartRecording(g_recordColTrack, g_recordRowTrack, 1000, "recorded_frames");
       std::cout << "Press 'R' again to stop recording early" << std::endl;
     }
     else {

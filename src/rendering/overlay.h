@@ -21,6 +21,18 @@ void DrawDebugOverlay(cv::Mat&image,
                       const std::vector<std::vector<Gem>>&grid);
 
 /**
+ * Set selected grid cell for visual highlight.
+ * @param col Grid column (0-7)
+ * @param row Grid row (0-7)
+ */
+void SetSelectedCell(int col, int row);
+
+/**
+ * Clear selected grid cell highlight.
+ */
+void ClearSelectedCell();
+
+/**
  * Draw shape mode overlay showing processed binary masks for each gem.
  * Displays the white-on-black gem silhouettes used for shape matching.
  * Used for SHAPE classification mode.

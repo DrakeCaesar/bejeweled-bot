@@ -41,7 +41,7 @@ void PrintGemGrid(const std::vector<std::vector<Gem>>&grid);
  * @param maxFrames Maximum number of frames to record
  * @param outputDir Directory to save frames (will be created if needed)
  */
-void StartRecording(int col, int row, int maxFrames = 100,
+void StartRecording(int col, int row, int maxFrames,
                     const std::string&outputDir = "recorded_frames");
 
 /**

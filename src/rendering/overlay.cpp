@@ -9,6 +9,21 @@
 // Debug Overlay Drawing
 // ============================================================================
 
+namespace {
+    int g_selectedCol = -1;
+    int g_selectedRow = -1;
+}
+
+void SetSelectedCell(int col, int row) {
+    g_selectedCol = col;
+    g_selectedRow = row;
+}
+
+void ClearSelectedCell() {
+    g_selectedCol = -1;
+    g_selectedRow = -1;
+}
+
 void DrawDebugOverlay(cv::Mat&image,
                       const std::vector<std::vector<Gem>>&grid) {
     // Draw grid lines with offset for banner
@@ -107,6 +122,14 @@ void DrawDebugOverlay(cv::Mat&image,
                 }
             }
         }
+    }
+
+    // Draw selected cell highlight on top
+    if (g_selectedCol >= 0 && g_selectedRow >= 0) {
+        cv::Rect selRect(g_selectedCol * Config::CELL_SIZE,
+                         Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
+                         Config::CELL_SIZE, Config::CELL_SIZE);
+        cv::rectangle(image, selRect, cv::Scalar(0, 255, 255), 3);
     }
 }
 
@@ -328,5 +351,13 @@ void DrawShapeOverlay(cv::Mat&image,
                             fontScale, textColor, thickness, cv::LINE_AA);
             }
         }
+    }
+
+    // Draw selected cell highlight on top
+    if (g_selectedCol >= 0 && g_selectedRow >= 0) {
+        cv::Rect selRect(g_selectedCol * Config::CELL_SIZE,
+                         Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
+                         Config::CELL_SIZE, Config::CELL_SIZE);
+        cv::rectangle(image, selRect, cv::Scalar(0, 255, 255), 3);
     }
 }
