@@ -130,6 +130,18 @@ void DrawDebugOverlay(cv::Mat&image,
                          Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
                          Config::CELL_SIZE, Config::CELL_SIZE);
         cv::rectangle(image, selRect, cv::Scalar(0, 255, 255), 3);
+
+        // Draw size reference square in center
+        int refSquareSize = Config::FRAME_DIFF_REGION_SIZE;
+        int borderThickness = 2;
+        int drawSize = refSquareSize + 2 * borderThickness;  // Account for border width
+        int centerX = selRect.x + selRect.width / 2;
+        int centerY = selRect.y + selRect.height / 2;
+        int refX = centerX - drawSize / 2;
+        int refY = centerY - drawSize / 2;
+        
+        cv::rectangle(image, cv::Rect(refX, refY, drawSize, drawSize),
+                      cv::Scalar(0, 255, 255), borderThickness);
     }
 }
 
@@ -359,5 +371,17 @@ void DrawShapeOverlay(cv::Mat&image,
                          Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
                          Config::CELL_SIZE, Config::CELL_SIZE);
         cv::rectangle(image, selRect, cv::Scalar(0, 255, 255), 3);
+
+        // Draw size reference square in center
+        int refSquareSize = Config::FRAME_DIFF_REGION_SIZE;
+        int borderThickness = 2;
+        int drawSize = refSquareSize + 2 * borderThickness;  // Account for border width
+        int centerX = selRect.x + selRect.width / 2;
+        int centerY = selRect.y + selRect.height / 2;
+        int refX = centerX - drawSize / 2;
+        int refY = centerY - drawSize / 2;
+        
+        cv::rectangle(image, cv::Rect(refX, refY, drawSize, drawSize),
+                      cv::Scalar(0, 255, 255), borderThickness);
     }
 }

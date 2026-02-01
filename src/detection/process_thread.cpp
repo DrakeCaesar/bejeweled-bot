@@ -2,6 +2,7 @@
 #include "../config.h"
 #include "../rendering/banner.h"
 #include "../rendering/overlay.h"
+#include "../rendering/control_panel.h"
 #include "gem_detector.h"
 #include <chrono>
 #include <iomanip>
@@ -76,6 +77,9 @@ void ProcessThreadFunc(
                     }
                 }
 
+                // Draw custom control panel on top
+                DrawControlPanel(buffer);
+
                 auto drawEnd = std::chrono::high_resolution_clock::now();
                 timingInfo.drawMs =
                         std::chrono::duration<double, std::milli>(drawEnd - drawStart)
@@ -91,6 +95,9 @@ void ProcessThreadFunc(
                 std::string status = "RECORDING: " + std::to_string(GetRecordedFrameCount()) + " frames";
                 cv::putText(buffer, status, cv::Point(20, 35), cv::FONT_HERSHEY_SIMPLEX, 0.8,
                             cv::Scalar(255, 255, 255), 2);
+
+                // Draw custom control panel on top
+                DrawControlPanel(buffer);
 
                 timingInfo.detectMs = 0;
                 timingInfo.drawMs = 0;

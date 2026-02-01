@@ -6,6 +6,7 @@
 #include "../detection/process_thread.h"
 #include "../detection/shape_classifier.h"
 #include "../rendering/overlay.h"
+#include "../rendering/control_panel.h"
 #include <iostream>
 
 namespace {
@@ -13,7 +14,8 @@ namespace {
   int g_recordColTrack = 0;
   int g_recordRowTrack = 0;
 
-  void OnMouse(int event, int x, int y, int, void*) {
+  void OnMouse(int event, int x, int y, int flags, void*) {
+    if (HandleControlPanelMouse(event, x, y, flags)) return;
     if (event != cv::EVENT_LBUTTONDOWN) return;
     if (y < Config::BANNER_HEIGHT) return;
 
@@ -59,9 +61,6 @@ bool Application::Initialize() {
   // Create display window
   cv::namedWindow(Config::DISPLAY_WINDOW_NAME,
                   cv::WINDOW_AUTOSIZE | cv::WINDOW_KEEPRATIO);
-
-  // Create trackbars for shape classifier parameter adjustment
-  ShapeParams::CreateTrackbars(Config::DISPLAY_WINDOW_NAME);
 
   // Mouse click selection for recording cell
   cv::setMouseCallback(Config::DISPLAY_WINDOW_NAME, OnMouse, nullptr);

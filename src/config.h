@@ -63,6 +63,9 @@ namespace Config {
     const int TARGET_FPS = 30; // Target frames per second for capture
     const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
+// Frame deduplication settings
+    const int FRAME_DIFF_REGION_SIZE = 38; // Size of center region (pixels) for frame uniqueness comparison
+
 // Capture interval (ms)
     const int CAPTURE_INTERVAL_MS = 10; // Capture every 10 ms
 
@@ -76,7 +79,7 @@ namespace Config {
             true; // Reduce FPS drop when window loses focus
 
 // Banner settings
-    const int BANNER_HEIGHT = 30; // Height of info banner at top
+    const int BANNER_HEIGHT = 200; // Height of info banner at top
     const cv::Scalar BANNER_BG_COLOR =
             cv::Scalar(40, 40, 40); // Dark gray background
     const cv::Scalar BANNER_TEXT_COLOR = cv::Scalar(0, 255, 0); // Green text

@@ -78,7 +78,8 @@ void StopRecording() {
     g_uniqueFramesBuffer.clear();
     cv::Mat firstFrame;
     cv::Mat previousFrame;
-    int threshold = 30000;
+    int threshold = 0;
+    const int diffSize = Config::FRAME_DIFF_REGION_SIZE;
     bool loopDetected = false;
 
     for (size_t i = 0; i < g_rawCaptureBuffer.size(); ++i) {
@@ -90,15 +91,20 @@ void StopRecording() {
         g_uniqueFramesBuffer.push_back(currentFrame);
       }
       else {
-        // Check difference with previous unique frame
+        // Check difference with previous unique frame (only 38x38 center region)
+        int roiSize = std::min(diffSize, std::min(currentFrame.cols, currentFrame.rows));
+        int roiX = (currentFrame.cols - roiSize) / 2;
+        int roiY = (currentFrame.rows - roiSize) / 2;
+        cv::Rect diffRoi(roiX, roiY, roiSize, roiSize);
+
         cv::Mat xorResult;
-        cv::bitwise_xor(currentFrame, previousFrame, xorResult);
+        cv::bitwise_xor(currentFrame(diffRoi), previousFrame(diffRoi), xorResult);
         int nonZeroPixels = cv::countNonZero(xorResult.reshape(1));
 
         if (nonZeroPixels > threshold) {
-          // Check for loop back to the first frame
+          // Check for loop back to the first frame (same ROI)
           cv::Mat xorFirst;
-          cv::bitwise_xor(currentFrame, firstFrame, xorFirst);
+          cv::bitwise_xor(currentFrame(diffRoi), firstFrame(diffRoi), xorFirst);
           int nonZeroFirst = cv::countNonZero(xorFirst.reshape(1));
 
           if (nonZeroFirst < threshold) {
