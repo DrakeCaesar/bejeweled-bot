@@ -23,12 +23,6 @@ namespace Config {
     const int GRID_SIZE = 8; // 8x8 grid
     const int CELL_SIZE = 128; // Each cell is 128x128 pixels
 
-// Gem detection settings
-    const int GEM_CENTER_SIZE = 80; // Size of center region to sample for color
-    // (80x80 from center of 128x128 cell)
-    const int GEM_SHAPE_SIZE = 120; // Size of region to sample for shape (larger to
-    // capture full gem silhouette)
-
 // Color thresholds for gem classification (HSV color space)
 // Hue range in OpenCV is 0-179. Red wraps around, so it is split into two
 // ranges. These are tuned for Bejeweled 3 gem hues.

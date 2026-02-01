@@ -23,8 +23,8 @@ namespace MaskLoader {
     constexpr int HYPERCUBE_COLS = 10;
     constexpr int HYPERCUBE_ROWS = 6;
     constexpr int HYPERCUBE_FRAMES = 60;
-    constexpr int HYPERCUBE_SPRITE_WIDTH = 1200;
-    constexpr int HYPERCUBE_SPRITE_HEIGHT = 720;
+    constexpr int HYPERCUBE_SPRITE_WIDTH = 1280;
+    constexpr int HYPERCUBE_SPRITE_HEIGHT = 768;
     constexpr int HYPERCUBE_FRAME_WIDTH = 128;
     constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
 

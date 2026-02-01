@@ -78,7 +78,7 @@ void StopRecording() {
     g_uniqueFramesBuffer.clear();
     cv::Mat firstFrame;
     cv::Mat previousFrame;
-    int threshold = 20000;
+    int threshold = 30000;
     bool loopDetected = false;
 
     for (size_t i = 0; i < g_rawCaptureBuffer.size(); ++i) {
@@ -225,11 +225,8 @@ void UpdateRecording(const cv::Mat&gameBoard) {
   int cellX = g_recordCol * Config::CELL_SIZE;
   int cellY = g_recordRow * Config::CELL_SIZE;
 
-  // Define ROI for shape classification
-  int shapeCenterX = cellX + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
-  int shapeCenterY = cellY + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
-  cv::Rect shapeRoi(shapeCenterX, shapeCenterY, Config::GEM_SHAPE_SIZE,
-                    Config::GEM_SHAPE_SIZE);
+  // Capture full cell
+  cv::Rect shapeRoi(cellX, cellY, Config::CELL_SIZE, Config::CELL_SIZE);
 
   // Check if ROI is valid
   bool roiValid = shapeRoi.x >= 0 && shapeRoi.y >= 0 &&
@@ -268,11 +265,11 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
   if (!g_recordingEnabled && MaskLoader::AreMasksLoaded()) {
     int scaleInt = ShapeParams::refScale.load();
     int blurSize = ShapeParams::refBlur.load();
-    cv::Size targetSize(Config::GEM_SHAPE_SIZE, Config::GEM_SHAPE_SIZE);
+    cv::Size targetSize(Config::CELL_SIZE, Config::CELL_SIZE);
     MaskLoader::EnsureScaledCache(targetSize, scaleInt, blurSize);
   }
 
-// Get pointer to static grid for lambda capture
+  // Get pointer to static grid for lambda capture
   auto* gridPtr = &grid;
 
   // Use a persistent thread pool - no thread creation per frame
@@ -296,14 +293,9 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
         int cellX = col * Config::CELL_SIZE;
         int cellY = row * Config::CELL_SIZE;
 
-        // Define ROI for shape classification
-        int shapeCenterX =
-            cellX + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
-        int shapeCenterY =
-            cellY + (Config::CELL_SIZE - Config::GEM_SHAPE_SIZE) / 2;
-        gem.shapeRoi =
-            cv::Rect(shapeCenterX, shapeCenterY, Config::GEM_SHAPE_SIZE,
-                     Config::GEM_SHAPE_SIZE);
+        // Use full cell
+        gem.shapeRoi = cv::Rect(cellX, cellY, Config::CELL_SIZE,
+                     Config::CELL_SIZE);
         gem.roi = gem.shapeRoi;
 
         // Check if ROI is valid

@@ -10,3 +10,4 @@ recorded_frames/
 /*.dll
 /.output.txt
 vcpkg_installed/
+bejeweled-bot.pdb
