@@ -135,7 +135,7 @@ void StopRecording() {
         
         // Run GrabCut (1 iteration is usually enough for a starting mask)
         try {
-          cv::grabCut(frame, mask, rect, bgModel, fgModel, 1, cv::GC_INIT_WITH_RECT);
+          cv::grabCut(frame, mask, rect, bgModel, fgModel, 10, cv::GC_INIT_WITH_RECT);
         } catch (const cv::Exception& e) {
           std::cerr << "\nGrabCut error on frame " << i << ": " << e.what() << std::endl;
           mask = cv::Mat::zeros(frame.size(), CV_8UC1);
