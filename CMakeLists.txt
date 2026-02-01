@@ -3,10 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 project(bejeweled-bot)
 
 # Force vcpkg triplet for MinGW if using MinGW
-if(MINGW OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND WIN32))
-    set(VCPKG_TARGET_TRIPLET "x64-mingw-dynamic" CACHE STRING "" FORCE)
-    message(STATUS "MinGW detected, forcing vcpkg triplet to x64-mingw-dynamic")
-endif()
+# if(MINGW OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND WIN32))
+#     if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+#         set(VCPKG_TARGET_TRIPLET "x64-mingw-dynamic" CACHE STRING "" FORCE)
+#         message(STATUS "MinGW detected, forcing vcpkg triplet to x64-mingw-dynamic")
+#     endif()
+# endif()
 
 include(ProcessorCount)
 ProcessorCount(num_jobs)
