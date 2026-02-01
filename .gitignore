@@ -9,3 +9,4 @@ recorded_frames/
 /bejeweled-bot.exe
 /*.dll
 /.output.txt
+vcpkg_installed/
