@@ -345,7 +345,7 @@ namespace MaskLoader {
             }
         }
 
-        // Process hypercube
+        // Process hypercube (skip scaling and blur - already fixed)
         for (int frame = 0; frame < HYPERCUBE_FRAMES; frame++) {
             const cv::Mat&srcMask = s_hypercubeMasks[frame];
 
@@ -359,12 +359,8 @@ namespace MaskLoader {
                 resized = srcMask.clone();
             }
 
-            if (blur > 1) {
-                cv::GaussianBlur(resized, resized, cv::Size(blur, blur), 0);
-            }
-
-            cv::warpAffine(resized, s_scaledHypercubeMasks[frame], colorTransform, targetSize,
-                           cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+            // No blur or scaling - hypercube sprites are already perfect
+            s_scaledHypercubeMasks[frame] = resized;
         }
 
         std::cout << "Rebuilt color cache: " << targetSize.width << "x" << targetSize.height

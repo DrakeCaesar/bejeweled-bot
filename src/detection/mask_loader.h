@@ -31,6 +31,20 @@ namespace MaskLoader {
 // Number of gem types (excluding EMPTY, HYPERCUBE and UNKNOWN)
     constexpr int NUM_GEM_TYPES = 7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
 
+/**
+ * Check if a gem type uses fixed (pre-scaled) sprites that don't need scaling.
+ * @param type The gem type to check
+ * @return True if the gem uses fixed sprites at the correct scale
+ */
+    inline bool IsGemFixed(GemType type) {
+        switch (type) {
+            case GemType::HYPERCUBE:
+                return true; // Hypercube sprites are already at correct scale
+            default:
+                return false; // Other gems still need scaling
+        }
+    }
+
 // Storage for all reference images: [gem_type][frame_index] -> color image
 // Indexed by (GemType - 1) since EMPTY=0 is not used
     using MaskStorage =
