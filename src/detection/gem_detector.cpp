@@ -79,7 +79,8 @@ void StopRecording() {
     cv::Mat firstFrame;
     cv::Mat previousFrame;
     int threshold = 0;
-    const int diffSize = Config::FRAME_DIFF_REGION_SIZE;
+    const int diffWidth = Config::FRAME_DIFF_REGION_WIDTH;
+    const int diffHeight = Config::FRAME_DIFF_REGION_HEIGHT;
     bool loopDetected = false;
 
     for (size_t i = 0; i < g_rawCaptureBuffer.size(); ++i) {
@@ -92,10 +93,11 @@ void StopRecording() {
       }
       else {
         // Check difference with previous unique frame (only 38x38 center region)
-        int roiSize = std::min(diffSize, std::min(currentFrame.cols, currentFrame.rows));
-        int roiX = (currentFrame.cols - roiSize) / 2;
-        int roiY = (currentFrame.rows - roiSize) / 2;
-        cv::Rect diffRoi(roiX, roiY, roiSize, roiSize);
+        int roiWidth = std::min(diffWidth, currentFrame.cols);
+        int roiHeight = std::min(diffHeight, currentFrame.rows);
+        int roiX = (currentFrame.cols - roiWidth) / 2;
+        int roiY = (currentFrame.rows - roiHeight) / 2;
+        cv::Rect diffRoi(roiX, roiY, roiWidth, roiHeight);
 
         cv::Mat xorResult;
         cv::bitwise_xor(currentFrame(diffRoi), previousFrame(diffRoi), xorResult);

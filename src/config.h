@@ -64,7 +64,8 @@ namespace Config {
     const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
 // Frame deduplication settings
-    const int FRAME_DIFF_REGION_SIZE = 38; // Size of center region (pixels) for frame uniqueness comparison
+    const int FRAME_DIFF_REGION_WIDTH = 25; // Width of center region (pixels) for frame uniqueness comparison
+    const int FRAME_DIFF_REGION_HEIGHT = 45; // Height of center region (pixels) for frame uniqueness comparison
 
 // Capture interval (ms)
     const int CAPTURE_INTERVAL_MS = 10; // Capture every 10 ms
