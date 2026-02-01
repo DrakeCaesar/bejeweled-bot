@@ -13,22 +13,69 @@ namespace {
   // Recording UI controls (trackbars)
   int g_recordColTrack = 0;
   int g_recordRowTrack = 0;
+  HWND g_gameWindow = nullptr;
+  bool g_mouseDownSent = false;
+
+  void SendMouseClickToGame(HWND gameWindow, int x, int y, bool isDown) {
+    if (!gameWindow || !IsWindow(gameWindow)) return;
+
+    // Convert overlay coordinates to game window coordinates
+    // Remove banner offset and add game board offset within the window
+    int gameX = x + Config::BOARD_X;
+    int gameY = y + Config::BOARD_Y;
+
+    // Send mouse move event
+    LPARAM lParam = MAKELPARAM(gameX, gameY);
+    PostMessage(gameWindow, WM_MOUSEMOVE, 0, lParam);
+
+    // Send mouse down/up
+    if (isDown) {
+      PostMessage(gameWindow, WM_LBUTTONDOWN, MK_LBUTTON, lParam);
+    } else {
+      PostMessage(gameWindow, WM_LBUTTONUP, 0, lParam);
+    }
+  }
 
   void OnMouse(int event, int x, int y, int flags, void*) {
     if (HandleControlPanelMouse(event, x, y, flags)) return;
-    if (event != cv::EVENT_LBUTTONDOWN) return;
     if (y < Config::BANNER_HEIGHT) return;
 
+    // Calculate grid position
     int col = x / Config::CELL_SIZE;
     int row = (y - Config::BANNER_HEIGHT) / Config::CELL_SIZE;
 
-    if (col < 0 || col >= Config::GRID_SIZE || row < 0 || row >= Config::GRID_SIZE) {
-      return;
+    // Handle left button down - select cell and pass click to game (only once)
+    if (event == cv::EVENT_LBUTTONDOWN) {
+      if (col >= 0 && col < Config::GRID_SIZE && row >= 0 && row < Config::GRID_SIZE) {
+        g_recordColTrack = col;
+        g_recordRowTrack = row;
+        SetSelectedCell(col, row);
+      }
+      
+      // Pass click to game (use adjusted coordinates - remove banner offset)
+      int gameY = y - Config::BANNER_HEIGHT;
+      SendMouseClickToGame(g_gameWindow, x, gameY, true);
+      g_mouseDownSent = true;
     }
-
-    g_recordColTrack = col;
-    g_recordRowTrack = row;
-    SetSelectedCell(col, row);
+    // Handle mouse move - pass drag to game (only send move, not down)
+    else if (event == cv::EVENT_MOUSEMOVE && (flags & cv::EVENT_FLAG_LBUTTON)) {
+      int gameY = y - Config::BANNER_HEIGHT;
+      // Only send move event, not another down event
+      if (g_gameWindow && IsWindow(g_gameWindow)) {
+        int gameX = x + Config::BOARD_X;
+        int adjustedGameY = gameY + Config::BOARD_Y;
+        LPARAM lParam = MAKELPARAM(gameX, adjustedGameY);
+        PostMessage(g_gameWindow, WM_MOUSEMOVE, MK_LBUTTON, lParam);
+      }
+    }
+    // Handle left button up - release mouse on game
+    else if (event == cv::EVENT_LBUTTONUP) {
+      int gameY = y - Config::BANNER_HEIGHT;
+      if (g_mouseDownSent) {
+        SendMouseClickToGame(g_gameWindow, x, gameY, false);
+        g_mouseDownSent = false;
+      }
+    }
   }
 
 }
@@ -63,6 +110,7 @@ bool Application::Initialize() {
                   cv::WINDOW_AUTOSIZE | cv::WINDOW_KEEPRATIO);
 
   // Mouse click selection for recording cell
+  g_gameWindow = gameWindow_;
   cv::setMouseCallback(Config::DISPLAY_WINDOW_NAME, OnMouse, nullptr);
 
   // Recording controls

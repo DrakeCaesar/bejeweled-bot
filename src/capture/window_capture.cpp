@@ -475,13 +475,13 @@ void CleanupDesktopDuplication(DuplicationContext* ctx) {
 // ============================================================================
 
 void KeepGameActive(HWND gameWindow) {
-    SendMessage(gameWindow, WM_ACTIVATEAPP, TRUE, 0);
-    SendMessage(gameWindow, WM_ACTIVATE, WA_ACTIVE, 0);
-
-    POINT pt;
-    GetCursorPos(&pt);
-    ScreenToClient(gameWindow, &pt);
-    SendMessage(gameWindow, WM_MOUSEMOVE, 0, MAKELPARAM(pt.x, pt.y));
+    // Only activate if the window is not already active
+    HWND foregroundWindow = GetForegroundWindow();
+    if (foregroundWindow != gameWindow) {
+        SendMessage(gameWindow, WM_ACTIVATEAPP, TRUE, 0);
+        SendMessage(gameWindow, WM_ACTIVATE, WA_ACTIVE, 0);
+    }
+    // Don't send WM_MOUSEMOVE - this causes the drag issue!
 }
 
 void SetWindowAlwaysOnTop(HWND hwnd, bool onTop) {
