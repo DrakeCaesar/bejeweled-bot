@@ -32,6 +32,12 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_executable(bejeweled-bot ${SOURCES})
 
 target_link_libraries(bejeweled-bot PRIVATE ${OpenCV_LIBS})
+set_target_properties(bejeweled-bot PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
+)
 target_include_directories(bejeweled-bot PRIVATE
     ${OpenCV_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/src
