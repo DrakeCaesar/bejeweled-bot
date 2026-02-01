@@ -45,8 +45,8 @@ bool Application::Initialize() {
 
   if (!masksLoaded) {
     std::cerr << "Warning: Failed to load gem masks from 'assets' directory. "
-                 "Shape classification will not work."
-              << std::endl;
+        "Shape classification will not work."
+        << std::endl;
   }
 
   // Print controls
@@ -55,13 +55,13 @@ bool Application::Initialize() {
   std::cout << "  'c' - Toggle classification mode (Color/Shape)" << std::endl;
   std::cout << "  'i' - Print window info" << std::endl;
   std::cout << "  'd' - Dump current gem grid to console" << std::endl;
-  std::cout << "  'r' - Start/stop recording frames (100 frames from col 3, row 2)" << std::endl;
+  std::cout << "  'r' - Start/stop recording frames (200 frames from col 2, row 1)" << std::endl;
   std::cout << "  's' - Show recording status" << std::endl;
   std::cout << std::endl;
   std::cout << "Note: HSV color thresholds need calibration!" << std::endl;
   std::cout << "      Adjust color constants in config.h if gems aren't "
-               "detected correctly."
-            << std::endl;
+      "detected correctly."
+      << std::endl;
   std::cout << std::endl;
 
   // Initialize FPS tracking
@@ -77,8 +77,8 @@ bool Application::FindAndSetupGameWindow() {
   if (!gameWindow_) {
     std::cerr << "Error: Could not find game window!" << std::endl;
     std::cerr << "Please make sure Bejeweled 3 is running and update "
-                 "WINDOW_TITLE constant in config.h."
-              << std::endl;
+        "WINDOW_TITLE constant in config.h."
+        << std::endl;
     return false;
   }
 
@@ -93,10 +93,10 @@ bool Application::FindAndSetupGameWindow() {
   RECT windowRect;
   GetClientRect(gameWindow_, &windowRect);
   std::cout << "Window size: " << (windowRect.right - windowRect.left) << "x"
-            << (windowRect.bottom - windowRect.top) << std::endl;
+      << (windowRect.bottom - windowRect.top) << std::endl;
   std::cout << "Crop region: (" << Config::BOARD_X << ", " << Config::BOARD_Y
-            << ") " << Config::BOARD_WIDTH << "x" << Config::BOARD_HEIGHT
-            << std::endl;
+      << ") " << Config::BOARD_WIDTH << "x" << Config::BOARD_HEIGHT
+      << std::endl;
   std::cout << std::endl;
 
   return true;
@@ -116,22 +116,22 @@ bool Application::InitializeCapture() {
   MonitorEnumData enumData = {hMonitor, 0, -1};
 
   EnumDisplayMonitors(
-      NULL, NULL,
-      [](HMONITOR hMon, HDC hdc, LPRECT rect, LPARAM data) -> BOOL {
-        MonitorEnumData *pData = (MonitorEnumData *)data;
-        if (hMon == pData->targetMonitor) {
-          pData->foundIndex = pData->currentIndex;
-          return FALSE;
-        }
-        pData->currentIndex++;
-        return TRUE;
-      },
-      (LPARAM)&enumData);
+    NULL, NULL,
+    [](HMONITOR hMon, HDC hdc, LPRECT rect, LPARAM data) -> BOOL {
+      MonitorEnumData* pData = (MonitorEnumData *)data;
+      if (hMon == pData->targetMonitor) {
+        pData->foundIndex = pData->currentIndex;
+        return FALSE;
+      }
+      pData->currentIndex++;
+      return TRUE;
+    },
+    (LPARAM)&enumData);
 
   if (enumData.foundIndex >= 0) {
     monitorIndex = enumData.foundIndex;
     std::cout << "Game window detected on monitor " << monitorIndex
-              << std::endl;
+        << std::endl;
   }
 
   // Try to initialize Desktop Duplication
@@ -140,15 +140,17 @@ bool Application::InitializeCapture() {
     frameData_.dupContext = InitializeDesktopDuplication(monitorIndex);
     if (frameData_.dupContext) {
       std::cout << "Desktop Duplication enabled - capturing synced to display "
-                   "refresh!"
-                << std::endl;
-    } else {
-      std::cout << "Desktop Duplication not available - falling back to BitBlt"
-                << std::endl;
+          "refresh!"
+          << std::endl;
     }
-  } else {
+    else {
+      std::cout << "Desktop Duplication not available - falling back to BitBlt"
+          << std::endl;
+    }
+  }
+  else {
     std::cout << "Desktop Duplication disabled in config - using BitBlt"
-              << std::endl;
+        << std::endl;
   }
 
   return true;
@@ -159,7 +161,7 @@ bool Application::AllocateBuffers() {
   cv::Mat dummyCapture = CaptureWindow(gameWindow_);
   if (dummyCapture.empty()) {
     std::cerr << "Error: Failed to capture initial frame for buffer allocation"
-              << std::endl;
+        << std::endl;
     return false;
   }
   cv::Mat dummyBoard = CropGameBoard(dummyCapture);
@@ -174,7 +176,7 @@ bool Application::AllocateBuffers() {
   }
 
   std::cout << "Pre-allocated buffers: Board=" << dummyBoard.size()
-            << " type=" << boardType << std::endl;
+      << " type=" << boardType << std::endl;
 
   return true;
 }
@@ -209,8 +211,7 @@ void Application::Run() {
     // Check if window was closed
     if (cv::getWindowProperty(Config::DISPLAY_WINDOW_NAME,
                               cv::WND_PROP_VISIBLE) <= 0) {
-      std::cout << "Window closed. Exiting..." << std::endl;
-      {
+      std::cout << "Window closed. Exiting..." << std::endl; {
         std::lock_guard<std::mutex> lock(frameData_.mutex);
         frameData_.shouldExit = true;
       }
@@ -223,9 +224,7 @@ void Application::Run() {
 void Application::DisplayFrame() {
   int displayIndex = -1;
   cv::Mat displayLocal;
-  bool shouldDisplay = false;
-
-  {
+  bool shouldDisplay = false; {
     std::lock_guard<std::mutex> lock(frameData_.mutex);
     displayIndex = frameData_.findBuffer(BufferState::PROCESSED);
     if (displayIndex >= 0) {
@@ -241,9 +240,7 @@ void Application::DisplayFrame() {
     auto displayEnd = std::chrono::high_resolution_clock::now();
     timingInfo_.displayMs =
         std::chrono::duration<double, std::milli>(displayEnd - displayStart)
-            .count();
-
-    {
+        .count(); {
       std::lock_guard<std::mutex> lock(frameData_.mutex);
       frameData_.bufferState[displayIndex] = BufferState::FREE;
     }
@@ -253,46 +250,52 @@ void Application::DisplayFrame() {
 
 void Application::HandleKeyboardInput(int key) {
   if (key == 'q' || key == 'Q') {
-    std::cout << "Exiting..." << std::endl;
-    {
+    std::cout << "Exiting..." << std::endl; {
       std::lock_guard<std::mutex> lock(frameData_.mutex);
       frameData_.shouldExit = true;
     }
     frameData_.cv.notify_one();
     running_ = false;
-  } else if (key == 'c' || key == 'C') {
+  }
+  else if (key == 'c' || key == 'C') {
     std::lock_guard<std::mutex> lock(frameData_.mutex);
     if (frameData_.classificationMode == Config::ClassificationMode::COLOR) {
       frameData_.classificationMode = Config::ClassificationMode::SHAPE;
       std::cout << "Classification mode changed to: SHAPE" << std::endl;
-    } else {
+    }
+    else {
       frameData_.classificationMode = Config::ClassificationMode::COLOR;
       std::cout << "Classification mode changed to: COLOR" << std::endl;
     }
-  } else if (key == 'i' || key == 'I') {
+  }
+  else if (key == 'i' || key == 'I') {
     std::cout << "Window info:" << std::endl;
     std::lock_guard<std::mutex> lock(frameData_.mutex);
     for (int i = 0; i < 3; i++) {
       if (!frameData_.frameBuffer[i].empty()) {
         std::cout << "  Game board size: " << frameData_.frameBuffer[i].cols
-                  << "x" << frameData_.frameBuffer[i].rows << std::endl;
+            << "x" << frameData_.frameBuffer[i].rows << std::endl;
         break;
       }
     }
-  } else if (key == 'r' || key == 'R') {
+  }
+  else if (key == 'r' || key == 'R') {
     if (!IsRecording()) {
-      // Start recording: column 2, row 1, 100 frames
-      StartRecording(2, 1, 100, "recorded_frames");
+      // Start recording: column 2, row 1, 200 frames
+      StartRecording(2, 1, 1000, "recorded_frames");
       std::cout << "Press 'R' again to stop recording early" << std::endl;
-    } else {
+    }
+    else {
       StopRecording();
     }
-  } else if (key == 's' || key == 'S') {
+  }
+  else if (key == 's' || key == 'S') {
     if (IsRecording()) {
-      std::cout << "Recording status: " << GetRecordedFrameCount() 
-                << " unique frames captured (checked " << GetTotalFramesChecked() 
-                << " total frames)" << std::endl;
-    } else {
+      std::cout << "Recording status: " << GetRecordedFrameCount()
+          << " unique frames captured (checked " << GetTotalFramesChecked()
+          << " total frames)" << std::endl;
+    }
+    else {
       std::cout << "Not currently recording. Press 'R' to start." << std::endl;
     }
   }

@@ -17,5 +17,5 @@
  * @param frameData Shared frame data for buffer management
  * @param timingInfo Timing information for performance tracking
  */
-void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
-                       TimingInfo &timingInfo);
+void CaptureThreadFunc(HWND gameWindow, SharedFrameData&frameData,
+                       TimingInfo&timingInfo);

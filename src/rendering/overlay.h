@@ -17,8 +17,8 @@
  * @param image The image to draw on (will be modified)
  * @param grid The detected gem grid
  */
-void DrawDebugOverlay(cv::Mat &image,
-                      const std::vector<std::vector<Gem>> &grid);
+void DrawDebugOverlay(cv::Mat&image,
+                      const std::vector<std::vector<Gem>>&grid);
 
 /**
  * Draw shape mode overlay showing processed binary masks for each gem.
@@ -28,5 +28,5 @@ void DrawDebugOverlay(cv::Mat &image,
  * @param image The image to draw on (will be modified)
  * @param grid The detected gem grid with shapeMask populated
  */
-void DrawShapeOverlay(cv::Mat &image,
-                      const std::vector<std::vector<Gem>> &grid);
+void DrawShapeOverlay(cv::Mat&image,
+                      const std::vector<std::vector<Gem>>&grid);

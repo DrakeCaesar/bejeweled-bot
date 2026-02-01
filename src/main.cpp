@@ -8,11 +8,12 @@
 // ============================================================================
 
 struct TimerResolution {
-  explicit TimerResolution(UINT periodMs) : period(periodMs) {
-    timeBeginPeriod(period);
-  }
-  ~TimerResolution() { timeEndPeriod(period); }
-  UINT period;
+    explicit TimerResolution(UINT periodMs) : period(periodMs) {
+        timeBeginPeriod(period);
+    }
+
+    ~TimerResolution() { timeEndPeriod(period); }
+    UINT period;
 };
 
 // ============================================================================
@@ -20,17 +21,17 @@ struct TimerResolution {
 // ============================================================================
 
 int main() {
-  // Enable high-resolution timing
-  TimerResolution timerResolution(1);
+    // Enable high-resolution timing
+    TimerResolution timerResolution(1);
 
-  // Create and run application
-  Application app;
+    // Create and run application
+    Application app;
 
-  if (!app.Initialize()) {
-    return -1;
-  }
+    if (!app.Initialize()) {
+        return -1;
+    }
 
-  app.Run();
+    app.Run();
 
-  return 0;
+    return 0;
 }

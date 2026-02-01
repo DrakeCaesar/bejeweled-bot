@@ -11,40 +11,39 @@
 // ============================================================================
 
 namespace MaskLoader {
-
 // Constants for reference image grid layout
-constexpr int MASK_COLS = 5;       // 5 columns in standard sprite sheets
-constexpr int MASK_ROWS = 4;       // 4 rows in standard sprite sheets
-constexpr int FRAMES_PER_GEM = 20; // Total frames per standard gem (5 * 4)
-constexpr int SPRITE_WIDTH = 640;  // Standard sprite width
-constexpr int SPRITE_HEIGHT = 512; // Standard sprite height
-constexpr int FRAME_WIDTH = 128;   // Width of each frame (640 / 5)
-constexpr int FRAME_HEIGHT = 128;  // Height of each frame (512 / 4)
+    constexpr int MASK_COLS = 5; // 5 columns in standard sprite sheets
+    constexpr int MASK_ROWS = 4; // 4 rows in standard sprite sheets
+    constexpr int FRAMES_PER_GEM = 20; // Total frames per standard gem (5 * 4)
+    constexpr int SPRITE_WIDTH = 640; // Standard sprite width
+    constexpr int SPRITE_HEIGHT = 512; // Standard sprite height
+    constexpr int FRAME_WIDTH = 128; // Width of each frame (640 / 5)
+    constexpr int FRAME_HEIGHT = 128; // Height of each frame (512 / 4)
 
 // Hypercube has different dimensions
-constexpr int HYPERCUBE_COLS = 6;         // 6 columns
-constexpr int HYPERCUBE_ROWS = 5;         // 5 rows
-constexpr int HYPERCUBE_FRAMES = 30;      // 6 * 5 frames
-constexpr int HYPERCUBE_SPRITE_WIDTH = 768;
-constexpr int HYPERCUBE_SPRITE_HEIGHT = 640;
-constexpr int HYPERCUBE_FRAME_WIDTH = 128;
-constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
+    constexpr int HYPERCUBE_COLS = 6; // 6 columns
+    constexpr int HYPERCUBE_ROWS = 5; // 5 rows
+    constexpr int HYPERCUBE_FRAMES = 30; // 6 * 5 frames
+    constexpr int HYPERCUBE_SPRITE_WIDTH = 768;
+    constexpr int HYPERCUBE_SPRITE_HEIGHT = 640;
+    constexpr int HYPERCUBE_FRAME_WIDTH = 128;
+    constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
 
 // Number of gem types (excluding EMPTY, HYPERCUBE and UNKNOWN)
-constexpr int NUM_GEM_TYPES = 7;  // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
+    constexpr int NUM_GEM_TYPES = 7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
 
 // Storage for all reference images: [gem_type][frame_index] -> color image
 // Indexed by (GemType - 1) since EMPTY=0 is not used
-using MaskStorage =
+    using MaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
 // Storage for binary alpha masks: [gem_type][frame_index] -> grayscale mask
-using AlphaMaskStorage =
+    using AlphaMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
 // Storage for hypercube (separate due to different frame count)
-using HypercubeMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
-using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+    using HypercubeMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+    using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 /**
  * Load all gem reference images from the assets folder.
@@ -53,7 +52,7 @@ using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
  * @param assetsPath Path to the assets folder (e.g., "../assets")
  * @return True if all reference images loaded successfully
  */
-bool LoadAllMasks(const std::string &assetsPath);
+    bool LoadAllMasks(const std::string&assetsPath);
 
 /**
  * Get the loaded masks storage.
@@ -61,12 +60,12 @@ bool LoadAllMasks(const std::string &assetsPath);
  *
  * @return Reference to the mask storage array
  */
-const MaskStorage &GetMasks();
+    const MaskStorage& GetMasks();
 
 /**
  * Check if masks have been loaded.
  */
-bool AreMasksLoaded();
+    bool AreMasksLoaded();
 
 /**
  * Get a specific mask for a gem type and frame.
@@ -75,7 +74,7 @@ bool AreMasksLoaded();
  * @param frameIndex Frame index 0-19 (or 0-29 for HYPERCUBE)
  * @return The mask image, or empty Mat if not found
  */
-const cv::Mat &GetMask(GemType type, int frameIndex);
+    const cv::Mat& GetMask(GemType type, int frameIndex);
 
 /**
  * Get a specific alpha mask for a gem type and frame.
@@ -85,12 +84,12 @@ const cv::Mat &GetMask(GemType type, int frameIndex);
  * @param frameIndex Frame index 0-19 (or 0-29 for HYPERCUBE)
  * @return The alpha mask (grayscale, 0=background, 255=foreground), or empty Mat if not found
  */
-const cv::Mat &GetAlphaMask(GemType type, int frameIndex);
+    const cv::Mat& GetAlphaMask(GemType type, int frameIndex);
 
 /**
  * Get the number of frames for a given gem type.
  */
-int GetFrameCount(GemType type);
+    int GetFrameCount(GemType type);
 
 /**
  * Ensure scaled cache is built for the given parameters.
@@ -101,11 +100,10 @@ int GetFrameCount(GemType type);
  * @param scaleInt Scale as integer for color images (1000 = 100%)
  * @param blurSize Gaussian blur kernel size to apply to reference images (1 = no blur)
  */
-void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize = 1);
+    void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize = 1);
 
 /**
  * Get a pre-scaled reference color image. Must call EnsureScaledCache first.
  */
-const cv::Mat &GetScaledMask(GemType type, int frameIndex);
-
+    const cv::Mat& GetScaledMask(GemType type, int frameIndex);
 } // namespace MaskLoader

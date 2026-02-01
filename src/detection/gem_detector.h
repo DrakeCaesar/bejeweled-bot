@@ -19,14 +19,14 @@
  * @return Reference to internal 2D vector representing the 8x8 grid of detected
  * gems
  */
-std::vector<std::vector<Gem>> &
-DetectGems(const cv::Mat &gameBoard,
+std::vector<std::vector<Gem>>&
+DetectGems(const cv::Mat&gameBoard,
            Config::ClassificationMode mode = Config::ClassificationMode::COLOR);
 
 /**
  * Print the gem grid to console for debugging
  */
-void PrintGemGrid(const std::vector<std::vector<Gem>> &grid);
+void PrintGemGrid(const std::vector<std::vector<Gem>>&grid);
 
 // ============================================================================
 // Frame Recording - Capture raw gem images for asset creation
@@ -41,8 +41,8 @@ void PrintGemGrid(const std::vector<std::vector<Gem>> &grid);
  * @param maxFrames Maximum number of frames to record
  * @param outputDir Directory to save frames (will be created if needed)
  */
-void StartRecording(int col, int row, int maxFrames = 100, 
-                    const std::string& outputDir = "recorded_frames");
+void StartRecording(int col, int row, int maxFrames = 100,
+                    const std::string&outputDir = "recorded_frames");
 
 /**
  * Stop recording frames.
@@ -70,4 +70,4 @@ int GetTotalFramesChecked();
  * 
  * @param gameBoard The full game board image
  */
-void UpdateRecording(const cv::Mat& gameBoard);
+void UpdateRecording(const cv::Mat&gameBoard);

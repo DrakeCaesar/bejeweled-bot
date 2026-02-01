@@ -10,8 +10,8 @@
 // Capture Thread Implementation
 // ============================================================================
 
-void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
-                       TimingInfo &timingInfo) {
+void CaptureThreadFunc(HWND gameWindow, SharedFrameData&frameData,
+                       TimingInfo&timingInfo) {
   const int ACTIVATION_INTERVAL_MS = 1000;
   auto lastActivation = std::chrono::high_resolution_clock::now();
 
@@ -35,8 +35,8 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
 
       auto timeToWait = nextCaptureTime - nowSteady;
       auto sleepUntil = (timeToWait > spinThreshold)
-                            ? (nextCaptureTime - spinThreshold)
-                            : nextCaptureTime;
+                          ? (nextCaptureTime - spinThreshold)
+                          : nextCaptureTime;
       if (sleepUntil > nowSteady) {
         std::this_thread::sleep_until(sleepUntil);
       }
@@ -52,14 +52,13 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
     auto now = std::chrono::high_resolution_clock::now();
     if (std::chrono::duration_cast<std::chrono::milliseconds>(now -
                                                               lastActivation)
-            .count() >= ACTIVATION_INTERVAL_MS) {
+        .count() >= ACTIVATION_INTERVAL_MS) {
       KeepGameActive(gameWindow);
       lastActivation = now;
     }
 
     // Find a FREE buffer to capture into
-    int bufferIndex = -1;
-    {
+    int bufferIndex = -1; {
       std::unique_lock<std::mutex> lock(frameData.mutex);
 
       if (IsRecording()) {
@@ -67,20 +66,21 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
         // If no FREE buffer, use the oldest DISPLAYING or PROCESSED one to keep recording moving,
         // or just use a temporary buffer.
         bufferIndex = frameData.findBuffer(BufferState::FREE);
-        
+
         if (bufferIndex < 0) {
-            // If we are recording and no FREE buffer, we might be blocked by the display thread.
-            // Let's wait a tiny bit then try again, or just wait normally.
-            // To ensure we don't miss frames, we SHOULD wait for a buffer, 
-            // but the processing thread is now much faster (skips work), 
-            // so FREE buffers should be available quickly.
-            frameData.cv.wait_for(lock, std::chrono::milliseconds(5), [&] {
-                if (frameData.shouldExit) return true;
-                bufferIndex = frameData.findBuffer(BufferState::FREE);
-                return bufferIndex >= 0;
-            });
+          // If we are recording and no FREE buffer, we might be blocked by the display thread.
+          // Let's wait a tiny bit then try again, or just wait normally.
+          // To ensure we don't miss frames, we SHOULD wait for a buffer,
+          // but the processing thread is now much faster (skips work),
+          // so FREE buffers should be available quickly.
+          frameData.cv.wait_for(lock, std::chrono::milliseconds(5), [&] {
+            if (frameData.shouldExit) return true;
+            bufferIndex = frameData.findBuffer(BufferState::FREE);
+            return bufferIndex >= 0;
+          });
         }
-      } else {
+      }
+      else {
         // Normal mode: wait indefinitely for a FREE buffer
         frameData.cv.wait(lock, [&] {
           if (frameData.shouldExit)
@@ -104,18 +104,19 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
     cv::Mat* targetMat = nullptr;
 
     if (bufferIndex >= 0) {
-        targetMat = &frameData.frameBuffer[bufferIndex];
-    } else {
-        // Emergency buffer for recording if all shared buffers are busy
-        // Use CV_8UC3 as established in window_capture.cpp
-        tempBuffer = cv::Mat(Config::BOARD_HEIGHT + Config::BANNER_HEIGHT, 
-                             Config::BOARD_WIDTH, CV_8UC3); 
-        targetMat = &tempBuffer;
+      targetMat = &frameData.frameBuffer[bufferIndex];
+    }
+    else {
+      // Emergency buffer for recording if all shared buffers are busy
+      // Use CV_8UC3 as established in window_capture.cpp
+      tempBuffer = cv::Mat(Config::BOARD_HEIGHT + Config::BANNER_HEIGHT,
+                           Config::BOARD_WIDTH, CV_8UC3);
+      targetMat = &tempBuffer;
     }
 
     // Get ROI for game board region (below banner)
     cv::Mat gameBoardROI = (*targetMat)(cv::Rect(
-        0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
+      0, Config::BANNER_HEIGHT, Config::BOARD_WIDTH, Config::BOARD_HEIGHT));
 
     if (useDuplication) {
       // Convert window-relative coordinates to screen-absolute coordinates
@@ -129,15 +130,16 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
 
       // Desktop Duplication - blocks until new frame arrives (perfect sync!)
       captureSuccess = CaptureRegionFromDuplication(
-          frameData.dupContext, screenX, screenY, Config::BOARD_WIDTH,
-          Config::BOARD_HEIGHT, gameBoardROI,
-          16 // 16ms timeout = ~60 FPS minimum
+        frameData.dupContext, screenX, screenY, Config::BOARD_WIDTH,
+        Config::BOARD_HEIGHT, gameBoardROI,
+        16 // 16ms timeout = ~60 FPS minimum
       );
-    } else {
+    }
+    else {
       // Fallback to BitBlt - capture into ROI
       captureSuccess = CaptureWindowRegionInto(
-          gameWindow, Config::BOARD_X, Config::BOARD_Y, Config::BOARD_WIDTH,
-          Config::BOARD_HEIGHT, gameBoardROI);
+        gameWindow, Config::BOARD_X, Config::BOARD_Y, Config::BOARD_WIDTH,
+        Config::BOARD_HEIGHT, gameBoardROI);
     }
 
     auto captureEnd = std::chrono::high_resolution_clock::now();
@@ -158,17 +160,17 @@ void CaptureThreadFunc(HWND gameWindow, SharedFrameData &frameData,
 
       timingInfo.captureMs =
           std::chrono::duration<double, std::milli>(captureEnd - captureStart)
-              .count();
+          .count();
       frameData.bufferState[bufferIndex] = BufferState::CAPTURED;
     }
 
     // Process recording if enabled (outside mutex, syncs with capture)
     if (IsRecording()) {
-        UpdateRecording(gameBoardROI);
+      UpdateRecording(gameBoardROI);
     }
 
     if (bufferIndex >= 0) {
-        frameData.cv.notify_all();
+      frameData.cv.notify_all();
     }
   }
 }
