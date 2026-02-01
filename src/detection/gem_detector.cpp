@@ -122,12 +122,40 @@ void StopRecording() {
     }
 
     if (!g_uniqueFramesBuffer.empty()) {
-      std::cout << "Writing unique frames to disk..." << std::endl;
+      std::cout << "Writing unique frames and masks to disk..." << std::endl;
+      
       for (size_t i = 0; i < g_uniqueFramesBuffer.size(); ++i) {
+        // Use GrabCut for mask generation
+        cv::Mat frame = g_uniqueFramesBuffer[i];
+        cv::Mat mask = cv::Mat::zeros(frame.size(), CV_8UC1);
+        cv::Mat bgModel, fgModel;
+
+        // Initialize with a rectangle (slightly smaller than frame to assume border is background)
+        cv::Rect rect(2, 2, frame.cols - 4, frame.rows - 4);
+        
+        // Run GrabCut (1 iteration is usually enough for a starting mask)
+        try {
+          cv::grabCut(frame, mask, rect, bgModel, fgModel, 1, cv::GC_INIT_WITH_RECT);
+        } catch (const cv::Exception& e) {
+          std::cerr << "\nGrabCut error on frame " << i << ": " << e.what() << std::endl;
+          mask = cv::Mat::zeros(frame.size(), CV_8UC1);
+        }
+
+        // Convert GrabCut mask to binary mask (foreground and probably foreground)
+        cv::Mat binaryMask;
+        binaryMask = (mask == cv::GC_FGD) | (mask == cv::GC_PR_FGD);
+        
+        // Save original frame
         std::ostringstream filename;
         filename << g_outputDir << "/frame_" << std::setw(4) << std::setfill('0')
             << i << ".png";
-        cv::imwrite(filename.str(), g_uniqueFramesBuffer[i]);
+        cv::imwrite(filename.str(), frame);
+
+        // Save mask frame
+        std::ostringstream maskFilename;
+        maskFilename << g_outputDir << "/frame_" << std::setw(4) << std::setfill('0')
+            << i << "_mask.png";
+        cv::imwrite(maskFilename.str(), binaryMask);
 
         if ((i + 1) % 10 == 0 || i == g_uniqueFramesBuffer.size() - 1) {
           std::cout << "\rProgress: " << (i + 1) << "/" << g_uniqueFramesBuffer.size() << std::flush;
