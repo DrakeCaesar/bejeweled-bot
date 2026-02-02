@@ -5,14 +5,68 @@ namespace MaskLoader {
 // Static storage for masks
     static MaskStorage s_masks;
     static AlphaMaskStorage s_alphaMasks;
+    static RingMaskStorage s_ringMasks;
     static HypercubeMaskStorage s_hypercubeMasks;
     static HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
+    static HypercubeRingMaskStorage s_hypercubeRingMasks;
     static bool s_loaded = false;
     static cv::Mat s_emptyMask;
 
 // Static color reference images (first frame replacements for Phase 1)
     static MaskStorage s_staticColorMasks;
     static bool s_staticColorsLoaded = false;
+
+    static cv::Mat BuildRingMask(const cv::Mat&alphaMask) {
+        if (alphaMask.empty()) {
+            return cv::Mat();
+        }
+
+        constexpr double kRingScale = 1.15;
+        cv::Mat scaled;
+        cv::resize(alphaMask, scaled, cv::Size(), kRingScale, kRingScale, cv::INTER_NEAREST);
+
+        // Ensure binary
+        cv::threshold(scaled, scaled, 127, 255, cv::THRESH_BINARY);
+
+        // Scale the mask by 105% to remove edge pixels
+        constexpr double kInnerScale = 1.05;
+        cv::Mat innerMask;
+        cv::resize(alphaMask, innerMask, cv::Size(), kInnerScale, kInnerScale, cv::INTER_NEAREST);
+        cv::threshold(innerMask, innerMask, 127, 255, cv::THRESH_BINARY);
+
+        // Center the 95%-scaled mask inside the scaled mask and invert it
+        cv::Mat centered = cv::Mat::zeros(scaled.size(), scaled.type());
+        int offsetX = (scaled.cols - innerMask.cols) / 2;
+        int offsetY = (scaled.rows - innerMask.rows) / 2;
+        if (offsetX >= 0 && offsetY >= 0 &&
+            offsetX + innerMask.cols <= scaled.cols &&
+            offsetY + innerMask.rows <= scaled.rows) {
+            innerMask.copyTo(centered(cv::Rect(offsetX, offsetY, innerMask.cols, innerMask.rows)));
+        }
+
+        cv::Mat centeredInverted;
+        cv::bitwise_not(centered, centeredInverted);
+
+        // Apply inverted center to scaled mask to keep only the ring
+        cv::Mat ringScaled;
+        cv::bitwise_and(scaled, centeredInverted, ringScaled);
+
+        // Crop back to original size (centered)
+        cv::Mat ring;
+        if (ringScaled.cols >= alphaMask.cols && ringScaled.rows >= alphaMask.rows) {
+            int startX = (ringScaled.cols - alphaMask.cols) / 2;
+            int startY = (ringScaled.rows - alphaMask.rows) / 2;
+            ring = ringScaled(cv::Rect(startX, startY, alphaMask.cols, alphaMask.rows)).clone();
+        }
+        else {
+            ring = cv::Mat::zeros(alphaMask.size(), alphaMask.type());
+            int dstX = (alphaMask.cols - ringScaled.cols) / 2;
+            int dstY = (alphaMask.rows - ringScaled.rows) / 2;
+            ringScaled.copyTo(ring(cv::Rect(dstX, dstY, ringScaled.cols, ringScaled.rows)));
+        }
+
+        return ring;
+    }
 
 // Map GemType to filename
     static const char* GemTypeToFilename(GemType type) {
@@ -141,6 +195,9 @@ namespace MaskLoader {
                 cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
                 cv::erode(maskFrame, maskFrame, kernel, cv::Point(-1, -1), 1);
 
+                // Build ring mask (scaled alpha minus original)
+                cv::Mat ringMask = BuildRingMask(maskFrame);
+
                 // Apply mask to color frame (set background to black)
                 for (int y = 0; y < colorFrame.rows; y++) {
                     cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
@@ -156,6 +213,7 @@ namespace MaskLoader {
 
                 s_masks[gemIndex][frameIndex] = colorFrame;
                 s_alphaMasks[gemIndex][frameIndex] = maskFrame;
+                s_ringMasks[gemIndex][frameIndex] = ringMask;
                 frameIndex++;
             }
         }
@@ -217,6 +275,7 @@ namespace MaskLoader {
             // Store as frame 0 in main storage
             s_masks[gemIndex][0] = staticImage;
             s_alphaMasks[gemIndex][0] = alphaMask;
+            s_ringMasks[gemIndex][0] = BuildRingMask(alphaMask);
 
             std::cout << "Loaded static color reference for " << GemTypeToString(type) << std::endl;
         }
@@ -264,6 +323,8 @@ namespace MaskLoader {
 
                 cv::threshold(maskFrame, maskFrame, 127, 255, cv::THRESH_BINARY);
 
+                cv::Mat ringMask = BuildRingMask(maskFrame);
+
                 // Apply mask to color
                 for (int y = 0; y < colorFrame.rows; y++) {
                     cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
@@ -277,6 +338,7 @@ namespace MaskLoader {
 
                 s_hypercubeMasks[frameIndex] = colorFrame;
                 s_hypercubeAlphaMasks[frameIndex] = maskFrame;
+                s_hypercubeRingMasks[frameIndex] = ringMask;
                 frameIndex++;
             }
         }
@@ -354,6 +416,21 @@ namespace MaskLoader {
             return s_emptyMask;
         }
         return s_alphaMasks[gemIndex][frameIndex];
+    }
+
+    const cv::Mat& GetRingMask(GemType type, int frameIndex) {
+        if (type == GemType::HYPERCUBE) {
+            if (frameIndex < 0 || frameIndex >= HYPERCUBE_FRAMES) {
+                return s_emptyMask;
+            }
+            return s_hypercubeRingMasks[frameIndex];
+        }
+
+        int gemIndex = GemTypeToIndex(type);
+        if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
+            return s_emptyMask;
+        }
+        return s_ringMasks[gemIndex][frameIndex];
     }
 
     int GetFrameCount(GemType type) {

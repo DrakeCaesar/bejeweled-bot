@@ -27,7 +27,7 @@ namespace {
     int g_activeSlider = -1;
 
     const std::array<SliderDef, 2> kSliders = {
-        SliderDef{"Debug", 0, 5, &ShapeParams::debugStage},
+        SliderDef{"Debug", 0, 6, &ShapeParams::debugStage},
         SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold}
     };
 

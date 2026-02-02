@@ -69,32 +69,50 @@ void DrawDebugOverlay(cv::Mat&image,
                 int lineCount = 0;
                 cv::Scalar textColor;
 
-                if (gem.matchedThreshold && gem.type != GemType::UNKNOWN) {
-                    lines[lineCount++] = GemTypeToString(gem.type);
+                int stage = ShapeParams::debugStage.load();
+
+                if (stage == 6) {
                     oss.str("");
-                    oss << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f)
-                            << "%";
+                    if (gem.ringValue >= 0) {
+                        oss << "V" << gem.ringValue;
+                    }
+                    else {
+                        oss << "V-";
+                    }
                     lines[lineCount++] = oss.str();
-                    textColor = GemTypeToColor(gem.type);
-                }
-                else {
-                    lines[lineCount++] = "CLOSE:";
-                    lines[lineCount++] = GemTypeToString(gem.closestType);
-                    oss.str("");
-                    oss << std::fixed << std::setprecision(0) << (gem.bestMatch * 100.0f)
-                            << "%";
-                    lines[lineCount++] = oss.str();
-                    textColor = (gem.closestType != GemType::UNKNOWN)
-                                    ? GemTypeToColor(gem.closestType)
+                    textColor = (gem.type != GemType::UNKNOWN)
+                                    ? GemTypeToColor(gem.type)
                                     : cv::Scalar(160, 160, 160);
                 }
+                else {
 
-                oss.str("");
-                oss << "H" << (int)hsvVal[0] << " S" << (int)hsvVal[1];
-                lines[lineCount++] = oss.str();
-                oss.str("");
-                oss << "V" << (int)hsvVal[2];
-                lines[lineCount++] = oss.str();
+                    if (gem.matchedThreshold && gem.type != GemType::UNKNOWN) {
+                        lines[lineCount++] = GemTypeToString(gem.type);
+                        oss.str("");
+                        oss << std::fixed << std::setprecision(0)
+                            << (gem.bestMatch * 100.0f) << "%";
+                        lines[lineCount++] = oss.str();
+                        textColor = GemTypeToColor(gem.type);
+                    }
+                    else {
+                        lines[lineCount++] = "CLOSE:";
+                        lines[lineCount++] = GemTypeToString(gem.closestType);
+                        oss.str("");
+                        oss << std::fixed << std::setprecision(0)
+                            << (gem.bestMatch * 100.0f) << "%";
+                        lines[lineCount++] = oss.str();
+                        textColor = (gem.closestType != GemType::UNKNOWN)
+                                        ? GemTypeToColor(gem.closestType)
+                                        : cv::Scalar(160, 160, 160);
+                    }
+
+                    oss.str("");
+                    oss << "H" << (int)hsvVal[0] << " S" << (int)hsvVal[1];
+                    lines[lineCount++] = oss.str();
+                    oss.str("");
+                    oss << "V" << (int)hsvVal[2];
+                    lines[lineCount++] = oss.str();
+                }
 
                 // Calculate background size
                 int maxWidth = 0;
@@ -168,78 +186,107 @@ void DrawShapeOverlay(cv::Mat&image,
                     // Apply alpha mask to captured gem for visualization
                     cv::Mat capturedGem = gem.shapeMask.clone();
 
-                    // Apply mask to captured gem if we have a match
-                    if (isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
-                        const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(gem.type, gem.bestMatchFrame);
+                    int stage = ShapeParams::debugStage.load();
 
-                        if (!alphaMask.empty()) {
-                            // Resize mask to match captured gem
-                            cv::Mat mask = alphaMask;
+                    // Stage 6: Show only ring pixels
+                    if (stage == 6 && isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
+                        const cv::Mat&ringMask = MaskLoader::GetRingMask(gem.type, gem.bestMatchFrame);
+
+                        if (!ringMask.empty()) {
+                            // Resize ring mask to match captured gem
+                            cv::Mat mask = ringMask;
                             if (mask.size() != capturedGem.size()) {
-                                cv::resize(alphaMask, mask, capturedGem.size(), 0, 0, cv::INTER_NEAREST);
+                                cv::resize(ringMask, mask, capturedGem.size(), 0, 0, cv::INTER_NEAREST);
                             }
 
-                            // Apply mask: set background pixels to black
+                            // Apply ring mask: keep only ring pixels, set rest to black
                             for (int y = 0; y < capturedGem.rows; y++) {
                                 cv::Vec3b* gemRow = capturedGem.ptr<cv::Vec3b>(y);
                                 const uchar* maskRow = mask.ptr<uchar>(y);
 
                                 for (int x = 0; x < capturedGem.cols; x++) {
                                     if (maskRow[x] == 0) {
-                                        // Background pixel - set to black
+                                        // Not in ring - set to black
                                         gemRow[x] = cv::Vec3b(0, 0, 0);
                                     }
                                 }
                             }
                         }
-                    }
-
-                    // Show comparison with reference if available
-                    int stage = ShapeParams::debugStage.load();
-                    bool showComparison = (stage == 0);
-
-                    if (showComparison && isKnown && gem.bestMatchFrame >= 0 &&
-                        MaskLoader::AreMasksLoaded()) {
-                        // Get the best matching reference image
-                        cv::Mat refImage = MaskLoader::GetMask(gem.type, gem.bestMatchFrame);
-
-                        if (!refImage.empty()) {
-                            // Resize reference to match gem size
-                            if (refImage.size() != capturedGem.size()) {
-                                cv::resize(refImage, refImage, capturedGem.size(), 0, 0,
-                                           cv::INTER_LINEAR);
-                            }
-
-                            // Create side-by-side comparison
-                            int w = capturedGem.cols;
-                            int h = capturedGem.rows;
-                            maskColored = cv::Mat::zeros(h, w * 2 + 4, CV_8UC3);
-
-                            // Left: captured gem (with mask applied)
-                            capturedGem.copyTo(maskColored(cv::Rect(0, 0, w, h)));
-
-                            // Middle: divider line
-                            cv::line(maskColored, cv::Point(w + 2, 0), cv::Point(w + 2, h),
-                                     cv::Scalar(255, 255, 0), 2);
-
-                            // Right: reference image (already has mask applied)
-                            refImage.copyTo(maskColored(cv::Rect(w + 4, 0, w, h)));
-
-                            // Add labels
-                            cv::putText(maskColored, "Captured", cv::Point(2, 12),
-                                        cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(0, 255, 255),
-                                        1, cv::LINE_AA);
-                            cv::putText(maskColored, "Reference", cv::Point(w + 6, 12),
-                                        cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(0, 255, 255),
-                                        1, cv::LINE_AA);
-                        }
-                        else {
-                            maskColored = capturedGem.clone();
-                        }
+                        maskColored = capturedGem.clone();
                     }
                     else {
-                        // Just show the captured gem (with mask applied)
-                        maskColored = capturedGem.clone();
+                        // Apply regular mask to captured gem if we have a match
+                        if (isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
+                            const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(gem.type, gem.bestMatchFrame);
+
+                            if (!alphaMask.empty()) {
+                                // Resize mask to match captured gem
+                                cv::Mat mask = alphaMask;
+                                if (mask.size() != capturedGem.size()) {
+                                    cv::resize(alphaMask, mask, capturedGem.size(), 0, 0, cv::INTER_NEAREST);
+                                }
+
+                                // Apply mask: set background pixels to black
+                                for (int y = 0; y < capturedGem.rows; y++) {
+                                    cv::Vec3b* gemRow = capturedGem.ptr<cv::Vec3b>(y);
+                                    const uchar* maskRow = mask.ptr<uchar>(y);
+
+                                    for (int x = 0; x < capturedGem.cols; x++) {
+                                        if (maskRow[x] == 0) {
+                                            // Background pixel - set to black
+                                            gemRow[x] = cv::Vec3b(0, 0, 0);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show comparison with reference if available
+                        bool showComparison = (stage == 0);
+
+                        if (showComparison && isKnown && gem.bestMatchFrame >= 0 &&
+                            MaskLoader::AreMasksLoaded()) {
+                            // Get the best matching reference image
+                            cv::Mat refImage = MaskLoader::GetMask(gem.type, gem.bestMatchFrame);
+
+                            if (!refImage.empty()) {
+                                // Resize reference to match gem size
+                                if (refImage.size() != capturedGem.size()) {
+                                    cv::resize(refImage, refImage, capturedGem.size(), 0, 0,
+                                               cv::INTER_LINEAR);
+                                }
+
+                                // Create side-by-side comparison
+                                int w = capturedGem.cols;
+                                int h = capturedGem.rows;
+                                maskColored = cv::Mat::zeros(h, w * 2 + 4, CV_8UC3);
+
+                                // Left: captured gem (with mask applied)
+                                capturedGem.copyTo(maskColored(cv::Rect(0, 0, w, h)));
+
+                                // Middle: divider line
+                                cv::line(maskColored, cv::Point(w + 2, 0), cv::Point(w + 2, h),
+                                         cv::Scalar(255, 255, 0), 2);
+
+                                // Right: reference image (already has mask applied)
+                                refImage.copyTo(maskColored(cv::Rect(w + 4, 0, w, h)));
+
+                                // Add labels
+                                cv::putText(maskColored, "Captured", cv::Point(2, 12),
+                                            cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(0, 255, 255),
+                                            1, cv::LINE_AA);
+                                cv::putText(maskColored, "Reference", cv::Point(w + 6, 12),
+                                            cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(0, 255, 255),
+                                            1, cv::LINE_AA);
+                            }
+                            else {
+                                maskColored = capturedGem.clone();
+                            }
+                        }
+                        else {
+                            // Just show the captured gem (with mask applied)
+                            maskColored = capturedGem.clone();
+                        }
                     }
                 }
                 else {

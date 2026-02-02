@@ -360,6 +360,7 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
         Gem&gem = (*gridPtr)[row][col];
         gem.gridPos = cv::Point(col, row);
         gem.state = GemState::NORMAL;
+        gem.ringValue = -1;
 
         // Calculate cell position
         int cellX = col * Config::CELL_SIZE;
@@ -395,6 +396,33 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
         gem.shapeMask = GetDebugVisualization(shapeRegion);
         gem.closestType = GemType::UNKNOWN;
         gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
+
+        // Compute ring HSV V value for flame/lightning state debug
+        if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
+            MaskLoader::AreMasksLoaded()) {
+          int frameIndex = (gem.bestMatchFrame >= 0) ? gem.bestMatchFrame : 0;
+          const cv::Mat&ringMask = MaskLoader::GetRingMask(gem.type, frameIndex);
+
+          if (!ringMask.empty()) {
+            cv::Mat mask = ringMask;
+            if (mask.size() != shapeRegion.size()) {
+              cv::resize(ringMask, mask, shapeRegion.size(), 0, 0,
+                         cv::INTER_NEAREST);
+            }
+
+            if (cv::countNonZero(mask) > 0) {
+              cv::Scalar meanBgr = cv::mean(shapeRegion, mask);
+              cv::Mat tmpBgr(1, 1, CV_8UC3);
+              tmpBgr.at<cv::Vec3b>(0, 0) = cv::Vec3b(
+                  cv::saturate_cast<uchar>(meanBgr[0]),
+                  cv::saturate_cast<uchar>(meanBgr[1]),
+                  cv::saturate_cast<uchar>(meanBgr[2]));
+              cv::Mat tmpHsv;
+              cv::cvtColor(tmpBgr, tmpHsv, cv::COLOR_BGR2HSV);
+              gem.ringValue = tmpHsv.at<cv::Vec3b>(0, 0)[2];
+            }
+          }
+        }
       }
     });
 

@@ -40,6 +40,7 @@ struct Gem {
     int bestMatchFrame; // Best matching frame index (0-19) for shape mode
     cv::Mat
     shapeMask; // Binary mask for shape classification (white gem on black)
+    int ringValue; // HSV V channel from ring around gem (debug)
 };
 
 // ============================================================================

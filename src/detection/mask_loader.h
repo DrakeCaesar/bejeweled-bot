@@ -40,9 +40,14 @@ namespace MaskLoader {
     using AlphaMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
+// Storage for ring masks (scaled-up alpha minus original): [gem_type][frame_index]
+    using RingMaskStorage =
+    std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+
 // Storage for hypercube (separate due to different frame count)
     using HypercubeMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+    using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 /**
  * Load all gem reference images from the assets folder.
@@ -84,6 +89,16 @@ namespace MaskLoader {
  * @return The alpha mask (grayscale, 0=background, 255=foreground), or empty Mat if not found
  */
     const cv::Mat& GetAlphaMask(GemType type, int frameIndex);
+
+/**
+ * Get a specific ring mask for a gem type and frame.
+ * Ring masks are the scaled-up alpha mask minus the original alpha mask.
+ *
+ * @param type The gem type (RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE, HYPERCUBE)
+ * @param frameIndex Frame index 0-19 (or 0-29 for HYPERCUBE)
+ * @return The ring mask (grayscale, 0=background, 255=ring), or empty Mat if not found
+ */
+     const cv::Mat& GetRingMask(GemType type, int frameIndex);
 
 /**
  * Get the number of frames for a given gem type.

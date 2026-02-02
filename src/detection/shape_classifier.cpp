@@ -22,7 +22,7 @@ namespace ShapeParams {
     }
 
     void CreateTrackbars(const std::string&windowName) {
-        cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5, OnDebugStageChange);
+        cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 6, OnDebugStageChange);
         cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100, OnMatchThresholdChange);
     }
 } // namespace ShapeParams
