@@ -34,12 +34,12 @@ struct Gem {
     bool matchedThreshold;
     cv::Point gridPos; // Grid position (0-7, 0-7)
     cv::Rect roi; // Region of interest for color classification (smaller)
-    cv::Rect shapeRoi; // Region of interest for shape classification (larger)
+    cv::Rect shapeRoi; // Region of interest for classification (larger)
     cv::Scalar avgColor; // Average color for debugging
     float bestMatch; // Best match ratio [0..1] for debug
-    int bestMatchFrame; // Best matching frame index (0-19) for shape mode
+    int bestMatchFrame; // Best matching frame index (0-19)
     cv::Mat
-    shapeMask; // Binary mask for shape classification (white gem on black)
+    shapeMask; // Binary mask for classification (white gem on black)
     int ringValue; // HSV V channel from ring around gem (debug)
     cv::Vec3i ringHSV; // HSV values from ring around gem (H, S, V) for flame/lightning detection
 };

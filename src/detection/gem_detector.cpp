@@ -333,8 +333,7 @@ void UpdateRecording(const cv::Mat&gameBoard) {
 // Grid Detection
 // ============================================================================
 
-std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
-                                          Config::ClassificationMode) {
+std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard) {
 // Static allocation - grid is reused across calls
   static std::vector<std::vector<Gem>> grid(
     Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
@@ -390,7 +389,7 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
         cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
         gem.avgColor = cv::mean(shapeRegion);
 
-        // Normal mode: classify gem using shape matching
+        // Classify gem
         cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
         gem.type = ClassifyGemByShape(processed, &gem.bestMatch,
                                       &gem.bestMatchFrame);

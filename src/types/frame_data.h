@@ -37,10 +37,6 @@ struct SharedFrameData {
     // Desktop Duplication context
     DuplicationContext* dupContext = nullptr;
 
-    // Classification mode toggle
-    Config::ClassificationMode classificationMode =
-            Config::ClassificationMode::SHAPE;
-
     // Find first buffer in given state, returns -1 if none found
     int findBuffer(BufferState state) const {
         for (int i = 0; i < 3; i++) {

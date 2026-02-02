@@ -333,17 +333,6 @@ void Application::HandleKeyboardInput(int key) {
     frameData_.cv.notify_one();
     running_ = false;
   }
-  else if (key == 'c' || key == 'C') {
-    std::lock_guard<std::mutex> lock(frameData_.mutex);
-    if (frameData_.classificationMode == Config::ClassificationMode::COLOR) {
-      frameData_.classificationMode = Config::ClassificationMode::SHAPE;
-      std::cout << "Classification mode changed to: SHAPE" << std::endl;
-    }
-    else {
-      frameData_.classificationMode = Config::ClassificationMode::COLOR;
-      std::cout << "Classification mode changed to: COLOR" << std::endl;
-    }
-  }
   else if (key == 'i' || key == 'I') {
     std::cout << "Window info:" << std::endl;
     std::lock_guard<std::mutex> lock(frameData_.mutex);

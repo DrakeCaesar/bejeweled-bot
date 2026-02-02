@@ -127,7 +127,7 @@ void DrawDebugOverlay(cv::Mat&image,
 }
 
 // ============================================================================
-// Shape Mode Overlay Drawing
+// Overlay Drawing
 // ============================================================================
 
 void DrawShapeOverlay(cv::Mat&image,
@@ -142,12 +142,12 @@ void DrawShapeOverlay(cv::Mat&image,
                  cv::Scalar(100, 100, 100), 1);
     }
 
-    // Draw processed shape masks on top of each gem
+    // Draw processed masks on top of each gem
     for (int row = 0; row < Config::GRID_SIZE; row++) {
         for (int col = 0; col < Config::GRID_SIZE; col++) {
             const Gem&gem = grid[row][col];
 
-            // Use shapeRoi (larger) for shape mode display
+            // Use shapeRoi for display
             cv::Rect offsetRoi = gem.shapeRoi;
             offsetRoi.y += Config::BANNER_HEIGHT;
 

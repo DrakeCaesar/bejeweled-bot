@@ -29,7 +29,7 @@ namespace ShapeParams {
 } // namespace ShapeParams
 
 /**
- * Process a gem region for shape matching.
+ * Process a gem region for matching.
  */
 cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion);
 

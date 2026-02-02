@@ -18,8 +18,7 @@ void ProcessThreadFunc(
     std::chrono::high_resolution_clock::time_point&lastFpsUpdateTime) {
     while (true) {
         // Find a CAPTURED buffer to process
-        int bufferIndex = -1;
-        Config::ClassificationMode mode; {
+        int bufferIndex = -1; {
             std::unique_lock<std::mutex> lock(frameData.mutex);
 
             // Wait for a CAPTURED buffer or exit signal
@@ -32,8 +31,6 @@ void ProcessThreadFunc(
 
             if (frameData.shouldExit)
                 break;
-
-            mode = frameData.classificationMode;
         }
 
         // Process the buffer (detection outside mutex for performance)
@@ -46,7 +43,7 @@ void ProcessThreadFunc(
             if (!recording) {
                 // Detect gems
                 auto detectStart = std::chrono::high_resolution_clock::now();
-                std::vector<std::vector<Gem>>&gemGrid = DetectGems(currentFrame, mode);
+                std::vector<std::vector<Gem>>&gemGrid = DetectGems(currentFrame);
                 auto detectEnd = std::chrono::high_resolution_clock::now();
                 timingInfo.detectMs =
                         std::chrono::duration<double, std::milli>(detectEnd - detectStart)
@@ -64,17 +61,12 @@ void ProcessThreadFunc(
                 // Draw banner and overlay directly on buffer
                 DrawBanner(buffer, timingInfo.avgFps, timingInfo.avgCaptureMs,
                            timingInfo.avgDetectMs, timingInfo.avgDrawMs,
-                           timingInfo.avgDisplayMs, mode, timingInfo.maxFpsWidth,
+                           timingInfo.avgDisplayMs, timingInfo.maxFpsWidth,
                            timingInfo.maxCaptureWidth, timingInfo.maxDetectWidth,
                            timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
 
                 if (Config::SHOW_DEBUG_OVERLAY) {
-                    if (mode == Config::ClassificationMode::SHAPE) {
-                        DrawShapeOverlay(buffer, gemGrid);
-                    }
-                    else {
-                        DrawDebugOverlay(buffer, gemGrid);
-                    }
+                    DrawShapeOverlay(buffer, gemGrid);
                 }
 
                 // Draw custom control panel on top

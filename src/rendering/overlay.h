@@ -33,9 +33,8 @@ void SetSelectedCell(int col, int row);
 void ClearSelectedCell();
 
 /**
- * Draw shape mode overlay showing processed binary masks for each gem.
- * Displays the white-on-black gem silhouettes used for shape matching.
- * Used for SHAPE classification mode.
+ * Draw overlay showing processed binary masks for each gem.
+ * Displays the white-on-black gem silhouettes used for matching.
  *
  * @param image The image to draw on (will be modified)
  * @param grid The detected gem grid with shapeMask populated

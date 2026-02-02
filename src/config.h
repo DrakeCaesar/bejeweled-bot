@@ -23,41 +23,6 @@ namespace Config {
     const int GRID_SIZE = 8; // 8x8 grid
     const int CELL_SIZE = 128; // Each cell is 128x128 pixels
 
-// Color thresholds for gem classification (HSV color space)
-// Hue range in OpenCV is 0-179. Red wraps around, so it is split into two
-// ranges. These are tuned for Bejeweled 3 gem hues.
-    const cv::Scalar RED_GEM_HSV_MIN_1 = cv::Scalar(0, 90, 90);
-    const cv::Scalar RED_GEM_HSV_MAX_1 = cv::Scalar(8, 255, 255);
-    const cv::Scalar RED_GEM_HSV_MIN_2 = cv::Scalar(172, 90, 90);
-    const cv::Scalar RED_GEM_HSV_MAX_2 = cv::Scalar(179, 255, 255);
-
-    const cv::Scalar ORANGE_GEM_HSV_MIN = cv::Scalar(9, 90, 90);
-    const cv::Scalar ORANGE_GEM_HSV_MAX = cv::Scalar(20, 255, 255);
-
-    const cv::Scalar YELLOW_GEM_HSV_MIN = cv::Scalar(21, 90, 90);
-    const cv::Scalar YELLOW_GEM_HSV_MAX = cv::Scalar(34, 255, 255);
-
-    const cv::Scalar GREEN_GEM_HSV_MIN = cv::Scalar(35, 80, 80);
-    const cv::Scalar GREEN_GEM_HSV_MAX = cv::Scalar(85, 255, 255);
-
-    const cv::Scalar BLUE_GEM_HSV_MIN = cv::Scalar(90, 80, 80);
-    const cv::Scalar BLUE_GEM_HSV_MAX = cv::Scalar(125, 255, 255);
-
-    const cv::Scalar PURPLE_GEM_HSV_MIN = cv::Scalar(126, 80, 80);
-    const cv::Scalar PURPLE_GEM_HSV_MAX = cv::Scalar(155, 255, 255);
-
-    const cv::Scalar WHITE_GEM_HSV_MIN = cv::Scalar(0, 0, 200);
-    const cv::Scalar WHITE_GEM_HSV_MAX = cv::Scalar(179, 35, 255);
-
-    const float COLOR_MATCH_THRESHOLD =
-            0.10f; // Minimum match ratio for a confident detection
-
-// Classification mode
-    enum class ClassificationMode {
-        COLOR, // Classify gems by color
-        SHAPE // Classify gems by shape (placeholder)
-    };
-
 // Display settings
     const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
     const int TARGET_FPS = 30; // Target frames per second for capture
