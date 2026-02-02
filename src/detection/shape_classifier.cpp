@@ -201,15 +201,49 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
     float bestScore = 0.0f;
     int bestFrame = -1;
 
+    // Track last match for temporal coherence optimization
+    thread_local GemType lastMatchedType = GemType::UNKNOWN;
+    thread_local int lastMatchedFrame = -1;
+
+    // Fast path: Check last matched frame first (temporal coherence)
+    if (lastMatchedType != GemType::UNKNOWN && lastMatchedFrame >= 0) {
+        const cv::Mat&refImage = MaskLoader::GetScaledMask(lastMatchedType, lastMatchedFrame);
+        const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(lastMatchedType, lastMatchedFrame);
+        
+        if (!refImage.empty()) {
+            float score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestType = lastMatchedType;
+                bestFrame = lastMatchedFrame;
+                SaveAsBestMatch();
+            }
+
+            if (score >= threshold) {
+                if (outBestMatch) *outBestMatch = score;
+                if (outBestFrame) *outBestFrame = lastMatchedFrame;
+                return lastMatchedType;
+            }
+        }
+    }
+
     struct FirstFrameResult {
         GemType type;
         float score;
     };
     FirstFrameResult firstFrameScores[8]; // Updated for 8 types
 
-    // Phase 1: Check first frame of each type
+    // Phase 1: Check first frame of each type (skip if already checked above)
     for (int i = 0; i < numTypes; i++) {
         GemType type = gemTypes[i];
+        
+        // Skip if this was the last matched frame
+        if (type == lastMatchedType && lastMatchedFrame == 0) {
+            firstFrameScores[i] = {type, bestScore};
+            continue;
+        }
+
         const cv::Mat&refImage = MaskLoader::GetScaledMask(type, 0);
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, 0);
         float score = 0.0f;
@@ -228,6 +262,8 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         }
 
         if (score >= threshold) {
+            lastMatchedType = type;
+            lastMatchedFrame = 0;
             if (outBestMatch) *outBestMatch = score;
             if (outBestFrame) *outBestFrame = 0;
             return type;
@@ -251,6 +287,11 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         int frameCount = MaskLoader::GetFrameCount(type);
 
         for (int frame = 1; frame < frameCount; frame++) {
+            // Skip if this was the last matched frame
+            if (type == lastMatchedType && frame == lastMatchedFrame) {
+                continue;
+            }
+
             const cv::Mat&refImage = MaskLoader::GetScaledMask(type, frame);
             const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
             if (refImage.empty()) continue;
@@ -265,12 +306,18 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
             }
 
             if (score >= threshold) {
+                lastMatchedType = bestType;
+                lastMatchedFrame = bestFrame;
                 if (outBestMatch) *outBestMatch = bestScore;
                 if (outBestFrame) *outBestFrame = bestFrame;
                 return bestType;
             }
         }
     }
+
+    // Update last matched even if below threshold (use best match)
+    lastMatchedType = bestType;
+    lastMatchedFrame = bestFrame;
 
     if (outBestMatch) *outBestMatch = bestScore;
     if (outBestFrame) *outBestFrame = bestFrame;
