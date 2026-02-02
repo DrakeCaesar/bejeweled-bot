@@ -341,14 +341,6 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
 
   static constexpr int TOTAL_TILES = Config::GRID_SIZE * Config::GRID_SIZE;
 
-// Skip cache building when recording for max performance
-  if (!g_recordingEnabled && MaskLoader::AreMasksLoaded()) {
-    int scaleInt = ShapeParams::refScale.load();
-    int blurSize = ShapeParams::refBlur.load();
-    cv::Size targetSize(Config::CELL_SIZE, Config::CELL_SIZE);
-    MaskLoader::EnsureScaledCache(targetSize, scaleInt, blurSize);
-  }
-
   // Get pointer to static grid for lambda capture
   auto* gridPtr = &grid;
 

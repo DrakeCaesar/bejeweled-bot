@@ -119,8 +119,9 @@ namespace MaskLoader {
             cv::resize(maskSheet, maskSheet, cv::Size(SPRITE_WIDTH, SPRITE_HEIGHT), 0, 0, cv::INTER_NEAREST);
         }
 
-        // Extract each frame
-        int frameIndex = 0;
+        // Extract each frame from sprite sheet (20 frames go into indices 1-20)
+        // Frame 0 is reserved for static image loaded separately
+        int frameIndex = 1;
         for (int row = 0; row < MASK_ROWS; row++) {
             for (int col = 0; col < MASK_COLS; col++) {
                 // Calculate ROI for this frame
@@ -155,7 +156,7 @@ namespace MaskLoader {
             }
         }
 
-        std::cout << "Loaded " << frameIndex << " reference images for "
+        std::cout << "Loaded " << (frameIndex - 1) << " animated frames for "
                 << GemTypeToString(type) << " with alpha masks" << std::endl;
         return true;
     }
@@ -197,8 +198,21 @@ namespace MaskLoader {
                 staticImage = resized;
             }
 
-            // Store as first frame replacement for this gem type
-            s_staticColorMasks[gemIndex][0] = staticImage;
+            // Generate alpha mask from black background
+            cv::Mat alphaMask = cv::Mat::zeros(staticImage.size(), CV_8UC1);
+            for (int y = 0; y < staticImage.rows; y++) {
+                const cv::Vec3b* colorRow = staticImage.ptr<cv::Vec3b>(y);
+                uchar* maskRow = alphaMask.ptr<uchar>(y);
+                for (int x = 0; x < staticImage.cols; x++) {
+                    if (colorRow[x][0] > 0 || colorRow[x][1] > 0 || colorRow[x][2] > 0) {
+                        maskRow[x] = 255;
+                    }
+                }
+            }
+
+            // Store as frame 0 in main storage
+            s_masks[gemIndex][0] = staticImage;
+            s_alphaMasks[gemIndex][0] = alphaMask;
 
             std::cout << "Loaded static color reference for " << GemTypeToString(type) << std::endl;
         }
@@ -318,6 +332,8 @@ namespace MaskLoader {
         if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
             return s_emptyMask;
         }
+        
+        // Frame 0 = static image, Frames 1-20 = animated frames
         return s_masks[gemIndex][frameIndex];
     }
 
@@ -344,111 +360,4 @@ namespace MaskLoader {
     }
 
     bool AreStaticColorsLoaded() { return s_staticColorsLoaded; }
-
-// ============================================================================
-// Scaled Color Image Cache - Pre-scaled color images for current settings
-// ============================================================================
-
-    static MaskStorage s_scaledMasks;
-    static HypercubeMaskStorage s_scaledHypercubeMasks;
-    static int s_cachedScaleInt = 0; // 0 = not initialized
-    static int s_cachedBlurSize = 0;
-    static cv::Size s_cachedTargetSize{0, 0};
-
-    void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize) {
-        // Already valid and matches?
-        if (scaleInt == s_cachedScaleInt && targetSize == s_cachedTargetSize &&
-            blurSize == s_cachedBlurSize) {
-            return;
-        }
-
-        if (!s_loaded) return;
-
-        s_cachedScaleInt = scaleInt;
-        s_cachedTargetSize = targetSize;
-        s_cachedBlurSize = blurSize;
-
-        float scale = scaleInt / 1000.0f;
-        float centerX = targetSize.width / 2.0f;
-        float centerY = targetSize.height / 2.0f;
-        cv::Mat colorTransform = cv::getRotationMatrix2D(cv::Point2f(centerX, centerY), 0, scale);
-
-        // Ensure blur size is odd and >= 1
-        int blur = (blurSize < 1) ? 1 : (blurSize | 1);
-
-        // Process standard gems
-        for (int gemIdx = 0; gemIdx < NUM_GEM_TYPES; gemIdx++) {
-            for (int frame = 0; frame < FRAMES_PER_GEM; frame++) {
-                const cv::Mat&srcMask = s_masks[gemIdx][frame];
-
-                if (srcMask.empty()) continue;
-
-                // Use static color for frame 0 if available (no scaling or blur needed)
-                if (frame == 0 && s_staticColorsLoaded) {
-                    const cv::Mat&staticSrc = s_staticColorMasks[gemIdx][0];
-                    if (!staticSrc.empty()) {
-                        s_scaledMasks[gemIdx][frame] = staticSrc;
-                        continue;
-                    }
-                }
-
-                // For non-static frames, apply scaling and blur based on refScale
-                // Resize color image to target size first
-                cv::Mat resized;
-                if (srcMask.size() != targetSize) {
-                    cv::resize(srcMask, resized, targetSize, 0, 0, cv::INTER_LANCZOS4);
-                }
-                else {
-                    resized = srcMask.clone();
-                }
-
-                // Apply Gaussian blur to match game's softer appearance
-                if (blur > 1) {
-                    cv::GaussianBlur(resized, resized, cv::Size(blur, blur), 0);
-                }
-
-                // Apply scale transformation to color image
-                cv::warpAffine(resized, s_scaledMasks[gemIdx][frame], colorTransform, targetSize,
-                               cv::INTER_LANCZOS4, cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
-            }
-        }
-
-        // Process hypercube (skip scaling and blur - already fixed)
-        for (int frame = 0; frame < HYPERCUBE_FRAMES; frame++) {
-            const cv::Mat&srcMask = s_hypercubeMasks[frame];
-
-            if (srcMask.empty()) continue;
-
-            cv::Mat resized;
-            if (srcMask.size() != targetSize) {
-                cv::resize(srcMask, resized, targetSize, 0, 0, cv::INTER_LANCZOS4);
-            }
-            else {
-                resized = srcMask.clone();
-            }
-
-            // No blur or scaling - hypercube sprites are already perfect
-            s_scaledHypercubeMasks[frame] = resized;
-        }
-
-        std::cout << "Rebuilt color cache: " << targetSize.width << "x" << targetSize.height
-                << " @ " << (scale * 100.0f) << "%, blur=" << blur << std::endl;
-    }
-
-    const cv::Mat& GetScaledMask(GemType type, int frameIndex) {
-        if (type == GemType::HYPERCUBE) {
-            if (frameIndex < 0 || frameIndex >= HYPERCUBE_FRAMES) {
-                return s_emptyMask;
-            }
-            const cv::Mat&scaled = s_scaledHypercubeMasks[frameIndex];
-            return scaled.empty() ? s_hypercubeMasks[frameIndex] : scaled;
-        }
-
-        int gemIndex = GemTypeToIndex(type);
-        if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
-            return s_emptyMask;
-        }
-        const cv::Mat&scaled = s_scaledMasks[gemIndex][frameIndex];
-        return scaled.empty() ? s_masks[gemIndex][frameIndex] : scaled;
-    }
 } // namespace MaskLoader

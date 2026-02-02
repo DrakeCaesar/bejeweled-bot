@@ -22,14 +22,6 @@ namespace ShapeParams {
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching
     inline std::atomic<int> matchThreshold{80};
 
-// Reference asset scale (900-1100 maps to 0.900x - 1.100x)
-// Used to compensate for size differences between assets and game rendering
-    inline std::atomic<int> refScale{1080};
-
-// Reference asset blur (1-15, odd values only)
-// Used to soften reference images to match game's rendering
-    inline std::atomic<int> refBlur{3};
-
 /**
  * Create trackbars for shape parameters in the given window.
  */

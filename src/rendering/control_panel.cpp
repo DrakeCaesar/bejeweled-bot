@@ -26,11 +26,9 @@ namespace {
 
     int g_activeSlider = -1;
 
-    const std::array<SliderDef, 4> kSliders = {
+    const std::array<SliderDef, 2> kSliders = {
         SliderDef{"Debug", 0, 5, &ShapeParams::debugStage},
-        SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold},
-        SliderDef{"Scale", 900, 1100, &ShapeParams::refScale},
-        SliderDef{"Blur", 1, 15, &ShapeParams::refBlur}
+        SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold}
     };
 
     cv::Rect GetSliderTrackRect(int index) {

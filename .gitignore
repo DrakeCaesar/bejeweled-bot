@@ -11,3 +11,4 @@ recorded_frames/*.png
 /.output.txt
 vcpkg_installed/
 bejeweled-bot.pdb
+assets/rotating/

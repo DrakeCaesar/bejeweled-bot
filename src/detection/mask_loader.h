@@ -13,7 +13,7 @@
 namespace MaskLoader {
     constexpr int MASK_COLS = 5;
     constexpr int MASK_ROWS = 4;
-    constexpr int FRAMES_PER_GEM = 20;
+    constexpr int FRAMES_PER_GEM = 21;  // 1 static + 20 animated
     constexpr int SPRITE_WIDTH = 640;
     constexpr int SPRITE_HEIGHT = 512;
     constexpr int FRAME_WIDTH = 128;
@@ -30,20 +30,6 @@ namespace MaskLoader {
 
 // Number of gem types (excluding EMPTY, HYPERCUBE and UNKNOWN)
     constexpr int NUM_GEM_TYPES = 7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
-
-/**
- * Check if a gem type uses fixed (pre-scaled) sprites that don't need scaling.
- * @param type The gem type to check
- * @return True if the gem uses fixed sprites at the correct scale
- */
-    inline bool IsGemFixed(GemType type) {
-        switch (type) {
-            case GemType::HYPERCUBE:
-                return true; // Hypercube sprites are already at correct scale
-            default:
-                return false; // Other gems still need scaling
-        }
-    }
 
 // Storage for all reference images: [gem_type][frame_index] -> color image
 // Indexed by (GemType - 1) since EMPTY=0 is not used
@@ -108,20 +94,4 @@ namespace MaskLoader {
  * Check if static color masks have been loaded.
  */
     bool AreStaticColorsLoaded();
-
-/**
- * Ensure scaled cache is built for the given parameters.
- * Call ONCE before parallel processing begins (main thread only).
- * Only scales color images - alpha masks are used as-is via GetAlphaMask.
- *
- * @param targetSize Target size for scaled color images
- * @param scaleInt Scale as integer for color images (1000 = 100%)
- * @param blurSize Gaussian blur kernel size to apply to reference images (1 = no blur)
- */
-    void EnsureScaledCache(cv::Size targetSize, int scaleInt, int blurSize = 1);
-
-/**
- * Get a pre-scaled reference color image. Must call EnsureScaledCache first.
- */
-    const cv::Mat& GetScaledMask(GemType type, int frameIndex);
 } // namespace MaskLoader

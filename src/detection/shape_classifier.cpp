@@ -11,8 +11,6 @@ namespace ShapeParams {
 // Trackbar backing variables (OpenCV requires int pointers)
     static int debugStageTrack = debugStage.load();
     static int matchThresholdTrack = matchThreshold.load();
-    static int refScaleTrack = refScale.load();
-    static int refBlurTrack = refBlur.load();
 
     static void OnDebugStageChange(int value, void*) { debugStage.store(value); }
 
@@ -23,25 +21,9 @@ namespace ShapeParams {
         matchThreshold.store(v);
     }
 
-    static void OnRefScaleChange(int value, void*) {
-        int v = value;
-        if (v < 900) v = 900;
-        if (v > 1100) v = 1100;
-        refScale.store(v);
-    }
-
-    static void OnRefBlurChange(int value, void*) {
-        int v = value | 1;
-        if (v < 1) v = 1;
-        refBlur.store(v);
-    }
-
     void CreateTrackbars(const std::string&windowName) {
         cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5, OnDebugStageChange);
         cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100, OnMatchThresholdChange);
-        cv::createTrackbar("Ref Scale %%", windowName, &refScaleTrack, 1100, OnRefScaleChange);
-        cv::setTrackbarMin("Ref Scale %%", windowName, 900);
-        cv::createTrackbar("Ref Blur", windowName, &refBlurTrack, 15, OnRefBlurChange);
     }
 } // namespace ShapeParams
 
@@ -207,7 +189,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
 
     // Fast path: Check last matched frame first (temporal coherence)
     if (lastMatchedType != GemType::UNKNOWN && lastMatchedFrame >= 0) {
-        const cv::Mat&refImage = MaskLoader::GetScaledMask(lastMatchedType, lastMatchedFrame);
+        const cv::Mat&refImage = MaskLoader::GetMask(lastMatchedType, lastMatchedFrame);
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(lastMatchedType, lastMatchedFrame);
         
         if (!refImage.empty()) {
@@ -244,7 +226,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
             continue;
         }
 
-        const cv::Mat&refImage = MaskLoader::GetScaledMask(type, 0);
+        const cv::Mat&refImage = MaskLoader::GetMask(type, 0);
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, 0);
         float score = 0.0f;
 
@@ -292,7 +274,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
                 continue;
             }
 
-            const cv::Mat&refImage = MaskLoader::GetScaledMask(type, frame);
+            const cv::Mat&refImage = MaskLoader::GetMask(type, frame);
             const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
             if (refImage.empty()) continue;
 
