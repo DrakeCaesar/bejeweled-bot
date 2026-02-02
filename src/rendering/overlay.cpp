@@ -356,11 +356,19 @@ void DrawShapeOverlay(cv::Mat&image,
                     std::vector<std::string> lines;
                     
                     if (gem.ringHSV[0] >= 0) {
+                        // Add state indicator
+                        if (gem.state == GemState::FLAME) {
+                            lines.push_back("FLAME");
+                        }
+                        else if (gem.state == GemState::STAR) {
+                            lines.push_back("STAR");
+                        }
+                        
                         oss << "H" << gem.ringHSV[0];
                         lines.push_back(oss.str());
-                        oss.str("");
-                        oss << "S" << gem.ringHSV[1];
-                        lines.push_back(oss.str());
+                        // oss.str("");
+                        // oss << "S" << gem.ringHSV[1];
+                        // lines.push_back(oss.str());
                         oss.str("");
                         oss << "V" << gem.ringHSV[2];
                         lines.push_back(oss.str());

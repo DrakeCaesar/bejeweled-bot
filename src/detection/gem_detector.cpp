@@ -429,6 +429,48 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
       }
     });
 
+  // Post-process: Calculate average ring V and detect flame/star gems
+  int normalGemCount = 0;
+  int totalRingV = 0;
+
+  for (int row = 0; row < Config::GRID_SIZE; row++) {
+    for (int col = 0; col < Config::GRID_SIZE; col++) {
+      Gem&gem = grid[row][col];
+      if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
+          gem.type != GemType::HYPERCUBE && gem.ringValue >= 0) {
+        totalRingV += gem.ringValue;
+        normalGemCount++;
+      }
+    }
+  }
+
+  int avgRingV = (normalGemCount > 0) ? (totalRingV / normalGemCount) : 0;
+
+  // Detect flame and star gems
+  for (int row = 0; row < Config::GRID_SIZE; row++) {
+    for (int col = 0; col < Config::GRID_SIZE; col++) {
+      Gem&gem = grid[row][col];
+      if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
+          gem.type != GemType::HYPERCUBE && gem.ringHSV[0] >= 0) {
+        int H = gem.ringHSV[0];
+        int V = gem.ringHSV[2];
+        int minVThreshold = avgRingV * 2;
+
+        // Check for flame: H < 50 and V > 190 and V >= 2 * avgRingV
+        if (H < 50 && V > 190 && V >= minVThreshold) {
+          gem.state = GemState::FLAME;
+        }
+        // Check for star: H > 70 and V > 190 and V >= 2 * avgRingV
+        else if (H > 70 && V > 190 && V >= minVThreshold) {
+          gem.state = GemState::STAR;
+        }
+        else {
+          gem.state = GemState::NORMAL;
+        }
+      }
+    }
+  }
+
   return grid;
 }
 
