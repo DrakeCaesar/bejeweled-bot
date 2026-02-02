@@ -22,7 +22,7 @@ namespace ShapeParams {
     }
 
     void CreateTrackbars(const std::string&windowName) {
-        cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 6, OnDebugStageChange);
+        cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 4, OnDebugStageChange);
         cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100, OnMatchThresholdChange);
     }
 } // namespace ShapeParams
@@ -52,15 +52,9 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
     int stage = ShapeParams::debugStage.load();
 
     if (stage == 0) return gemRegion.clone();
-    if (stage == 1) return gemRegion.clone();
-    if (stage == 2 && !g_debugBestRef.empty()) return g_debugBestRef.clone();
-    if (stage == 3 && !g_debugBestInput.empty() && !g_debugBestRef.empty()) {
-        cv::Mat sideBySide;
-        cv::hconcat(g_debugBestInput, g_debugBestRef, sideBySide);
-        return sideBySide;
-    }
-    if (stage == 4 && !g_debugBestDiffMap.empty()) return g_debugBestDiffMap.clone();
-    if (stage == 5 && !g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
+    if (stage == 1 && !g_debugBestRef.empty()) return g_debugBestRef.clone();
+    if (stage == 2 && !g_debugBestDiffMap.empty()) return g_debugBestDiffMap.clone();
+    if (stage == 3 && !g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
         cv::Mat overlay;
         cv::addWeighted(g_debugBestInput, 0.5, g_debugBestDiffMap, 0.5, 0, overlay);
         return overlay;

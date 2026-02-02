@@ -170,8 +170,8 @@ void DrawShapeOverlay(cv::Mat&image,
 
                     int stage = ShapeParams::debugStage.load();
 
-                    // Stage 6: Show only ring pixels
-                    if (stage == 6 && isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
+                    // Stage 4: Show only ring pixels
+                    if (stage == 4 && isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
                         const cv::Mat&ringMask = MaskLoader::GetRingMask(gem.type, gem.bestMatchFrame);
 
                         if (!ringMask.empty()) {
@@ -223,65 +223,17 @@ void DrawShapeOverlay(cv::Mat&image,
                             }
                         }
 
-                        // Show comparison with reference if available
-                        bool showComparison = (stage == 0);
-
-                        if (showComparison && isKnown && gem.bestMatchFrame >= 0 &&
-                            MaskLoader::AreMasksLoaded()) {
-                            // Get the best matching reference image
-                            cv::Mat refImage = MaskLoader::GetMask(gem.type, gem.bestMatchFrame);
-
-                            if (!refImage.empty()) {
-                                // Resize reference to match gem size
-                                if (refImage.size() != capturedGem.size()) {
-                                    cv::resize(refImage, refImage, capturedGem.size(), 0, 0,
-                                               cv::INTER_LINEAR);
-                                }
-
-                                // Create side-by-side comparison
-                                int w = capturedGem.cols;
-                                int h = capturedGem.rows;
-                                maskColored = cv::Mat::zeros(h, w * 2 + 4, CV_8UC3);
-
-                                // Left: captured gem (with mask applied)
-                                capturedGem.copyTo(maskColored(cv::Rect(0, 0, w, h)));
-
-                                // Middle: divider line
-                                cv::line(maskColored, cv::Point(w + 2, 0), cv::Point(w + 2, h),
-                                         cv::Scalar(255, 255, 0), 2);
-
-                                // Right: reference image (already has mask applied)
-                                refImage.copyTo(maskColored(cv::Rect(w + 4, 0, w, h)));
-
-                                // Add labels
-                                cv::putText(maskColored, "Captured", cv::Point(2, 12),
-                                            cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(0, 255, 255),
-                                            1, cv::LINE_AA);
-                                cv::putText(maskColored, "Reference", cv::Point(w + 6, 12),
-                                            cv::FONT_HERSHEY_SIMPLEX, 0.35, cv::Scalar(0, 255, 255),
-                                            1, cv::LINE_AA);
-                            }
-                            else {
-                                maskColored = capturedGem.clone();
-                            }
-                        }
-                        else {
-                            // Just show the captured gem (with mask applied)
-                            maskColored = capturedGem.clone();
-                        }
+                        // Just show the captured gem (with mask applied)
+                        maskColored = capturedGem.clone();
                     }
                 }
                 else {
                     // Old binary mask system (for backward compatibility)
                     maskColored = cv::Mat::zeros(gem.shapeMask.size(), CV_8UC3);
 
-                    // Only show reference mask comparison when debugStage is 0 (final) or 10
-                    int stage = ShapeParams::debugStage.load();
-                    bool showComparison = (stage == 0 || stage == 10);
-
-                    // Get reference mask if available and comparison is enabled
+                    // Get reference mask if available
                     cv::Mat refMask;
-                    if (showComparison && isKnown && gem.bestMatchFrame >= 0 &&
+                    if (isKnown && gem.bestMatchFrame >= 0 &&
                         MaskLoader::AreMasksLoaded()) {
                         refMask = MaskLoader::GetMask(gem.type, gem.bestMatchFrame);
                         // Resize to match computed mask size
@@ -294,28 +246,19 @@ void DrawShapeOverlay(cv::Mat&image,
                     for (int y = 0; y < gem.shapeMask.rows; y++) {
                         for (int x = 0; x < gem.shapeMask.cols; x++) {
                             bool inComputed = gem.shapeMask.at<uchar>(y, x) > 127;
+                            bool inRef = !refMask.empty() && refMask.at<uchar>(y, x) > 127;
 
-                            if (showComparison) {
-                                bool inRef = !refMask.empty() && refMask.at<uchar>(y, x) > 127;
-
-                                if (inComputed && inRef) {
-                                    // Overlap (good match)
-                                    maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
-                                }
-                                else if (inComputed) {
-                                    // Computed only (extra pixels)
-                                    maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 255, 0);
-                                }
-                                else if (inRef) {
-                                    // Magenta - reference only (missing pixels)
-                                    maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 0, 255);
-                                }
+                            if (inComputed && inRef) {
+                                // Overlap (good match)
+                                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
                             }
-                            else {
-                                // Debug mode - just show the mask in white
-                                if (inComputed) {
-                                    maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 255, 255);
-                                }
+                            else if (inComputed) {
+                                // Computed only (extra pixels)
+                                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 255, 0);
+                            }
+                            else if (inRef) {
+                                // Magenta - reference only (missing pixels)
+                                maskColored.at<cv::Vec3b>(y, x) = cv::Vec3b(255, 0, 255);
                             }
                         }
                     }
@@ -350,8 +293,8 @@ void DrawShapeOverlay(cv::Mat&image,
 
                 int stage = ShapeParams::debugStage.load();
 
-                // Stage 6: Display ring HSV values in center
-                if (stage == 6) {
+                // Stage 4: Display ring HSV values in center
+                if (stage == 4) {
                     std::ostringstream oss;
                     std::vector<std::string> lines;
                     

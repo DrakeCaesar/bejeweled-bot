@@ -17,7 +17,7 @@ namespace ShapeParams {
 //   3 = side-by-side (input | reference)
 //   4 = difference heat map
 //   5 = heat map overlaid on input
-    inline std::atomic<int> debugStage{6};
+    inline std::atomic<int> debugStage{4};
 
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching
     inline std::atomic<int> matchThreshold{80};
