@@ -134,7 +134,7 @@ void StopRecording() {
       animationEnd = g_rawCaptureBuffer.size();
     } else {
       std::cout << "Animation extracted from frame " << animationStart << " to " << animationEnd
-          << " (" << (animationEnd - animationStart) << " frames)" << std::endl;
+          << " (" << (animationEnd - animationStart - 1) << " frames, excluding end)" << std::endl;
     }
 
     // Calculate animation duration and required framerate

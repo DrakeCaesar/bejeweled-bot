@@ -357,7 +357,7 @@ void Application::HandleKeyboardInput(int key) {
   }
   else if (key == 'r' || key == 'R') {
     if (!IsRecording()) {
-      StartRecording(g_recordColTrack, g_recordRowTrack, 1000, "recorded_frames");
+      StartRecording(g_recordColTrack, g_recordRowTrack, 5000, "recorded_frames");
       std::cout << "Press 'R' again to stop recording early" << std::endl;
     }
     else {
