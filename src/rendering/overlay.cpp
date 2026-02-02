@@ -12,6 +12,7 @@
 namespace {
     int g_selectedCol = -1;
     int g_selectedRow = -1;
+    bool debugSelected = false
 }
 
 void SetSelectedCell(int col, int row) {
@@ -125,7 +126,7 @@ void DrawDebugOverlay(cv::Mat&image,
     }
 
     // Draw selected cell highlight on top
-    if (g_selectedCol >= 0 && g_selectedRow >= 0) {
+    if ( debugSelected && g_selectedCol >= 0 && g_selectedRow >= 0) {
         cv::Rect selRect(g_selectedCol * Config::CELL_SIZE,
                          Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
                          Config::CELL_SIZE, Config::CELL_SIZE);
