@@ -105,6 +105,11 @@ namespace MaskLoader {
     int GetFrameCount(GemType type);
 
 /**
+ * Check if static color masks have been loaded.
+ */
+    bool AreStaticColorsLoaded();
+
+/**
  * Ensure scaled cache is built for the given parameters.
  * Call ONCE before parallel processing begins (main thread only).
  * Only scales color images - alpha masks are used as-is via GetAlphaMask.

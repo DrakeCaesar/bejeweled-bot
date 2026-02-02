@@ -10,6 +10,10 @@ namespace MaskLoader {
     static bool s_loaded = false;
     static cv::Mat s_emptyMask;
 
+// Static color reference images (first frame replacements for Phase 1)
+    static MaskStorage s_staticColorMasks;
+    static bool s_staticColorsLoaded = false;
+
 // Map GemType to filename
     static const char* GemTypeToFilename(GemType type) {
         switch (type) {
@@ -156,6 +160,53 @@ namespace MaskLoader {
         return true;
     }
 
+    bool LoadStaticColorMasks(const std::string&assetsPath) {
+        bool success = true;
+
+        static const GemType gemTypes[] = {
+            GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
+            GemType::BLUE, GemType::PURPLE, GemType::WHITE
+        };
+
+        for (GemType type: gemTypes) {
+            const char* filename = GemTypeToFilename(type);
+            if (!filename) {
+                success = false;
+                continue;
+            }
+
+            int gemIndex = GemTypeToIndex(type);
+            if (gemIndex < 0) {
+                success = false;
+                continue;
+            }
+
+            // Load static color image from static_color folder
+            std::string staticPath = assetsPath + "/static_color/" + filename;
+            cv::Mat staticImage = cv::imread(staticPath, cv::IMREAD_COLOR);
+            if (staticImage.empty()) {
+                std::cerr << "Failed to load static color image: " << staticPath << std::endl;
+                success = false;
+                continue;
+            }
+
+            // Resize to standard FRAME_WIDTH x FRAME_HEIGHT if needed
+            if (staticImage.cols != FRAME_WIDTH || staticImage.rows != FRAME_HEIGHT) {
+                cv::Mat resized;
+                cv::resize(staticImage, resized, cv::Size(FRAME_WIDTH, FRAME_HEIGHT), 0, 0, cv::INTER_LANCZOS4);
+                staticImage = resized;
+            }
+
+            // Store as first frame replacement for this gem type
+            s_staticColorMasks[gemIndex][0] = staticImage;
+
+            std::cout << "Loaded static color reference for " << GemTypeToString(type) << std::endl;
+        }
+
+        s_staticColorsLoaded = success;
+        return success;
+    }
+
     bool LoadHypercube(const std::string&assetsPath) {
         const char* filename = "hypercube.png";
 
@@ -231,6 +282,11 @@ namespace MaskLoader {
             }
         }
 
+        // Load static color references (first frame replacements from static_color folder)
+        if (!LoadStaticColorMasks(assetsPath)) {
+            success = false;
+        }
+
         // Load hypercube separately
         if (!LoadHypercube(assetsPath)) {
             success = false;
@@ -287,6 +343,8 @@ namespace MaskLoader {
         return FRAMES_PER_GEM;
     }
 
+    bool AreStaticColorsLoaded() { return s_staticColorsLoaded; }
+
 // ============================================================================
 // Scaled Color Image Cache - Pre-scaled color images for current settings
 // ============================================================================
@@ -325,6 +383,16 @@ namespace MaskLoader {
 
                 if (srcMask.empty()) continue;
 
+                // Use static color for frame 0 if available (no scaling or blur needed)
+                if (frame == 0 && s_staticColorsLoaded) {
+                    const cv::Mat&staticSrc = s_staticColorMasks[gemIdx][0];
+                    if (!staticSrc.empty()) {
+                        s_scaledMasks[gemIdx][frame] = staticSrc;
+                        continue;
+                    }
+                }
+
+                // For non-static frames, apply scaling and blur based on refScale
                 // Resize color image to target size first
                 cv::Mat resized;
                 if (srcMask.size() != targetSize) {
