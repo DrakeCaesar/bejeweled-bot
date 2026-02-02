@@ -74,20 +74,63 @@ void StopRecording() {
     std::cout << "Recording stopped. Processing " << g_rawCaptureBuffer.size()
         << " captured frames..." << std::endl;
 
-    // Process captured frames to find unique ones and detect loops
-    g_uniqueFramesBuffer.clear();
-    cv::Mat firstFrame;
-    cv::Mat previousFrame;
-    int threshold = 0;
+    // Find animation boundaries after full capture using corner pixel brightness
+    std::cout << "Finding animation boundaries..." << std::endl;
     const int diffWidth = Config::FRAME_DIFF_REGION_WIDTH;
     const int diffHeight = Config::FRAME_DIFF_REGION_HEIGHT;
-    bool loopDetected = false;
+    const int blackThreshold = 20;
 
+    size_t animationStart = g_rawCaptureBuffer.size();
+    size_t animationEnd = g_rawCaptureBuffer.size();
+    bool sawBlack = false;
+
+    // Start at first non-black corner
     for (size_t i = 0; i < g_rawCaptureBuffer.size(); ++i) {
+      cv::Mat&frame = g_rawCaptureBuffer[i];
+      cv::Vec3b cornerPixel = frame.at<cv::Vec3b>(0, 0);
+      int brightness = (cornerPixel[0] + cornerPixel[1] + cornerPixel[2]) / 3;
+      if (brightness >= blackThreshold) {
+        animationStart = i;
+        break;
+      }
+    }
+
+    if (animationStart < g_rawCaptureBuffer.size()) {
+      for (size_t i = animationStart + 1; i < g_rawCaptureBuffer.size(); ++i) {
+        cv::Mat&frame = g_rawCaptureBuffer[i];
+        cv::Vec3b cornerPixel = frame.at<cv::Vec3b>(0, 0);
+        int brightness = (cornerPixel[0] + cornerPixel[1] + cornerPixel[2]) / 3;
+        if (brightness < blackThreshold) {
+          sawBlack = true;
+        } else if (sawBlack) {
+          animationEnd = i;
+          break;
+        }
+      }
+    }
+
+    if (animationStart >= g_rawCaptureBuffer.size()) {
+      std::cout << "No non-black corner frames detected. Falling back to full buffer." << std::endl;
+      animationStart = 0;
+      animationEnd = g_rawCaptureBuffer.size();
+    } else if (animationEnd >= g_rawCaptureBuffer.size()) {
+      std::cout << "No end marker detected after black segment. Using frames from "
+          << animationStart << " to end." << std::endl;
+      animationEnd = g_rawCaptureBuffer.size();
+    } else {
+      std::cout << "Animation extracted from frame " << animationStart << " to " << animationEnd
+          << " (" << (animationEnd - animationStart) << " frames)" << std::endl;
+    }
+
+    // Process extracted range to find unique frames
+    g_uniqueFramesBuffer.clear();
+    cv::Mat previousFrame;
+    int threshold = 0;
+
+    for (size_t i = animationStart; i < animationEnd; ++i) {
       cv::Mat&currentFrame = g_rawCaptureBuffer[i];
 
-      if (firstFrame.empty()) {
-        firstFrame = currentFrame;
+      if (previousFrame.empty()) {
         previousFrame = currentFrame;
         g_uniqueFramesBuffer.push_back(currentFrame);
       }
@@ -104,30 +147,13 @@ void StopRecording() {
         int nonZeroPixels = cv::countNonZero(xorResult.reshape(1));
 
         if (nonZeroPixels > threshold) {
-          // Check for loop back to the first frame (same ROI)
-          cv::Mat xorFirst;
-          cv::bitwise_xor(currentFrame(diffRoi), firstFrame(diffRoi), xorFirst);
-          int nonZeroFirst = cv::countNonZero(xorFirst.reshape(1));
-
-          if (nonZeroFirst < threshold) {
-            std::cout << "Animation loop detected at frame " << i << "!" << std::endl;
-            loopDetected = true;
-            break;
-          }
-
           g_uniqueFramesBuffer.push_back(currentFrame);
           previousFrame = currentFrame;
         }
       }
     }
 
-    if (loopDetected) {
-      std::cout << "Captured complete animation cycle: " << g_uniqueFramesBuffer.size() << " unique frames." <<
-          std::endl;
-    }
-    else {
-      std::cout << "No loop detected. Found " << g_uniqueFramesBuffer.size() << " unique frames." << std::endl;
-    }
+    std::cout << "Found " << g_uniqueFramesBuffer.size() << " unique frames." << std::endl;
 
     if (!g_uniqueFramesBuffer.empty()) {
       std::cout << "Writing unique frames and masks to disk..." << std::endl;
