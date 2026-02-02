@@ -87,6 +87,7 @@ void StopRecording() {
     size_t animationStart = g_rawCaptureBuffer.size();
     size_t animationEnd = g_rawCaptureBuffer.size();
     bool sawBlack = false;
+    int nonBlackCount = 0;
     
     std::vector<size_t> nonBlackFrames;
 
@@ -106,11 +107,11 @@ void StopRecording() {
     }
     std::cout << std::endl;
 
-    // Start at first non-black corner
+    // Start at first non-black corner, end at fourth non-black corner (3 full loops)
     if (!nonBlackFrames.empty()) {
       animationStart = nonBlackFrames[0];
       
-      // Look for second non-black corner after seeing black frames
+      // Look for fourth non-black corner after seeing black frames (3 full loops)
       for (size_t i = animationStart + 1; i < g_rawCaptureBuffer.size(); ++i) {
         cv::Mat&frame = g_rawCaptureBuffer[i];
         cv::Vec3b cornerPixel = frame.at<cv::Vec3b>(0, 0);
@@ -118,8 +119,12 @@ void StopRecording() {
         if (brightness < blackThreshold) {
           sawBlack = true;
         } else if (sawBlack) {
-          animationEnd = i;
-          break;
+          nonBlackCount++;
+          sawBlack = false;
+          if (nonBlackCount == 3) {  // Fourth non-black overall (first was start, 3rd after black = 4th total = 3 full loops)
+            animationEnd = i;
+            break;
+          }
         }
       }
     }
@@ -168,15 +173,9 @@ void StopRecording() {
         g_uniqueFramesBuffer.push_back(currentFrame);
       }
       else {
-        // Check difference with previous unique frame (only 38x38 center region)
-        int roiWidth = std::min(diffWidth, currentFrame.cols);
-        int roiHeight = std::min(diffHeight, currentFrame.rows);
-        int roiX = (currentFrame.cols - roiWidth) / 2;
-        int roiY = (currentFrame.rows - roiHeight) / 2;
-        cv::Rect diffRoi(roiX, roiY, roiWidth, roiHeight);
-
+        // Check difference with previous unique frame (using whole image)
         cv::Mat xorResult;
-        cv::bitwise_xor(currentFrame(diffRoi), previousFrame(diffRoi), xorResult);
+        cv::bitwise_xor(currentFrame, previousFrame, xorResult);
         int nonZeroPixels = cv::countNonZero(xorResult.reshape(1));
 
         if (nonZeroPixels > threshold) {
@@ -187,6 +186,67 @@ void StopRecording() {
     }
 
     std::cout << "Found " << g_uniqueFramesBuffer.size() << " unique frames." << std::endl;
+
+    // Remove all duplicate base frames (from loop restarts) BEFORE subsampling
+    if (g_uniqueFramesBuffer.size() > 1) {
+      cv::Mat& firstFrame = g_uniqueFramesBuffer[0];
+      for (size_t i = g_uniqueFramesBuffer.size() - 1; i >= 1; --i) {
+        cv::Mat diff;
+        cv::absdiff(g_uniqueFramesBuffer[i], firstFrame, diff);
+        int nonZeroPixels = cv::countNonZero(diff.reshape(1));
+        
+        if (nonZeroPixels == 0) {
+          // Found duplicate base frame, remove it
+          g_uniqueFramesBuffer.erase(g_uniqueFramesBuffer.begin() + i);
+          std::cout << "Removed duplicate base frame at position " << i << std::endl;
+        }
+      }
+      std::cout << g_uniqueFramesBuffer.size() << " frames remaining after removing loop markers." << std::endl;
+    }
+
+    // Keep only every 5th frame (0, 5, 10, 15, ...)
+    if (g_uniqueFramesBuffer.size() > 1) {
+      std::vector<cv::Mat> subsampledFrames;
+      for (size_t i = 0; i < g_uniqueFramesBuffer.size(); i += 5) {
+        subsampledFrames.push_back(g_uniqueFramesBuffer[i]);
+      }
+      std::cout << "After keeping every 5th frame: " << subsampledFrames.size() << " frames." << std::endl;
+      g_uniqueFramesBuffer = std::move(subsampledFrames);
+    }
+
+    // Remove the first frame (base frame) after subsampling
+    if (!g_uniqueFramesBuffer.empty()) {
+      g_uniqueFramesBuffer.erase(g_uniqueFramesBuffer.begin());
+      std::cout << "Removed first frame (base frame), " << g_uniqueFramesBuffer.size() << " frames remaining." << std::endl;
+    }
+
+    // Second pass: remove duplicate frames across the entire set
+    if (g_uniqueFramesBuffer.size() > 1) {
+      std::vector<cv::Mat> trulyUniqueFrames;
+      trulyUniqueFrames.push_back(g_uniqueFramesBuffer[0]);
+      
+      for (size_t i = 1; i < g_uniqueFramesBuffer.size(); ++i) {
+        bool isDuplicate = false;
+        
+        for (size_t j = 0; j < trulyUniqueFrames.size(); ++j) {
+          cv::Mat diff;
+          cv::absdiff(g_uniqueFramesBuffer[i], trulyUniqueFrames[j], diff);
+          int nonZeroPixels = cv::countNonZero(diff.reshape(1));
+          
+          if (nonZeroPixels == 0) {
+            isDuplicate = true;
+            break;
+          }
+        }
+        
+        if (!isDuplicate) {
+          trulyUniqueFrames.push_back(g_uniqueFramesBuffer[i]);
+        }
+      }
+      
+      std::cout << "After removing duplicates: " << trulyUniqueFrames.size() << " truly unique frames." << std::endl;
+      g_uniqueFramesBuffer = std::move(trulyUniqueFrames);
+    }
 
     if (!g_uniqueFramesBuffer.empty()) {
       std::cout << "Writing unique frames to disk..." << std::endl;
