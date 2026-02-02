@@ -23,13 +23,13 @@ namespace MaskLoader {
 
         // Create outer boundary by dilating the mask
         cv::Mat outer;
-        cv::Mat outerKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
+        cv::Mat outerKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(13, 13));
         cv::dilate(alphaMask, outer, outerKernel);
         cv::threshold(outer, outer, 127, 255, cv::THRESH_BINARY);
 
         // Create inner boundary by dilating with a smaller kernel (pushes boundary outward)
         cv::Mat inner;
-        cv::Mat innerKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+        cv::Mat innerKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(9, 9));
         cv::dilate(alphaMask, inner, innerKernel);
         cv::threshold(inner, inner, 127, 255, cv::THRESH_BINARY);
 
