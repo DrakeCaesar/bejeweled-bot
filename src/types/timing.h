@@ -10,7 +10,7 @@
 
 struct TimingInfo {
     // Rolling average over 100 frames
-    static const int HISTORY_SIZE = 100;
+    static const int HISTORY_SIZE = 10;
     double captureHistory[HISTORY_SIZE] = {0};
     double detectHistory[HISTORY_SIZE] = {0};
     double drawHistory[HISTORY_SIZE] = {0};
