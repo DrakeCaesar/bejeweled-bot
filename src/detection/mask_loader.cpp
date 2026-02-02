@@ -14,21 +14,21 @@ namespace MaskLoader {
     static const char* GemTypeToFilename(GemType type) {
         switch (type) {
             case GemType::RED:
-                return "Red.png";
+                return "red.png";
             case GemType::ORANGE:
-                return "Orange.png";
+                return "orange.png";
             case GemType::YELLOW:
-                return "Yellow.png";
+                return "yellow.png";
             case GemType::GREEN:
-                return "Green.png";
+                return "green.png";
             case GemType::BLUE:
-                return "Blue.png";
+                return "blue.png";
             case GemType::PURPLE:
-                return "Purple.png";
+                return "purple.png";
             case GemType::WHITE:
-                return "White.png";
+                return "white.png";
             case GemType::HYPERCUBE:
-                return "Hypercube.png";
+                return "hypercube.png";
             default:
                 return nullptr;
         }
@@ -157,7 +157,7 @@ namespace MaskLoader {
     }
 
     bool LoadHypercube(const std::string&assetsPath) {
-        const char* filename = "Hypercube.png";
+        const char* filename = "hypercube.png";
 
         // Load color sprite sheet
         std::string colorPath = assetsPath + "/color/" + filename;
