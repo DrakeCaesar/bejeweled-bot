@@ -69,24 +69,7 @@ void DrawDebugOverlay(cv::Mat&image,
                 int lineCount = 0;
                 cv::Scalar textColor;
 
-                int stage = ShapeParams::debugStage.load();
-
-                if (stage == 6) {
-                    oss.str("");
-                    if (gem.ringValue >= 0) {
-                        oss << "V" << gem.ringValue;
-                    }
-                    else {
-                        oss << "V-";
-                    }
-                    lines[lineCount++] = oss.str();
-                    textColor = (gem.type != GemType::UNKNOWN)
-                                    ? GemTypeToColor(gem.type)
-                                    : cv::Scalar(160, 160, 160);
-                }
-                else {
-
-                    if (gem.matchedThreshold && gem.type != GemType::UNKNOWN) {
+                if (gem.matchedThreshold && gem.type != GemType::UNKNOWN) {
                         lines[lineCount++] = GemTypeToString(gem.type);
                         oss.str("");
                         oss << std::fixed << std::setprecision(0)
@@ -112,7 +95,6 @@ void DrawDebugOverlay(cv::Mat&image,
                     oss.str("");
                     oss << "V" << (int)hsvVal[2];
                     lines[lineCount++] = oss.str();
-                }
 
                 // Calculate background size
                 int maxWidth = 0;
@@ -365,6 +347,47 @@ void DrawShapeOverlay(cv::Mat&image,
                 int fontFace = cv::FONT_HERSHEY_SIMPLEX;
                 double fontScale = 0.4;
                 int thickness = 1;
+
+                int stage = ShapeParams::debugStage.load();
+
+                // Stage 6: Display ring HSV values in center
+                if (stage == 6) {
+                    std::ostringstream oss;
+                    std::vector<std::string> lines;
+                    
+                    if (gem.ringHSV[0] >= 0) {
+                        oss << "H" << gem.ringHSV[0];
+                        lines.push_back(oss.str());
+                        oss.str("");
+                        oss << "S" << gem.ringHSV[1];
+                        lines.push_back(oss.str());
+                        oss.str("");
+                        oss << "V" << gem.ringHSV[2];
+                        lines.push_back(oss.str());
+                    }
+                    else {
+                        lines.push_back("---");
+                    }
+
+                    cv::Scalar textColor = (gem.type != GemType::UNKNOWN)
+                                        ? GemTypeToColor(gem.type)
+                                        : cv::Scalar(160, 160, 160);
+
+                    // Center the text in the cell
+                    int cellCenterX = col * Config::CELL_SIZE + Config::CELL_SIZE / 2;
+                    int cellCenterY = Config::BANNER_HEIGHT + row * Config::CELL_SIZE + Config::CELL_SIZE / 2;
+                    int lineHeight = 14;
+                    int totalHeight = lines.size() * lineHeight;
+                    int startY = cellCenterY - totalHeight / 2 + lineHeight; // Add lineHeight to account for baseline
+
+                    for (size_t i = 0; i < lines.size(); ++i) {
+                        cv::Size textSize = cv::getTextSize(lines[i], fontFace, fontScale, thickness, nullptr);
+                        int textStartX = cellCenterX - textSize.width / 2;
+                        cv::Point pos(textStartX, startY + i * lineHeight);
+                        cv::putText(image, lines[i], pos, fontFace, fontScale, textColor, thickness, cv::LINE_AA);
+                    }
+                    continue;
+                }
 
                 // Background for text
                 std::string typeName = GemTypeToString(gem.type);

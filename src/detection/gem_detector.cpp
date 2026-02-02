@@ -361,6 +361,7 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
         gem.gridPos = cv::Point(col, row);
         gem.state = GemState::NORMAL;
         gem.ringValue = -1;
+        gem.ringHSV = cv::Vec3i(-1, -1, -1);
 
         // Calculate cell position
         int cellX = col * Config::CELL_SIZE;
@@ -419,7 +420,9 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard,
                   cv::saturate_cast<uchar>(meanBgr[2]));
               cv::Mat tmpHsv;
               cv::cvtColor(tmpBgr, tmpHsv, cv::COLOR_BGR2HSV);
-              gem.ringValue = tmpHsv.at<cv::Vec3b>(0, 0)[2];
+              cv::Vec3b hsvVal = tmpHsv.at<cv::Vec3b>(0, 0);
+              gem.ringValue = hsvVal[2];
+              gem.ringHSV = cv::Vec3i(hsvVal[0], hsvVal[1], hsvVal[2]);
             }
           }
         }

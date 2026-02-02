@@ -41,6 +41,7 @@ struct Gem {
     cv::Mat
     shapeMask; // Binary mask for shape classification (white gem on black)
     int ringValue; // HSV V channel from ring around gem (debug)
+    cv::Vec3i ringHSV; // HSV values from ring around gem (H, S, V) for flame/lightning detection
 };
 
 // ============================================================================
