@@ -21,49 +21,25 @@ namespace MaskLoader {
             return cv::Mat();
         }
 
-        constexpr double kRingScale = 1.15;
-        cv::Mat scaled;
-        cv::resize(alphaMask, scaled, cv::Size(), kRingScale, kRingScale, cv::INTER_NEAREST);
+        // Create outer boundary by dilating the mask
+        cv::Mat outer;
+        cv::Mat outerKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
+        cv::dilate(alphaMask, outer, outerKernel);
+        cv::threshold(outer, outer, 127, 255, cv::THRESH_BINARY);
 
-        // Ensure binary
-        cv::threshold(scaled, scaled, 127, 255, cv::THRESH_BINARY);
+        // Create inner boundary by dilating with a smaller kernel (pushes boundary outward)
+        cv::Mat inner;
+        cv::Mat innerKernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+        cv::dilate(alphaMask, inner, innerKernel);
+        cv::threshold(inner, inner, 127, 255, cv::THRESH_BINARY);
 
-        // Scale the mask by 105% to remove edge pixels
-        constexpr double kInnerScale = 1.05;
-        cv::Mat innerMask;
-        cv::resize(alphaMask, innerMask, cv::Size(), kInnerScale, kInnerScale, cv::INTER_NEAREST);
-        cv::threshold(innerMask, innerMask, 127, 255, cv::THRESH_BINARY);
+        // Invert the inner mask
+        cv::Mat innerInverted;
+        cv::bitwise_not(inner, innerInverted);
 
-        // Center the 95%-scaled mask inside the scaled mask and invert it
-        cv::Mat centered = cv::Mat::zeros(scaled.size(), scaled.type());
-        int offsetX = (scaled.cols - innerMask.cols) / 2;
-        int offsetY = (scaled.rows - innerMask.rows) / 2;
-        if (offsetX >= 0 && offsetY >= 0 &&
-            offsetX + innerMask.cols <= scaled.cols &&
-            offsetY + innerMask.rows <= scaled.rows) {
-            innerMask.copyTo(centered(cv::Rect(offsetX, offsetY, innerMask.cols, innerMask.rows)));
-        }
-
-        cv::Mat centeredInverted;
-        cv::bitwise_not(centered, centeredInverted);
-
-        // Apply inverted center to scaled mask to keep only the ring
-        cv::Mat ringScaled;
-        cv::bitwise_and(scaled, centeredInverted, ringScaled);
-
-        // Crop back to original size (centered)
+        // Ring is outer AND (NOT inner)
         cv::Mat ring;
-        if (ringScaled.cols >= alphaMask.cols && ringScaled.rows >= alphaMask.rows) {
-            int startX = (ringScaled.cols - alphaMask.cols) / 2;
-            int startY = (ringScaled.rows - alphaMask.rows) / 2;
-            ring = ringScaled(cv::Rect(startX, startY, alphaMask.cols, alphaMask.rows)).clone();
-        }
-        else {
-            ring = cv::Mat::zeros(alphaMask.size(), alphaMask.type());
-            int dstX = (alphaMask.cols - ringScaled.cols) / 2;
-            int dstY = (alphaMask.rows - ringScaled.rows) / 2;
-            ringScaled.copyTo(ring(cv::Rect(dstX, dstY, ringScaled.cols, ringScaled.rows)));
-        }
+        cv::bitwise_and(outer, innerInverted, ring);
 
         return ring;
     }
