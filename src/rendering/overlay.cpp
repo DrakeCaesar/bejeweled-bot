@@ -12,7 +12,7 @@
 namespace {
     int g_selectedCol = -1;
     int g_selectedRow = -1;
-    bool debugSelected = false
+    bool debugSelected = false;
 }
 
 void SetSelectedCell(int col, int row) {
