@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
+#include <chrono>
 
 // ============================================================================
 // Frame Recording for Asset Collection
@@ -26,6 +27,7 @@ namespace {
   int g_totalFramesChecked = 0;
   std::vector<cv::Mat> g_rawCaptureBuffer;
   std::vector<cv::Mat> g_uniqueFramesBuffer;
+  std::vector<std::chrono::steady_clock::time_point> g_frameTimestamps;
 }
 
 void StartRecording(int col, int row, int maxFrames, const std::string&outputDir) {
@@ -42,6 +44,8 @@ void StartRecording(int col, int row, int maxFrames, const std::string&outputDir
   g_rawCaptureBuffer.clear();
   g_rawCaptureBuffer.reserve(g_maxFrames);
   g_uniqueFramesBuffer.clear();
+  g_frameTimestamps.clear();
+  g_frameTimestamps.reserve(g_maxFrames);
 
   // Create the output directory and clear existing PNGs
   if (std::filesystem::exists(g_outputDir)) {
@@ -83,19 +87,30 @@ void StopRecording() {
     size_t animationStart = g_rawCaptureBuffer.size();
     size_t animationEnd = g_rawCaptureBuffer.size();
     bool sawBlack = false;
+    
+    std::vector<size_t> nonBlackFrames;
 
-    // Start at first non-black corner
+    // Find all non-black corner frames
     for (size_t i = 0; i < g_rawCaptureBuffer.size(); ++i) {
       cv::Mat&frame = g_rawCaptureBuffer[i];
       cv::Vec3b cornerPixel = frame.at<cv::Vec3b>(0, 0);
       int brightness = (cornerPixel[0] + cornerPixel[1] + cornerPixel[2]) / 3;
       if (brightness >= blackThreshold) {
-        animationStart = i;
-        break;
+        nonBlackFrames.push_back(i);
       }
     }
+    
+    std::cout << "Found " << nonBlackFrames.size() << " non-black corner frames: ";
+    for (size_t idx : nonBlackFrames) {
+      std::cout << idx << " ";
+    }
+    std::cout << std::endl;
 
-    if (animationStart < g_rawCaptureBuffer.size()) {
+    // Start at first non-black corner
+    if (!nonBlackFrames.empty()) {
+      animationStart = nonBlackFrames[0];
+      
+      // Look for second non-black corner after seeing black frames
       for (size_t i = animationStart + 1; i < g_rawCaptureBuffer.size(); ++i) {
         cv::Mat&frame = g_rawCaptureBuffer[i];
         cv::Vec3b cornerPixel = frame.at<cv::Vec3b>(0, 0);
@@ -120,6 +135,24 @@ void StopRecording() {
     } else {
       std::cout << "Animation extracted from frame " << animationStart << " to " << animationEnd
           << " (" << (animationEnd - animationStart) << " frames)" << std::endl;
+    }
+
+    // Calculate animation duration and required framerate
+    if (animationEnd > animationStart && animationEnd - 1 < g_frameTimestamps.size()) {
+      size_t capturedFrameCount = animationEnd - animationStart - 1; // Exclude last frame
+      
+      // Calculate actual duration from timestamps
+      auto startTime = g_frameTimestamps[animationStart];
+      auto endTime = g_frameTimestamps[animationEnd - 1];
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+      float animationDurationMs = static_cast<float>(duration.count());
+      
+      float requiredFramerate = 20000.0f / animationDurationMs;
+      
+      std::cout << "Animation duration: " << std::fixed << std::setprecision(1) 
+                << animationDurationMs << " ms (" << capturedFrameCount << " captured frames)" << std::endl;
+      std::cout << "Required game FPS to display 20 frames in this duration: " 
+                << std::fixed << std::setprecision(2) << requiredFramerate << " FPS" << std::endl;
     }
 
     // Process extracted range to find unique frames
@@ -156,70 +189,14 @@ void StopRecording() {
     std::cout << "Found " << g_uniqueFramesBuffer.size() << " unique frames." << std::endl;
 
     if (!g_uniqueFramesBuffer.empty()) {
-      std::cout << "Writing unique frames and masks to disk..." << std::endl;
+      std::cout << "Writing unique frames to disk..." << std::endl;
       
       for (size_t i = 0; i < g_uniqueFramesBuffer.size(); ++i) {
-        // Use GrabCut for mask generation
-        cv::Mat frame = g_uniqueFramesBuffer[i];
-        cv::Mat mask = cv::Mat::zeros(frame.size(), CV_8UC1);
-        cv::Mat bgModel, fgModel;
-
-        // Initialize with a rectangle (slightly smaller than frame to assume border is background)
-        cv::Rect rect(1, 1, frame.cols - 2, frame.rows - 2);
-        
-        // Run GrabCut (1 iteration is usually enough for a starting mask)
-        try {
-          cv::grabCut(frame, mask, rect, bgModel, fgModel, 10, cv::GC_INIT_WITH_RECT);
-        } catch (const cv::Exception& e) {
-          std::cerr << "\nGrabCut error on frame " << i << ": " << e.what() << std::endl;
-          mask = cv::Mat::zeros(frame.size(), CV_8UC1);
-        }
-
-        // Convert GrabCut mask to binary mask (foreground and probably foreground)
-        cv::Mat binaryMask;
-        binaryMask = (mask == cv::GC_FGD) | (mask == cv::GC_PR_FGD);
-        binaryMask.convertTo(binaryMask, CV_8UC1, 255.0);
-
-        // Enforce convexity using the largest contour's convex hull
-        std::vector<std::vector<cv::Point>> contours;
-        cv::findContours(binaryMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-        if (!contours.empty()) {
-          size_t largestIdx = 0;
-          double largestArea = 0.0;
-          for (size_t c = 0; c < contours.size(); ++c) {
-            double area = cv::contourArea(contours[c]);
-            if (area > largestArea) {
-              largestArea = area;
-              largestIdx = c;
-            }
-          }
-
-          std::vector<cv::Point> hull;
-          cv::convexHull(contours[largestIdx], hull);
-          binaryMask = cv::Mat::zeros(binaryMask.size(), CV_8UC1);
-          std::vector<std::vector<cv::Point>> hulls = { hull };
-          cv::drawContours(binaryMask, hulls, 0, cv::Scalar(255), cv::FILLED);
-        }
-
-        // Erode mask slightly (1px) after convex hull
-        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-        cv::erode(binaryMask, binaryMask, kernel, cv::Point(-1, -1), 1);
-
-        // Apply mask to color frame (background to black)
-        cv::Mat maskedFrame = frame.clone();
-        maskedFrame.setTo(cv::Scalar(0, 0, 0), binaryMask == 0);
-        
-        // Save masked color frame
+        // Save raw frame
         std::ostringstream filename;
         filename << g_outputDir << "/frame_" << std::setw(4) << std::setfill('0')
             << i << ".png";
-        cv::imwrite(filename.str(), maskedFrame);
-
-        // Save mask frame
-        std::ostringstream maskFilename;
-        maskFilename << g_outputDir << "/mask_" << std::setw(4) << std::setfill('0')
-            << i << ".png";
-        cv::imwrite(maskFilename.str(), binaryMask);
+        cv::imwrite(filename.str(), g_uniqueFramesBuffer[i]);
 
         if ((i + 1) % 10 == 0 || i == g_uniqueFramesBuffer.size() - 1) {
           std::cout << "\rProgress: " << (i + 1) << "/" << g_uniqueFramesBuffer.size() << std::flush;
@@ -282,6 +259,7 @@ void UpdateRecording(const cv::Mat&gameBoard) {
   // Just capture the frame, no processing
   if (g_rawCaptureBuffer.size() < (size_t)g_maxFrames) {
     g_rawCaptureBuffer.push_back(gameBoard(shapeRoi).clone());
+    g_frameTimestamps.push_back(std::chrono::steady_clock::now());
 
     if (g_rawCaptureBuffer.size() >= (size_t)g_maxFrames) {
       std::cout << "Capture buffer full (" << g_maxFrames << " frames). Stopping capture and starting processing..." <<
