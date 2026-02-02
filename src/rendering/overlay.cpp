@@ -124,28 +124,6 @@ void DrawDebugOverlay(cv::Mat&image,
             }
         }
     }
-
-    // Draw selected cell highlight on top
-    if ( debugSelected && g_selectedCol >= 0 && g_selectedRow >= 0) {
-        cv::Rect selRect(g_selectedCol * Config::CELL_SIZE,
-                         Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
-                         Config::CELL_SIZE, Config::CELL_SIZE);
-        cv::rectangle(image, selRect, cv::Scalar(0, 255, 255), 3);
-
-        // Draw size reference square in center
-        int refSquareWidth = Config::FRAME_DIFF_REGION_WIDTH;
-        int refSquareHeight = Config::FRAME_DIFF_REGION_HEIGHT;
-        int borderThickness = 2;
-        int drawWidth = refSquareWidth + 2 * borderThickness;  // Account for border width
-        int drawHeight = refSquareHeight + 2 * borderThickness;
-        int centerX = selRect.x + selRect.width / 2;
-        int centerY = selRect.y + selRect.height / 2;
-        int refX = centerX - drawWidth / 2;
-        int refY = centerY - drawHeight / 2;
-        
-        cv::rectangle(image, cv::Rect(refX, refY, drawWidth, drawHeight),
-                      cv::Scalar(0, 255, 255), borderThickness);
-    }
 }
 
 // ============================================================================
@@ -369,7 +347,7 @@ void DrawShapeOverlay(cv::Mat&image,
     }
 
     // Draw selected cell highlight on top
-    if (g_selectedCol >= 0 && g_selectedRow >= 0) {
+    if (debugSelected && g_selectedCol >= 0 && g_selectedRow >= 0) {
         cv::Rect selRect(g_selectedCol * Config::CELL_SIZE,
                          Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,
                          Config::CELL_SIZE, Config::CELL_SIZE);

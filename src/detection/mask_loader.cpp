@@ -138,7 +138,7 @@ namespace MaskLoader {
                 cv::threshold(maskFrame, maskFrame, 254, 255, cv::THRESH_BINARY);
 
                 // Erode mask by 1 pixel to clean up edges for rotating frames
-                cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+                cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
                 cv::erode(maskFrame, maskFrame, kernel, cv::Point(-1, -1), 1);
 
                 // Apply mask to color frame (set background to black)
