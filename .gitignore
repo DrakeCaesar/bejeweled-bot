@@ -5,7 +5,7 @@ cmake-build-*
 builds/
 build/
 .cache/
-recorded_frames/
+recorded_frames/*.png
 /bejeweled-bot.exe
 /*.dll
 /.output.txt
