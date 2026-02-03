@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <sstream>
 #include <chrono>
+#include <atomic>
 
 // ============================================================================
 // Frame Recording for Asset Collection
@@ -343,16 +344,14 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard) {
   // Get pointer to static grid for lambda capture
   auto* gridPtr = &grid;
 
-  // Use a persistent thread pool - no thread creation per frame
-  StaticThreadPool::Instance().ParallelFor(
-    [&gameBoard, gridPtr](int threadIndex, int numThreads) {
-      int tilesPerThread = TOTAL_TILES / numThreads;
-      int startIdx = threadIndex * tilesPerThread;
-      int endIdx = (threadIndex == numThreads - 1)
-                     ? TOTAL_TILES
-                     : (threadIndex + 1) * tilesPerThread;
+  // Atomic counter for dynamic tile distribution
+  std::atomic<int> nextTile(0);
 
-      for (int idx = startIdx; idx < endIdx; idx++) {
+  // Use a persistent thread pool with dynamic work distribution
+  StaticThreadPool::Instance().ParallelFor(
+    [&gameBoard, gridPtr, &nextTile](int threadIndex, int numThreads) {
+      int idx;
+      while ((idx = nextTile.fetch_add(1)) < TOTAL_TILES) {
         int row = idx / Config::GRID_SIZE;
         int col = idx % Config::GRID_SIZE;
 

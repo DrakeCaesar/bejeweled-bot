@@ -134,11 +134,6 @@ bool Application::Initialize() {
   std::cout << "  'r' - Start/stop recording frames (uses Rec Col/Row/Frames)" << std::endl;
   std::cout << "  's' - Show recording status" << std::endl;
   std::cout << std::endl;
-  std::cout << "Note: HSV color thresholds need calibration!" << std::endl;
-  std::cout << "      Adjust color constants in config.h if gems aren't "
-      "detected correctly."
-      << std::endl;
-  std::cout << std::endl;
 
   // Initialize FPS tracking
   lastFpsUpdateTime_ = std::chrono::high_resolution_clock::now();
