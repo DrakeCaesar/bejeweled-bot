@@ -44,6 +44,16 @@ set_target_properties(bejeweled-bot PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
+    # Ensure PDB files are generated in the same directory as the executable
+    PDB_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    PDB_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
+    PDB_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+    PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
+    # Set PDB file name to match executable
+    COMPILE_PDB_NAME "bejeweled-bot"
+    COMPILE_PDB_NAME_DEBUG "bejeweled-bot"
+    COMPILE_PDB_NAME_RELEASE "bejeweled-bot"
+    COMPILE_PDB_NAME_RELWITHDEBINFO "bejeweled-bot"
     INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
     INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE
 )
@@ -56,16 +66,20 @@ target_include_directories(bejeweled-bot PRIVATE
 if(MSVC)
     target_compile_options(bejeweled-bot PRIVATE
         /MP${num_jobs}
-        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG>
-        $<$<CONFIG:Debug>:/ZI>
+        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG /Zi>
+        $<$<CONFIG:RelWithDebInfo>:/O2 /Ob1 /fp:fast /arch:AVX2 /Zi>
+        $<$<CONFIG:Debug>:/ZI /Od>
     )
     target_link_options(bejeweled-bot PRIVATE
-        $<$<CONFIG:Release>:/LTCG>
+        $<$<CONFIG:Release>:/LTCG /DEBUG /OPT:REF /OPT:ICF>
+        $<$<CONFIG:RelWithDebInfo>:/DEBUG /OPT:REF /OPT:ICF>
+        $<$<CONFIG:Debug>:/DEBUG>
     )
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(bejeweled-bot PRIVATE
-        $<$<CONFIG:Release>:-O3 -march=native -ffast-math -flto -funroll-loops>
-        $<$<CONFIG:Debug>:-O0>
+        $<$<CONFIG:Release>:-O3 -march=native -ffast-math -flto -funroll-loops -g>
+        $<$<CONFIG:RelWithDebInfo>:-O2 -march=native -g>
+        $<$<CONFIG:Debug>:-O0 -g>
     )
     target_link_options(bejeweled-bot PRIVATE
         $<$<CONFIG:Release>:-flto>
