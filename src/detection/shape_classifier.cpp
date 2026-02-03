@@ -218,12 +218,38 @@ auto& cache = s_lastMatches[gemRow][gemCol];
 GemType lastType = cache.type;
 int lastFrame = cache.frame;
 
-// Helper lambda to check a specific type/frame
+// Track checked frames to avoid redundant comparisons (max 8 types * ~30 frames = 240 entries)
+// Use array indexed by (type * MAX_FRAMES + frame) for fast lookup
+constexpr int MAX_FRAMES_PER_TYPE = 32;  // Conservative upper bound
+constexpr int MAX_CACHE_SIZE = 8 * MAX_FRAMES_PER_TYPE;
+thread_local float scoreCache[MAX_CACHE_SIZE];
+thread_local bool checkedFlags[MAX_CACHE_SIZE];
+std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
+
+// Helper lambda to check a specific type/frame (with caching)
 auto checkMatch = [&](GemType type, int frame) -> float {
+    int idx = static_cast<int>(type) * MAX_FRAMES_PER_TYPE + frame;
+    
+    // Return cached score if already checked
+    if (idx >= 0 && idx < MAX_CACHE_SIZE && checkedFlags[idx]) {
+        return scoreCache[idx];
+    }
+    
+    // Compute score
     const cv::Mat&refImageLab = MaskLoader::GetLabMask(type, frame);
     const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
-    if (refImageLab.empty()) return 0.0f;
-    return CalculateColorSimilarity(processedImageLab, refImageLab, alphaMask);
+    float score = 0.0f;
+    if (!refImageLab.empty()) {
+        score = CalculateColorSimilarity(processedImageLab, refImageLab, alphaMask);
+    }
+    
+    // Cache result
+    if (idx >= 0 && idx < MAX_CACHE_SIZE) {
+        scoreCache[idx] = score;
+        checkedFlags[idx] = true;
+    }
+    
+    return score;
 };
 
 // Phase 0: Temporal coherence - check last matched frame first
