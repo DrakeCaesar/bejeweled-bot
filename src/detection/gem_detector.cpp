@@ -392,8 +392,8 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard, bool needDebu
          cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
          cv::Mat processedLab;
          cv::cvtColor(processed, processedLab, cv::COLOR_BGR2Lab);
-         gem.type = ClassifyGemByShape(processed, processedLab, &gem.bestMatch,
-                                       &gem.bestMatchFrame, needDebugMap);
+         gem.type = ClassifyGemByShape(processed, processedLab, row, col,
+                                       &gem.bestMatch, &gem.bestMatchFrame, needDebugMap);
         gem.shapeMask = GetDebugVisualization(shapeRegion);
         gem.closestType = GemType::UNKNOWN;
         gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
