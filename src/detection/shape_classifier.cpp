@@ -68,7 +68,7 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // ============================================================================
 
 static float CalculateColorSimilarity(const cv::Mat&img1, const cv::Mat&img2Lab,
-                                  const cv::Mat&alphaMask = cv::Mat(), const cv::Mat&img2Bgr = cv::Mat()) {
+                                  const cv::Mat&alphaMask, const cv::Mat&img2Bgr, bool needDebugMap) {
 if (img1.empty() || img2Lab.empty()) return 0.0f;
 
 cv::Mat i1 = img1.clone();
@@ -95,7 +95,15 @@ g_debugMaskedRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
     // img2Lab is already in Lab color space (pre-converted at load time)
     const cv::Mat& lab2 = img2Lab;
 
-    g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
+    // Only create debug diff map if needed (passed as parameter to avoid repeated atomic loads)
+    if (needDebugMap) {
+        // Reuse the buffer if it's the right size, otherwise allocate
+        if (g_debugDiffMap.size() != lab1.size() || g_debugDiffMap.type() != CV_8UC3) {
+            g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
+        } else {
+            g_debugDiffMap.setTo(cv::Scalar(0, 0, 0));
+        }
+    }
 
     double totalDistance = 0.0;
     int pixelCount = 0;
@@ -103,7 +111,7 @@ g_debugMaskedRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
     for (int y = 0; y < lab1.rows; y++) {
         const cv::Vec3b* row1 = lab1.ptr<cv::Vec3b>(y);
         const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
-        cv::Vec3b* diffRow = g_debugDiffMap.ptr<cv::Vec3b>(y);
+        cv::Vec3b* diffRow = needDebugMap ? g_debugDiffMap.ptr<cv::Vec3b>(y) : nullptr;
 
         for (int x = 0; x < lab1.cols; x++) {
             if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) continue;
@@ -116,17 +124,19 @@ g_debugMaskedRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
             totalDistance += dist;
             pixelCount++;
 
-            if (dist < 10.0f) {
-                diffRow[x] = cv::Vec3b(0, 0, 0);
-            }
-            else {
-                float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
-                uchar intensity = static_cast<uchar>(normalized * 255.0f);
-                if (normalized < 0.5f) {
-                    diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
+            if (needDebugMap) {
+                if (dist < 10.0f) {
+                    diffRow[x] = cv::Vec3b(0, 0, 0);
                 }
                 else {
-                    diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
+                    float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
+                    uchar intensity = static_cast<uchar>(normalized * 255.0f);
+                    if (normalized < 0.5f) {
+                        diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
+                    }
+                    else {
+                        diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
+                    }
                 }
             }
         }
@@ -147,7 +157,7 @@ static void SaveAsBestMatch() {
 }
 
 GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
-                           int* outBestFrame) {
+                           int* outBestFrame, bool needDebugMap) {
     if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
         if (outBestMatch) *outBestMatch = 0.0f;
         if (outBestFrame) *outBestFrame = -1;
@@ -159,7 +169,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         GemType::BLUE, GemType::PURPLE, GemType::WHITE, GemType::HYPERCUBE
     };
     static const int numTypes = 8;
-
+    
     float threshold = ShapeParams::matchThreshold.load() / 100.0f;
     GemType bestType = GemType::UNKNOWN;
     float bestScore = 0.0f;
@@ -176,7 +186,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(lastMatchedType, lastMatchedFrame);
         
         if (!refImageLab.empty()) {
-            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr);
+            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr, needDebugMap);
             
             if (score > bestScore) {
                 bestScore = score;
@@ -215,7 +225,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         float score = 0.0f;
 
         if (!refImageLab.empty()) {
-            score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr);
+            score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr, needDebugMap);
         }
 
         firstFrameScores[i] = {type, score};
@@ -263,7 +273,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
             const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
             if (refImageLab.empty()) continue;
 
-            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr);
+            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr, needDebugMap);
 
             if (score > bestScore) {
                 bestScore = score;

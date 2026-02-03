@@ -4,6 +4,7 @@
 #include "../rendering/overlay.h"
 #include "../rendering/control_panel.h"
 #include "gem_detector.h"
+#include "shape_classifier.h"
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -41,9 +42,12 @@ void ProcessThreadFunc(
             bool recording = IsRecording();
 
             if (!recording) {
+                // Read debug stage once per frame (atomic operation)
+                const bool needDebugMap = (ShapeParams::debugStage.load() >= 2);
+                
                 // Detect gems
                 auto detectStart = std::chrono::high_resolution_clock::now();
-                std::vector<std::vector<Gem>>&gemGrid = DetectGems(currentFrame);
+                std::vector<std::vector<Gem>>&gemGrid = DetectGems(currentFrame, needDebugMap);
                 auto detectEnd = std::chrono::high_resolution_clock::now();
                 timingInfo.detectMs =
                         std::chrono::duration<double, std::milli>(detectEnd - detectStart)

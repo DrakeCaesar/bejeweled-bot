@@ -334,7 +334,7 @@ void UpdateRecording(const cv::Mat&gameBoard) {
 // Grid Detection
 // ============================================================================
 
-std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard) {
+std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard, bool needDebugMap) {
 // Static allocation - grid is reused across calls
   static std::vector<std::vector<Gem>> grid(
     Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
@@ -349,7 +349,7 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard) {
 
   // Use a persistent thread pool with dynamic work distribution
   StaticThreadPool::Instance().ParallelFor(
-    [&gameBoard, gridPtr, &nextTile](int threadIndex, int numThreads) {
+    [&gameBoard, gridPtr, &nextTile, needDebugMap](int threadIndex, int numThreads) {
       int idx;
       while ((idx = nextTile.fetch_add(1)) < TOTAL_TILES) {
         int row = idx / Config::GRID_SIZE;
@@ -391,7 +391,7 @@ std::vector<std::vector<Gem>>& DetectGems(const cv::Mat&gameBoard) {
         // Classify gem
         cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
         gem.type = ClassifyGemByShape(processed, &gem.bestMatch,
-                                      &gem.bestMatchFrame);
+                                      &gem.bestMatchFrame, needDebugMap);
         gem.shapeMask = GetDebugVisualization(shapeRegion);
         gem.closestType = GemType::UNKNOWN;
         gem.matchedThreshold = (gem.type != GemType::UNKNOWN);

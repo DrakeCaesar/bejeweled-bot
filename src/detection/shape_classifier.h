@@ -41,7 +41,13 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion);
 
 /**
  * Classify a gem by comparing its color to reference images.
+ * 
+ * @param processedImage The gem image to classify
+ * @param outBestMatch Optional pointer to store the best match score
+ * @param outBestFrame Optional pointer to store the best matching frame index
+ * @param needDebugMap Whether debug visualization is needed (passed from frame level to avoid atomic loads)
  */
 GemType ClassifyGemByShape(const cv::Mat&processedImage,
                            float* outBestMatch = nullptr,
-                           int* outBestFrame = nullptr);
+                           int* outBestFrame = nullptr,
+                           bool needDebugMap = false);

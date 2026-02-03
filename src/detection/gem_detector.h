@@ -15,11 +15,12 @@
  * Returns a reference to a static grid that is reused across calls.
  *
  * @param gameBoard The game board image (1024x1024)
+ * @param needDebugMap Whether debug visualization is needed (to avoid atomic loads)
  * @return Reference to internal 2D vector representing the 8x8 grid of detected
  * gems
  */
 std::vector<std::vector<Gem>>&
-DetectGems(const cv::Mat&gameBoard);
+DetectGems(const cv::Mat&gameBoard, bool needDebugMap = false);
 
 /**
  * Print the gem grid to console for debugging
