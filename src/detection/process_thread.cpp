@@ -43,7 +43,9 @@ void ProcessThreadFunc(
 
             if (!recording) {
                 // Read debug stage once per frame (atomic operation)
-                const bool needDebugMap = (ShapeParams::debugStage.load() >= 2);
+                // Generate debug maps for all debug stages (0-3)
+                const int currentDebugStage = ShapeParams::debugStage.load();
+                const bool needDebugMap = (currentDebugStage >= 0 && currentDebugStage <= 3);
                 
                 // Detect gems
                 auto detectStart = std::chrono::high_resolution_clock::now();
