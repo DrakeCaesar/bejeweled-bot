@@ -68,44 +68,32 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // ============================================================================
 
 static float CalculateColorSimilarity(const cv::Mat&img1, const cv::Mat&img2,
-                                      const cv::Mat&alphaMask = cv::Mat()) {
-    if (img1.empty() || img2.empty()) return 0.0f;
+                                  const cv::Mat&alphaMask = cv::Mat()) {
+if (img1.empty() || img2.empty()) return 0.0f;
 
-    cv::Mat i1 = img1.clone();
-    cv::Mat i2 = img2.clone();
-    cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
+cv::Mat i1 = img1.clone();
+cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
 
-    // Resize reference to match input if needed (scaling already applied in cache)
-    if (i2.size() != i1.size()) {
-        cv::resize(i2, i2, i1.size(), 0, 0, cv::INTER_LANCZOS4);
-    }
-
-    // Resize mask to match input if needed
-    if (!mask.empty() && mask.size() != i1.size()) {
-        cv::resize(mask, mask, i1.size(), 0, 0, cv::INTER_NEAREST);
-    }
-
-    // Apply mask to BOTH images
-    if (!mask.empty()) {
-        for (int y = 0; y < i1.rows; y++) {
-            cv::Vec3b* row1 = i1.ptr<cv::Vec3b>(y);
-            cv::Vec3b* row2 = i2.ptr<cv::Vec3b>(y);
-            const uchar* maskRow = mask.ptr<uchar>(y);
-            for (int x = 0; x < i1.cols; x++) {
-                if (maskRow[x] == 0) {
-                    row1[x] = cv::Vec3b(0, 0, 0);
-                    row2[x] = cv::Vec3b(0, 0, 0);
-                }
+// Apply mask only to img1 (captured game screen)
+// img2 (reference image) already has the mask pre-applied at load time
+if (!mask.empty()) {
+    for (int y = 0; y < i1.rows; y++) {
+        cv::Vec3b* row1 = i1.ptr<cv::Vec3b>(y);
+        const uchar* maskRow = mask.ptr<uchar>(y);
+        for (int x = 0; x < i1.cols; x++) {
+            if (maskRow[x] == 0) {
+                row1[x] = cv::Vec3b(0, 0, 0);
             }
         }
     }
+}
 
-    g_debugMaskedInput = i1.clone();
-    g_debugMaskedRef = i2.clone();
+g_debugMaskedInput = i1.clone();
+g_debugMaskedRef = img2.clone();
 
     thread_local cv::Mat lab1, lab2;
     cv::cvtColor(i1, lab1, cv::COLOR_BGR2Lab);
-    cv::cvtColor(i2, lab2, cv::COLOR_BGR2Lab);
+    cv::cvtColor(img2, lab2, cv::COLOR_BGR2Lab);
 
     g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
 
