@@ -67,15 +67,15 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // Color Similarity Calculation
 // ============================================================================
 
-static float CalculateColorSimilarity(const cv::Mat&img1, const cv::Mat&img2Lab,
+static float CalculateColorSimilarity(const cv::Mat&img1, const cv::Mat&img1Lab,
+                                  const cv::Mat&img2Lab,
                                   const cv::Mat&alphaMask, const cv::Mat&img2Bgr, bool needDebugMap) {
-if (img1.empty() || img2Lab.empty()) return 0.0f;
+if (img1.empty() || img2Lab.empty() || img1Lab.empty()) return 0.0f;
 
 cv::Mat i1 = img1.clone();
 cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
 
-// Apply mask only to img1 (captured game screen)
-// img2 (reference image) already has the mask pre-applied at load time
+// Apply mask to both BGR (for debug) and LAB (for comparison)
 for (int y = 0; y < i1.rows; y++) {
     cv::Vec3b* row1 = i1.ptr<cv::Vec3b>(y);
     const uchar* maskRow = mask.ptr<uchar>(y);
@@ -89,65 +89,74 @@ for (int y = 0; y < i1.rows; y++) {
 g_debugMaskedInput = i1.clone();
 g_debugMaskedRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
 
-    thread_local cv::Mat lab1;
-    cv::cvtColor(i1, lab1, cv::COLOR_BGR2Lab);
-    
-    // img2Lab is already in Lab color space (pre-converted at load time)
-    const cv::Mat& lab2 = img2Lab;
-
-    // Only create debug diff map if needed (passed as parameter to avoid repeated atomic loads)
-    if (needDebugMap) {
-        // Reuse the buffer if it's the right size, otherwise allocate
-        if (g_debugDiffMap.size() != lab1.size() || g_debugDiffMap.type() != CV_8UC3) {
-            g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
-        } else {
-            g_debugDiffMap.setTo(cv::Scalar(0, 0, 0));
+// Apply mask to LAB image for comparison
+cv::Mat lab1 = img1Lab.clone();
+if (!mask.empty()) {
+    for (int y = 0; y < lab1.rows; y++) {
+        cv::Vec3b* labRow = lab1.ptr<cv::Vec3b>(y);
+        const uchar* maskRow = mask.ptr<uchar>(y);
+        for (int x = 0; x < lab1.cols; x++) {
+            if (maskRow[x] == 0) {
+                labRow[x] = cv::Vec3b(0, 128, 128);  // Black in LAB space
+            }
         }
     }
+}
+const cv::Mat& lab2 = img2Lab;
 
-    double totalDistance = 0.0;
-    int pixelCount = 0;
+// Only create debug diff map if needed (passed as parameter to avoid repeated atomic loads)
+if (needDebugMap) {
+    // Reuse the buffer if it's the right size, otherwise allocate
+    if (g_debugDiffMap.size() != lab1.size() || g_debugDiffMap.type() != CV_8UC3) {
+        g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
+    } else {
+        g_debugDiffMap.setTo(cv::Scalar(0, 0, 0));
+    }
+}
 
-    for (int y = 0; y < lab1.rows; y++) {
-        const cv::Vec3b* row1 = lab1.ptr<cv::Vec3b>(y);
-        const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
-        cv::Vec3b* diffRow = needDebugMap ? g_debugDiffMap.ptr<cv::Vec3b>(y) : nullptr;
+double totalDistance = 0.0;
+int pixelCount = 0;
 
-        for (int x = 0; x < lab1.cols; x++) {
-            if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) continue;
+for (int y = 0; y < lab1.rows; y++) {
+    const cv::Vec3b* row1 = lab1.ptr<cv::Vec3b>(y);
+    const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
+    cv::Vec3b* diffRow = needDebugMap ? g_debugDiffMap.ptr<cv::Vec3b>(y) : nullptr;
 
-            float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
-            float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
-            float db = static_cast<float>(row1[x][2]) - static_cast<float>(row2[x][2]);
+    for (int x = 0; x < lab1.cols; x++) {
+        if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) continue;
 
-            float dist = std::sqrt(dL * dL + da * da + db * db);
-            totalDistance += dist;
-            pixelCount++;
+        float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
+        float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
+        float db = static_cast<float>(row1[x][2]) - static_cast<float>(row2[x][2]);
 
-            if (needDebugMap) {
-                if (dist < 10.0f) {
-                    diffRow[x] = cv::Vec3b(0, 0, 0);
+        float dist = std::sqrt(dL * dL + da * da + db * db);
+        totalDistance += dist;
+        pixelCount++;
+
+        if (needDebugMap) {
+            if (dist < 10.0f) {
+                diffRow[x] = cv::Vec3b(0, 0, 0);
+            }
+            else {
+                float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
+                uchar intensity = static_cast<uchar>(normalized * 255.0f);
+                if (normalized < 0.5f) {
+                    diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
                 }
                 else {
-                    float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
-                    uchar intensity = static_cast<uchar>(normalized * 255.0f);
-                    if (normalized < 0.5f) {
-                        diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
-                    }
-                    else {
-                        diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
-                    }
+                    diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
                 }
             }
         }
     }
+}
 
-    if (pixelCount == 0) return 0.0f;
+if (pixelCount == 0) return 0.0f;
 
-    double avgDistance = totalDistance / pixelCount;
-    double similarity = 1.0 - std::min(avgDistance / 100.0, 1.0);
+double avgDistance = totalDistance / pixelCount;
+double similarity = 1.0 - std::min(avgDistance / 100.0, 1.0);
 
-    return static_cast<float>(similarity);
+return static_cast<float>(similarity);
 }
 
 static void SaveAsBestMatch() {
@@ -156,7 +165,8 @@ static void SaveAsBestMatch() {
     g_debugBestDiffMap = g_debugDiffMap.clone();
 }
 
-GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
+GemType ClassifyGemByShape(const cv::Mat&processedImage, const cv::Mat&processedImageLab,
+                           float* outBestMatch,
                            int* outBestFrame, bool needDebugMap) {
     if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
         if (outBestMatch) *outBestMatch = 0.0f;
@@ -186,7 +196,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(lastMatchedType, lastMatchedFrame);
         
         if (!refImageLab.empty()) {
-            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr, needDebugMap);
+            float score = CalculateColorSimilarity(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr, needDebugMap);
             
             if (score > bestScore) {
                 bestScore = score;
@@ -225,7 +235,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
         float score = 0.0f;
 
         if (!refImageLab.empty()) {
-            score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr, needDebugMap);
+            score = CalculateColorSimilarity(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr, needDebugMap);
         }
 
         firstFrameScores[i] = {type, score};
@@ -273,7 +283,7 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
             const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
             if (refImageLab.empty()) continue;
 
-            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr, needDebugMap);
+            float score = CalculateColorSimilarity(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr, needDebugMap);
 
             if (score > bestScore) {
                 bestScore = score;

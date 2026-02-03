@@ -17,7 +17,7 @@ namespace ShapeParams {
 //   3 = side-by-side (input | reference)
 //   4 = difference heat map
 //   5 = heat map overlaid on input
-    inline std::atomic<int> debugStage{4};
+    inline std::atomic<int> debugStage{1};
 
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching
     inline std::atomic<int> matchThreshold{80};
@@ -43,11 +43,13 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion);
  * Classify a gem by comparing its color to reference images.
  * 
  * @param processedImage The gem image to classify
+ * @param processedImageLab Optional pre-converted LAB version of processedImage to avoid redundant conversion
  * @param outBestMatch Optional pointer to store the best match score
  * @param outBestFrame Optional pointer to store the best matching frame index
  * @param needDebugMap Whether debug visualization is needed (passed from frame level to avoid atomic loads)
  */
 GemType ClassifyGemByShape(const cv::Mat&processedImage,
+                           const cv::Mat&processedImageLab = cv::Mat(),
                            float* outBestMatch = nullptr,
                            int* outBestFrame = nullptr,
                            bool needDebugMap = false);
