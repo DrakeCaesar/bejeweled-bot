@@ -253,6 +253,8 @@ auto checkMatch = [&](GemType type, int frame) -> float {
 };
 
 // Phase 0: Temporal coherence - check last matched frame first
+bool phase0CheckedAllFrame0s = false;
+
 if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     float score = checkMatch(lastType, lastFrame);
     if (score > bestScore) {
@@ -280,6 +282,7 @@ if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     bool isFrame0 = (lastFrame == 0);
         
     if (isRegularGem && isFrame0) {
+        phase0CheckedAllFrame0s = true;
         // Was frame 0 of regular gem - check other regular gems' frame 0
         for (int i = 0; i < numRegularGems; i++) {
             if (regularGems[i] == lastType) continue; // Already checked
@@ -355,6 +358,7 @@ if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
         }
     }
     else { // HYPERCUBE
+        phase0CheckedAllFrame0s = true;
         // Was HYPERCUBE frame - check next frame in hypercube animation
         int frameCount = MaskLoader::GetFrameCount(GemType::HYPERCUBE);
         int nextFrame = (lastFrame + 1) % frameCount;
@@ -435,6 +439,8 @@ struct FirstFrameResult {
 };
 FirstFrameResult firstFrameScores[8];
 
+// Only check frame 0s if Phase 0 didn't already cover them
+if (!phase0CheckedAllFrame0s) {
     // Check all regular gems frame 0 + hypercube frame 0
     for (int i = 0; i < numRegularGems; i++) {
         float score = checkMatch(regularGems[i], 0);
@@ -531,25 +537,26 @@ FirstFrameResult firstFrameScores[8];
             }
         }
     }
+}
 
-    // Update cache with best match
-    cache.type = bestType;
-    cache.frame = bestFrame;
+// Update cache with best match (reached when no match >= threshold was found)
+cache.type = bestType;
+cache.frame = bestFrame;
 
-    if (outBestMatch) *outBestMatch = bestScore;
-    if (outBestFrame) *outBestFrame = bestFrame;
+if (outBestMatch) *outBestMatch = bestScore;
+if (outBestFrame) *outBestFrame = bestFrame;
 
-    // Generate debug visualization for best match if needed
-    if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
-        const cv::Mat&refImageLab = MaskLoader::GetLabMask(bestType, bestFrame);
-        const cv::Mat&refImageBgr = MaskLoader::GetMask(bestType, bestFrame);
-        const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(bestType, bestFrame);
-        if (!refImageLab.empty()) {
-            GenerateDebugVisualization(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr);
-        }
+// Generate debug visualization for best match if needed
+if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
+    const cv::Mat&refImageLab = MaskLoader::GetLabMask(bestType, bestFrame);
+    const cv::Mat&refImageBgr = MaskLoader::GetMask(bestType, bestFrame);
+    const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(bestType, bestFrame);
+    if (!refImageLab.empty()) {
+        GenerateDebugVisualization(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr);
     }
+}
 
-    if (bestScore < 0.4f) return GemType::UNKNOWN;
+if (bestScore < 0.4f) return GemType::UNKNOWN;
 
-    return bestType;
+return bestType;
 }
