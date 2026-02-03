@@ -4,9 +4,11 @@
 namespace MaskLoader {
 // Static storage for masks
     static MaskStorage s_masks;
+    static LabMaskStorage s_labMasks;
     static AlphaMaskStorage s_alphaMasks;
     static RingMaskStorage s_ringMasks;
     static HypercubeMaskStorage s_hypercubeMasks;
+    static HypercubeLabMaskStorage s_hypercubeLabMasks;
     static HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
     static HypercubeRingMaskStorage s_hypercubeRingMasks;
     static bool s_loaded = false;
@@ -187,7 +189,12 @@ namespace MaskLoader {
                     }
                 }
 
+                // Convert to Lab color space for pre-conversion optimization
+                cv::Mat labFrame;
+                cv::cvtColor(colorFrame, labFrame, cv::COLOR_BGR2Lab);
+
                 s_masks[gemIndex][frameIndex] = colorFrame;
+                s_labMasks[gemIndex][frameIndex] = labFrame;
                 s_alphaMasks[gemIndex][frameIndex] = maskFrame;
                 s_ringMasks[gemIndex][frameIndex] = ringMask;
                 frameIndex++;
@@ -248,8 +255,13 @@ namespace MaskLoader {
                 }
             }
 
+            // Convert to Lab color space for pre-conversion optimization
+            cv::Mat labImage;
+            cv::cvtColor(staticImage, labImage, cv::COLOR_BGR2Lab);
+
             // Store as frame 0 in main storage
             s_masks[gemIndex][0] = staticImage;
+            s_labMasks[gemIndex][0] = labImage;
             s_alphaMasks[gemIndex][0] = alphaMask;
             s_ringMasks[gemIndex][0] = BuildRingMask(alphaMask);
 
@@ -312,7 +324,12 @@ namespace MaskLoader {
                     }
                 }
 
+                // Convert to Lab color space for pre-conversion optimization
+                cv::Mat labFrame;
+                cv::cvtColor(colorFrame, labFrame, cv::COLOR_BGR2Lab);
+
                 s_hypercubeMasks[frameIndex] = colorFrame;
+                s_hypercubeLabMasks[frameIndex] = labFrame;
                 s_hypercubeAlphaMasks[frameIndex] = maskFrame;
                 s_hypercubeRingMasks[frameIndex] = ringMask;
                 frameIndex++;
@@ -407,6 +424,21 @@ namespace MaskLoader {
             return s_emptyMask;
         }
         return s_ringMasks[gemIndex][frameIndex];
+    }
+
+    const cv::Mat& GetLabMask(GemType type, int frameIndex) {
+        if (type == GemType::HYPERCUBE) {
+            if (frameIndex < 0 || frameIndex >= HYPERCUBE_FRAMES) {
+                return s_emptyMask;
+            }
+            return s_hypercubeLabMasks[frameIndex];
+        }
+
+        int gemIndex = GemTypeToIndex(type);
+        if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
+            return s_emptyMask;
+        }
+        return s_labMasks[gemIndex][frameIndex];
     }
 
     int GetFrameCount(GemType type) {

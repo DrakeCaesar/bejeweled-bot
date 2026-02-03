@@ -67,33 +67,33 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // Color Similarity Calculation
 // ============================================================================
 
-static float CalculateColorSimilarity(const cv::Mat&img1, const cv::Mat&img2,
-                                  const cv::Mat&alphaMask = cv::Mat()) {
-if (img1.empty() || img2.empty()) return 0.0f;
+static float CalculateColorSimilarity(const cv::Mat&img1, const cv::Mat&img2Lab,
+                                  const cv::Mat&alphaMask = cv::Mat(), const cv::Mat&img2Bgr = cv::Mat()) {
+if (img1.empty() || img2Lab.empty()) return 0.0f;
 
 cv::Mat i1 = img1.clone();
 cv::Mat mask = alphaMask.empty() ? cv::Mat() : alphaMask.clone();
 
 // Apply mask only to img1 (captured game screen)
 // img2 (reference image) already has the mask pre-applied at load time
-if (!mask.empty()) {
-    for (int y = 0; y < i1.rows; y++) {
-        cv::Vec3b* row1 = i1.ptr<cv::Vec3b>(y);
-        const uchar* maskRow = mask.ptr<uchar>(y);
-        for (int x = 0; x < i1.cols; x++) {
-            if (maskRow[x] == 0) {
-                row1[x] = cv::Vec3b(0, 0, 0);
-            }
+for (int y = 0; y < i1.rows; y++) {
+    cv::Vec3b* row1 = i1.ptr<cv::Vec3b>(y);
+    const uchar* maskRow = mask.ptr<uchar>(y);
+    for (int x = 0; x < i1.cols; x++) {
+        if (maskRow[x] == 0) {
+            row1[x] = cv::Vec3b(0, 0, 0);
         }
     }
 }
 
 g_debugMaskedInput = i1.clone();
-g_debugMaskedRef = img2.clone();
+g_debugMaskedRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
 
-    thread_local cv::Mat lab1, lab2;
+    thread_local cv::Mat lab1;
     cv::cvtColor(i1, lab1, cv::COLOR_BGR2Lab);
-    cv::cvtColor(img2, lab2, cv::COLOR_BGR2Lab);
+    
+    // img2Lab is already in Lab color space (pre-converted at load time)
+    const cv::Mat& lab2 = img2Lab;
 
     g_debugDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
 
@@ -171,11 +171,12 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
 
     // Fast path: Check last matched frame first (temporal coherence)
     if (lastMatchedType != GemType::UNKNOWN && lastMatchedFrame >= 0) {
-        const cv::Mat&refImage = MaskLoader::GetMask(lastMatchedType, lastMatchedFrame);
+        const cv::Mat&refImageLab = MaskLoader::GetLabMask(lastMatchedType, lastMatchedFrame);
+        const cv::Mat&refImageBgr = MaskLoader::GetMask(lastMatchedType, lastMatchedFrame);
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(lastMatchedType, lastMatchedFrame);
         
-        if (!refImage.empty()) {
-            float score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
+        if (!refImageLab.empty()) {
+            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr);
             
             if (score > bestScore) {
                 bestScore = score;
@@ -208,12 +209,13 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
             continue;
         }
 
-        const cv::Mat&refImage = MaskLoader::GetMask(type, 0);
+        const cv::Mat&refImageLab = MaskLoader::GetLabMask(type, 0);
+        const cv::Mat&refImageBgr = MaskLoader::GetMask(type, 0);
         const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, 0);
         float score = 0.0f;
 
-        if (!refImage.empty()) {
-            score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
+        if (!refImageLab.empty()) {
+            score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr);
         }
 
         firstFrameScores[i] = {type, score};
@@ -256,11 +258,12 @@ GemType ClassifyGemByShape(const cv::Mat&processedImage, float* outBestMatch,
                 continue;
             }
 
-            const cv::Mat&refImage = MaskLoader::GetMask(type, frame);
+            const cv::Mat&refImageLab = MaskLoader::GetLabMask(type, frame);
+            const cv::Mat&refImageBgr = MaskLoader::GetMask(type, frame);
             const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
-            if (refImage.empty()) continue;
+            if (refImageLab.empty()) continue;
 
-            float score = CalculateColorSimilarity(processedImage, refImage, alphaMask);
+            float score = CalculateColorSimilarity(processedImage, refImageLab, alphaMask, refImageBgr);
 
             if (score > bestScore) {
                 bestScore = score;

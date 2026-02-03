@@ -36,6 +36,10 @@ namespace MaskLoader {
     using MaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
+// Storage for Lab color space reference images (pre-converted for performance)
+    using LabMaskStorage =
+    std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+
 // Storage for binary alpha masks: [gem_type][frame_index] -> grayscale mask
     using AlphaMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
@@ -48,6 +52,7 @@ namespace MaskLoader {
     using HypercubeMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+    using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 /**
  * Load all gem reference images from the assets folder.
@@ -99,6 +104,16 @@ namespace MaskLoader {
  * @return The ring mask (grayscale, 0=background, 255=ring), or empty Mat if not found
  */
      const cv::Mat& GetRingMask(GemType type, int frameIndex);
+
+/**
+ * Get a specific Lab color space reference image for a gem type and frame.
+ * Lab images are pre-converted from BGR for performance optimization.
+ *
+ * @param type The gem type (RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE, HYPERCUBE)
+ * @param frameIndex Frame index 0-20 (or 0-59 for HYPERCUBE)
+ * @return The Lab color space image, or empty Mat if not found
+ */
+    const cv::Mat& GetLabMask(GemType type, int frameIndex);
 
 /**
  * Get the number of frames for a given gem type.
