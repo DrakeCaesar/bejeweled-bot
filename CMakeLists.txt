@@ -56,7 +56,8 @@ target_include_directories(bejeweled-bot PRIVATE
 if(MSVC)
     target_compile_options(bejeweled-bot PRIVATE
         /MP${num_jobs}
-        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /DNDEBUG>
+        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG>
+        $<$<CONFIG:Debug>:/ZI>
     )
     target_link_options(bejeweled-bot PRIVATE
         $<$<CONFIG:Release>:/LTCG>
