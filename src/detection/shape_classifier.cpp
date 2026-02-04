@@ -74,13 +74,14 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // ============================================================================
 
 __declspec(noinline)
-static float CalculateColorSimilarity(const cv::Mat&img1Lab,
+static int CalculateColorSimilarity(const cv::Mat&img1Lab,
                                   const cv::Mat&img2Lab) {
-if (img1Lab.empty() || img2Lab.empty()) return 0.0f;
+if (img1Lab.empty() || img2Lab.empty()) return 0;
 
 // Compare LAB images - Reference already has mask applied (background = (0,128,128))
+// Returns similarity score on integer scale 0-10000 (representing 0.00% to 100.00%)
 
-double totalDistance = 0.0;
+uint64_t totalDistanceSq = 0;
 int pixelCount = 0;
 
 for (int y = 0; y < img1Lab.rows; y++) {
@@ -91,22 +92,22 @@ for (int y = 0; y < img1Lab.rows; y++) {
         // Skip background pixels in reference image (already masked to black in LAB)
         if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
 
-        float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
-        float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
-        float db = static_cast<float>(row1[x][2]) - static_cast<float>(row2[x][2]);
+        int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
+        int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
+        int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
 
-        float dist = std::sqrt(dL * dL + da * da + db * db);
-        totalDistance += dist;
+        totalDistanceSq += dL * dL + da * da + db * db;
         pixelCount++;
     }
 }
 
-if (pixelCount == 0) return 0.0f;
+if (pixelCount == 0) return 0;
 
-double avgDistance = totalDistance / pixelCount;
-double similarity = 1.0 - std::min(avgDistance / 100.0, 1.0);
+// All-integer calculation: similarity = 1.0 - sqrt(avgDistSq)/100.0
+// Using squared distance without sqrt (monotonic), scale 0-10000
+if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
 
-return static_cast<float>(similarity);
+return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
 }
 
 __declspec(noinline)
@@ -147,11 +148,11 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
             // Skip background pixels in reference image (already masked to black in LAB)
             if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
 
-            float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
-            float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
-            float db = static_cast<float>(row1[x][2]) - static_cast<float>(row2[x][2]);
+            int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
+            int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
+            int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
 
-            float dist = std::sqrt(dL * dL + da * da + db * db);
+            float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
 
             if (dist < 10.0f) {
                 diffRow[x] = cv::Vec3b(0, 0, 0);
@@ -175,11 +176,11 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
 // ============================================================================
 
 // Check a specific type/frame with caching to avoid redundant comparisons
-static float CheckMatchScore(
+static int CheckMatchScore(
     GemType type, 
     int frame,
     const cv::Mat& processedImageLab,
-    float* scoreCache,
+    int* scoreCache,
     bool* checkedFlags,
     int maxCacheSize,
     int maxFramesPerType)
@@ -193,7 +194,7 @@ static float CheckMatchScore(
     
     // Compute score
     const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
-    float score = 0.0f;
+    int score = 0;
     if (!refImageLab.empty()) {
         score = CalculateColorSimilarity(processedImageLab, refImageLab);
     }
@@ -211,7 +212,7 @@ static float CheckMatchScore(
 static GemType FinalizeMatch(
     GemType type,
     int frame,
-    float score,
+    int score,
     GemMatchCache& cache,
     float* outBestMatch,
     int* outBestFrame,
@@ -221,7 +222,7 @@ static GemType FinalizeMatch(
 {
     cache.type = type;
     cache.frame = frame;
-    if (outBestMatch) *outBestMatch = score;
+    if (outBestMatch) *outBestMatch = score / 10000.0f;  // Convert int (0-10000) to float (0.0-1.0)
     if (outBestFrame) *outBestFrame = frame;
     if (needDebugMap) {
         const cv::Mat& refImageBgr = MaskLoader::GetMask(type, frame);
@@ -237,16 +238,16 @@ static bool TryMatch(
     GemType type,
     int frame,
     const cv::Mat& processedImageLab,
-    float* scoreCache,
+    int* scoreCache,
     bool* checkedFlags,
     int maxCacheSize,
     int maxFramesPerType,
-    float threshold,
+    int threshold,
     GemType& bestType,
-    float& bestScore,
+    int& bestScore,
     int& bestFrame)
 {
-    float score = CheckMatchScore(type, frame, processedImageLab, 
+    int score = CheckMatchScore(type, frame, processedImageLab, 
                                    scoreCache, checkedFlags, 
                                    maxCacheSize, maxFramesPerType);
     if (score > bestScore) {
@@ -274,9 +275,10 @@ static const GemType allGemTypes[] = {
 };
 static const int numAllGemTypes = 8;
 
-float threshold = ShapeParams::matchThreshold.load() / 100.0f;
+// Use integer threshold (0-10000 scale representing 0.00%-100.00%)
+int threshold = ShapeParams::matchThreshold.load() * 100;
 GemType bestType = GemType::UNKNOWN;
-float bestScore = 0.0f;
+int bestScore = 0;
 int bestFrame = -1;
 
 // Get last match for this specific gem position
@@ -288,7 +290,7 @@ int lastFrame = cache.frame;
 // Use array indexed by (type * MAX_FRAMES + frame) for fast lookup
 constexpr int MAX_FRAMES_PER_TYPE = 32;  // Conservative upper bound
 constexpr int MAX_CACHE_SIZE = 8 * MAX_FRAMES_PER_TYPE;
-thread_local float scoreCache[MAX_CACHE_SIZE];
+thread_local int scoreCache[MAX_CACHE_SIZE];
 thread_local bool checkedFlags[MAX_CACHE_SIZE];
 std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
 
@@ -320,12 +322,12 @@ if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
 // Phase 1: Check frame 0 of all gem types (cache prevents redundant computation)
 struct FirstFrameResult {
     GemType type;
-    float score;
+    int score;
 };
 FirstFrameResult firstFrameScores[8];
 
 for (int i = 0; i < numAllGemTypes; i++) {
-    float score = CheckMatchScore(allGemTypes[i], 0, processedImageLab,
+    int score = CheckMatchScore(allGemTypes[i], 0, processedImageLab,
                                    scoreCache, checkedFlags,
                                    MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE);
     firstFrameScores[i] = {allGemTypes[i], score};
@@ -374,7 +376,7 @@ for (int i = 0; i < numAllGemTypes; i++) {
 cache.type = bestType;
 cache.frame = bestFrame;
 
-if (outBestMatch) *outBestMatch = bestScore;
+if (outBestMatch) *outBestMatch = bestScore / 10000.0f;  // Convert int (0-10000) to float (0.0-1.0)
 if (outBestFrame) *outBestFrame = bestFrame;
 
 // Generate debug visualization for best match if needed
@@ -387,7 +389,8 @@ if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
     }
 }
 
-if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT / 100.0f) return GemType::UNKNOWN;
+// Integer comparison: bestScore is 0-10000, threshold is 0-10000
+if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT * 100) return GemType::UNKNOWN;
 
 return bestType;
 }
