@@ -74,35 +74,21 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 
 __declspec(noinline)
 static float CalculateColorSimilarity(const cv::Mat&img1Lab,
-                                  const cv::Mat&img2Lab,
-                                  const cv::Mat&alphaMask) {
+                                  const cv::Mat&img2Lab) {
 if (img1Lab.empty() || img2Lab.empty()) return 0.0f;
 
-// Apply mask to LAB image for comparison
-cv::Mat lab1 = img1Lab.clone();
-if (!alphaMask.empty()) {
-    for (int y = 0; y < lab1.rows; y++) {
-        cv::Vec3b* labRow = lab1.ptr<cv::Vec3b>(y);
-        const uchar* maskRow = alphaMask.ptr<uchar>(y);
-        for (int x = 0; x < lab1.cols; x++) {
-            if (maskRow[x] == 0) {
-                labRow[x] = cv::Vec3b(0, 128, 128);  // Black in LAB space
-            }
-        }
-    }
-}
-
-const cv::Mat& lab2 = img2Lab;
+// Compare LAB images - Reference already has mask applied (background = (0,128,128))
 
 double totalDistance = 0.0;
 int pixelCount = 0;
 
-for (int y = 0; y < lab1.rows; y++) {
-    const cv::Vec3b* row1 = lab1.ptr<cv::Vec3b>(y);
-    const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
+for (int y = 0; y < img1Lab.rows; y++) {
+    const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
+    const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
 
-    for (int x = 0; x < lab1.cols; x++) {
-        if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) continue;
+    for (int x = 0; x < img1Lab.cols; x++) {
+        // Skip background pixels in reference image (already masked to black in LAB)
+        if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
 
         float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
         float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
@@ -145,32 +131,20 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
     g_debugBestInput = i1;
     g_debugBestRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
 
-    // Apply mask to LAB image
-    cv::Mat lab1 = img1Lab.clone();
-    if (!alphaMask.empty()) {
-        for (int y = 0; y < lab1.rows; y++) {
-            cv::Vec3b* labRow = lab1.ptr<cv::Vec3b>(y);
-            const uchar* maskRow = alphaMask.ptr<uchar>(y);
-            for (int x = 0; x < lab1.cols; x++) {
-                if (maskRow[x] == 0) {
-                    labRow[x] = cv::Vec3b(0, 128, 128);
-                }
-            }
-        }
-    }
-
+    // Reference LAB image already has mask applied (background = (0,128,128))
     const cv::Mat& lab2 = img2Lab;
 
     // Generate diff map
-    g_debugBestDiffMap = cv::Mat::zeros(lab1.rows, lab1.cols, CV_8UC3);
+    g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
 
-    for (int y = 0; y < lab1.rows; y++) {
-        const cv::Vec3b* row1 = lab1.ptr<cv::Vec3b>(y);
+    for (int y = 0; y < img1Lab.rows; y++) {
+        const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
         const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
         cv::Vec3b* diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
 
-        for (int x = 0; x < lab1.cols; x++) {
-            if (row1[x][0] == 0 && row1[x][1] == 128 && row1[x][2] == 128) continue;
+        for (int x = 0; x < img1Lab.cols; x++) {
+            // Skip background pixels in reference image (already masked to black in LAB)
+            if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
 
             float dL = static_cast<float>(row1[x][0]) - static_cast<float>(row2[x][0]);
             float da = static_cast<float>(row1[x][1]) - static_cast<float>(row2[x][1]);
@@ -218,10 +192,9 @@ static float CheckMatchScore(
     
     // Compute score
     const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
-    const cv::Mat& alphaMask = MaskLoader::GetAlphaMask(type, frame);
     float score = 0.0f;
     if (!refImageLab.empty()) {
-        score = CalculateColorSimilarity(processedImageLab, refImageLab, alphaMask);
+        score = CalculateColorSimilarity(processedImageLab, refImageLab);
     }
     
     // Cache result
