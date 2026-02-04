@@ -1,0 +1,8 @@
+# Exclude build artifacts and external dependencies from IntelliSense
+[*.{cpp,h,hpp,c}]
+
+# Paths to exclude from IntelliSense scanning
+cpp_exclude_paths = out/**;vcpkg/buildtrees/**;vcpkg/packages/**;build/**;cmake-build-*/**
+
+# Focus IntelliSense on source code only
+cpp_include_directories = src/**
