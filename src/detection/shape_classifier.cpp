@@ -193,6 +193,94 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
     }
 }
 
+// ============================================================================
+// Gem Classification Helper Functions
+// ============================================================================
+
+// Check a specific type/frame with caching to avoid redundant comparisons
+static float CheckMatchScore(
+    GemType type, 
+    int frame,
+    const cv::Mat& processedImageLab,
+    float* scoreCache,
+    bool* checkedFlags,
+    int maxCacheSize,
+    int maxFramesPerType)
+{
+    int idx = static_cast<int>(type) * maxFramesPerType + frame;
+    
+    // Return cached score if already checked
+    if (idx >= 0 && idx < maxCacheSize && checkedFlags[idx]) {
+        return scoreCache[idx];
+    }
+    
+    // Compute score
+    const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
+    const cv::Mat& alphaMask = MaskLoader::GetAlphaMask(type, frame);
+    float score = 0.0f;
+    if (!refImageLab.empty()) {
+        score = CalculateColorSimilarity(processedImageLab, refImageLab, alphaMask);
+    }
+    
+    // Cache result
+    if (idx >= 0 && idx < maxCacheSize) {
+        scoreCache[idx] = score;
+        checkedFlags[idx] = true;
+    }
+    
+    return score;
+}
+
+// Finalize a match by updating cache and output parameters
+static GemType FinalizeMatch(
+    GemType type,
+    int frame,
+    float score,
+    GemMatchCache& cache,
+    float* outBestMatch,
+    int* outBestFrame,
+    bool needDebugMap,
+    const cv::Mat& processedImage,
+    const cv::Mat& processedImageLab)
+{
+    cache.type = type;
+    cache.frame = frame;
+    if (outBestMatch) *outBestMatch = score;
+    if (outBestFrame) *outBestFrame = frame;
+    if (needDebugMap) {
+        const cv::Mat& refImageBgr = MaskLoader::GetMask(type, frame);
+        GenerateDebugVisualization(processedImage, processedImageLab,
+            MaskLoader::GetLabMask(type, frame),
+            MaskLoader::GetAlphaMask(type, frame), refImageBgr);
+    }
+    return type;
+}
+
+// Try matching a specific type/frame, updating best score and returning if threshold met
+static bool TryMatch(
+    GemType type,
+    int frame,
+    const cv::Mat& processedImageLab,
+    float* scoreCache,
+    bool* checkedFlags,
+    int maxCacheSize,
+    int maxFramesPerType,
+    float threshold,
+    GemType& bestType,
+    float& bestScore,
+    int& bestFrame)
+{
+    float score = CheckMatchScore(type, frame, processedImageLab, 
+                                   scoreCache, checkedFlags, 
+                                   maxCacheSize, maxFramesPerType);
+    if (score > bestScore) {
+        bestScore = score;
+        bestType = type;
+        bestFrame = frame;
+    }
+    return score >= threshold;
+}
+
 GemType ClassifyGemByShape(const cv::Mat&processedImage, const cv::Mat&processedImageLab,
                        int gemRow, int gemCol,
                        float* outBestMatch,
@@ -202,6 +290,13 @@ if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
     if (outBestFrame) *outBestFrame = -1;
     return GemType::UNKNOWN;
 }
+
+// All gem types including hypercube for unified iteration
+static const GemType allGemTypes[] = {
+    GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
+    GemType::BLUE, GemType::PURPLE, GemType::WHITE, GemType::HYPERCUBE
+};
+static const int numAllGemTypes = 8;
 
 float threshold = ShapeParams::matchThreshold.load() / 100.0f;
 GemType bestType = GemType::UNKNOWN;
@@ -221,78 +316,27 @@ thread_local float scoreCache[MAX_CACHE_SIZE];
 thread_local bool checkedFlags[MAX_CACHE_SIZE];
 std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
 
-// Helper lambda to check a specific type/frame (with caching)
-auto checkMatch = [&](GemType type, int frame) -> float {
-    int idx = static_cast<int>(type) * MAX_FRAMES_PER_TYPE + frame;
-    
-    // Return cached score if already checked
-    if (idx >= 0 && idx < MAX_CACHE_SIZE && checkedFlags[idx]) {
-        return scoreCache[idx];
-    }
-    
-    // Compute score
-    const cv::Mat&refImageLab = MaskLoader::GetLabMask(type, frame);
-    const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(type, frame);
-    float score = 0.0f;
-    if (!refImageLab.empty()) {
-        score = CalculateColorSimilarity(processedImageLab, refImageLab, alphaMask);
-    }
-    
-    // Cache result
-    if (idx >= 0 && idx < MAX_CACHE_SIZE) {
-        scoreCache[idx] = score;
-        checkedFlags[idx] = true;
-    }
-    
-    return score;
-};
-
-// All gem types including hypercube for unified iteration
-static const GemType allGemTypes[] = {
-    GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
-    GemType::BLUE, GemType::PURPLE, GemType::WHITE, GemType::HYPERCUBE
-};
-static const int numAllGemTypes = 8;
-
-// Helper lambda to finalize a match (reduces code duplication)
-auto finalizeMatch = [&](GemType type, int frame, float score) -> GemType {
-    cache.type = type;
-    cache.frame = frame;
-    if (outBestMatch) *outBestMatch = score;
-    if (outBestFrame) *outBestFrame = frame;
-    if (needDebugMap) {
-        const cv::Mat& refImageBgr = MaskLoader::GetMask(type, frame);
-        GenerateDebugVisualization(processedImage, processedImageLab,
-            MaskLoader::GetLabMask(type, frame),
-            MaskLoader::GetAlphaMask(type, frame), refImageBgr);
-    }
-    return type;
-};
-
-// Helper to check and potentially return early if threshold met
-auto tryMatch = [&](GemType type, int frame) -> bool {
-    float score = checkMatch(type, frame);
-    if (score > bestScore) {
-        bestScore = score;
-        bestType = type;
-        bestFrame = frame;
-    }
-    return score >= threshold;
-};
-
 // Phase 0: Temporal coherence - check cached match and next animation frame
 if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     // Check the exact cached position first
-    if (tryMatch(lastType, lastFrame)) {
-        return finalizeMatch(lastType, lastFrame, bestScore);
+    if (TryMatch(lastType, lastFrame, processedImageLab, 
+                 scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
+                 threshold, bestType, bestScore, bestFrame)) {
+        return FinalizeMatch(lastType, lastFrame, bestScore, cache,
+                            outBestMatch, outBestFrame, needDebugMap,
+                            processedImage, processedImageLab);
     }
     
     // If we were in an animation, check the next frame
     if (lastFrame > 0) {
         int frameCount = MaskLoader::GetFrameCount(lastType);
         int nextFrame = (lastFrame + 1) % frameCount;
-        if (nextFrame != 0 && tryMatch(lastType, nextFrame)) {
-            return finalizeMatch(lastType, nextFrame, bestScore);
+        if (nextFrame != 0 && TryMatch(lastType, nextFrame, processedImageLab,
+                                       scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
+                                       threshold, bestType, bestScore, bestFrame)) {
+            return FinalizeMatch(lastType, nextFrame, bestScore, cache,
+                                outBestMatch, outBestFrame, needDebugMap,
+                                processedImage, processedImageLab);
         }
     }
 }
@@ -305,7 +349,9 @@ struct FirstFrameResult {
 FirstFrameResult firstFrameScores[8];
 
 for (int i = 0; i < numAllGemTypes; i++) {
-    float score = checkMatch(allGemTypes[i], 0);
+    float score = CheckMatchScore(allGemTypes[i], 0, processedImageLab,
+                                   scoreCache, checkedFlags,
+                                   MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE);
     firstFrameScores[i] = {allGemTypes[i], score};
     
     if (score > bestScore) {
@@ -315,7 +361,9 @@ for (int i = 0; i < numAllGemTypes; i++) {
     }
     
     if (score >= threshold) {
-        return finalizeMatch(allGemTypes[i], 0, score);
+        return FinalizeMatch(allGemTypes[i], 0, score, cache,
+                            outBestMatch, outBestFrame, needDebugMap,
+                            processedImage, processedImageLab);
     }
 }
 
@@ -336,8 +384,12 @@ for (int i = 0; i < numAllGemTypes; i++) {
     int frameCount = MaskLoader::GetFrameCount(type);
 
     for (int frame = 1; frame < frameCount; frame++) {
-        if (tryMatch(type, frame)) {
-            return finalizeMatch(type, frame, bestScore);
+        if (TryMatch(type, frame, processedImageLab,
+                     scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
+                     threshold, bestType, bestScore, bestFrame)) {
+            return FinalizeMatch(type, frame, bestScore, cache,
+                                outBestMatch, outBestFrame, needDebugMap,
+                                processedImage, processedImageLab);
         }
     }
 }
