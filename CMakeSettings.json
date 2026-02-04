@@ -9,10 +9,6 @@
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "variables": [
         {
-          "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "${projectDir}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
-        },
-        {
           "name": "VCPKG_TARGET_TRIPLET",
           "value": "x64-windows"
         }
@@ -26,10 +22,6 @@
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "variables": [
-        {
-          "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "${projectDir}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
-        },
         {
           "name": "VCPKG_TARGET_TRIPLET",
           "value": "x64-windows-static"
@@ -46,10 +38,6 @@
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "variables": [
         {
-          "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "${projectDir}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
-        },
-        {
           "name": "VCPKG_TARGET_TRIPLET",
           "value": "x64-windows"
         }
@@ -63,10 +51,6 @@
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "variables": [
-        {
-          "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "${projectDir}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
-        },
         {
           "name": "VCPKG_TARGET_TRIPLET",
           "value": "x64-windows-static"
@@ -83,10 +67,6 @@
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "variables": [
         {
-          "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "${projectDir}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
-        },
-        {
           "name": "VCPKG_TARGET_TRIPLET",
           "value": "x64-windows"
         }
@@ -100,10 +80,6 @@
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
       "variables": [
-        {
-          "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "${projectDir}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
-        },
         {
           "name": "VCPKG_TARGET_TRIPLET",
           "value": "x64-windows-static"
