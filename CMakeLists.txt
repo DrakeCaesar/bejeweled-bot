@@ -66,12 +66,12 @@ target_include_directories(bejeweled-bot PRIVATE
 if(MSVC)
     target_compile_options(bejeweled-bot PRIVATE
         /MP${num_jobs}
-        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG /Zi>
-        $<$<CONFIG:RelWithDebInfo>:/O2 /Ob1 /fp:fast /arch:AVX2 /Zi>
+        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG>
+        $<$<CONFIG:RelWithDebInfo>:/O2 /Ob2 /fp:fast /arch:AVX2 /DNDEBUG /Zi /Oy->
         $<$<CONFIG:Debug>:/ZI /Od>
     )
     target_link_options(bejeweled-bot PRIVATE
-        $<$<CONFIG:Release>:/LTCG /DEBUG /OPT:REF /OPT:ICF>
+        $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>
         $<$<CONFIG:RelWithDebInfo>:/DEBUG /OPT:REF /OPT:ICF>
         $<$<CONFIG:Debug>:/DEBUG>
     )
