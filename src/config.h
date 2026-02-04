@@ -25,7 +25,6 @@ namespace Config {
 
 // Display settings
     const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
-    const int TARGET_FPS = 30; // Target frames per second for capture
     const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
 // Frame deduplication settings
@@ -49,4 +48,9 @@ namespace Config {
     const cv::Scalar BANNER_BG_COLOR =
             cv::Scalar(40, 40, 40); // Dark gray background
     const cv::Scalar BANNER_TEXT_COLOR = cv::Scalar(0, 255, 0); // Green text
+
+// Gem classification settings
+    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 80;  // Early exit threshold during search (0-100)
+    const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 60;   // Final fallback threshold for classification (0-100)
+
 } // namespace Config

@@ -1,5 +1,6 @@
 #include "shape_classifier.h"
 #include "mask_loader.h"
+#include "config.h"
 #include <cmath>
 #include <opencv2/opencv.hpp>
 
@@ -358,7 +359,7 @@ if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
     }
 }
 
-if (bestScore < threshold) return GemType::UNKNOWN;
+if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT / 100.0f) return GemType::UNKNOWN;
 
 return bestType;
 }
