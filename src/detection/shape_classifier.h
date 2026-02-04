@@ -11,12 +11,12 @@
 // Adjustable parameters for shape processing (thread-safe for trackbar updates)
 namespace ShapeParams {
 // Debug stage to visualize:
-//   0 = original image
-//   1 = preprocessed
+//   0 = nothing (maximum throughput)
+//   1 = original image
 //   2 = best matched reference image
-//   3 = side-by-side (input | reference)
-//   4 = difference heat map
-//   5 = heat map overlaid on input
+//   3 = difference heat map
+//   4 = heat map overlaid on input
+//   5 = ring pixels and HSV values
     inline std::atomic<int> debugStage{0};
 
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching

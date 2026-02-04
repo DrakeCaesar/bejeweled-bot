@@ -67,7 +67,7 @@ if(MSVC)
     target_compile_options(bejeweled-bot PRIVATE
         /MP${num_jobs}
         $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG>
-        $<$<CONFIG:RelWithDebInfo>:/O2 /Ob2 /fp:fast /arch:AVX2 /DNDEBUG /Zi /Oy->
+        $<$<CONFIG:RelWithDebInfo>:/O2 /Ob1 /fp:fast /arch:AVX2 /DNDEBUG /Zi /Oy->
         $<$<CONFIG:Debug>:/ZI /Od>
     )
     target_link_options(bejeweled-bot PRIVATE

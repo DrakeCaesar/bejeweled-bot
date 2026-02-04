@@ -170,8 +170,8 @@ void DrawShapeOverlay(cv::Mat&image,
 
                     int stage = ShapeParams::debugStage.load();
 
-                    // Stage 4: Show only ring pixels
-                    if (stage == 4 && isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
+                    // Stage 5: Show only ring pixels
+                    if (stage == 5 && isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
                         const cv::Mat&ringMask = MaskLoader::GetRingMask(gem.type, gem.bestMatchFrame);
 
                         if (!ringMask.empty()) {
@@ -293,8 +293,8 @@ void DrawShapeOverlay(cv::Mat&image,
 
                 int stage = ShapeParams::debugStage.load();
 
-                // Stage 4: Display ring HSV values in center
-                if (stage == 4) {
+                // Stage 5: Display ring HSV values in center
+                if (stage == 5) {
                     std::ostringstream oss;
                     std::vector<std::string> lines;
                     
