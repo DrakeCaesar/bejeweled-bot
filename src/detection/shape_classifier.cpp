@@ -72,6 +72,7 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // Color Similarity Calculation
 // ============================================================================
 
+__declspec(noinline)
 static float CalculateColorSimilarity(const cv::Mat&img1Lab,
                                   const cv::Mat&img2Lab,
                                   const cv::Mat&alphaMask) {
@@ -121,6 +122,7 @@ double similarity = 1.0 - std::min(avgDistance / 100.0, 1.0);
 return static_cast<float>(similarity);
 }
 
+__declspec(noinline)
 static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab,
                                        const cv::Mat&img2Lab,
                                        const cv::Mat&alphaMask, const cv::Mat&img2Bgr) {
