@@ -47,10 +47,7 @@ namespace {
 }
 
 cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
-    if (gemRegion.empty()) {
-        return cv::Mat();
-    }
-    return gemRegion.clone();
+    return gemRegion.empty() ? cv::Mat() : gemRegion.clone();
 }
 
 cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
@@ -90,53 +87,58 @@ __forceinline static uint64_t isqrt(uint64_t x) {
     return result;
 }
 
+// Helper: Iterate over non-background pixels in crop-bounded region
+template<typename Callback>
+static void IterateNonBlackPixels(const cv::Mat& img1Lab, const cv::Mat& img2Lab,
+                                   const MaskLoader::CropBounds& bounds, Callback cb) {
+    for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
+        const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
+        const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
+
+        for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
+            if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
+
+            int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
+            int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
+            int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
+
+            cb(x, y, dL, da, db);
+        }
+    }
+}
+
 __declspec(noinline)
 static int CalculateColorSimilarity(const cv::Mat&img1Lab,
                                   const cv::Mat&img2Lab,
                                   GemType type,
                                   int frame) {
-if (img1Lab.empty() || img2Lab.empty()) return 0;
+    if (img1Lab.empty() || img2Lab.empty()) return 0;
 
-// Compare LAB images - Reference already has mask applied (background = (0,128,128))
-// Returns similarity score on integer scale 0-10000 (representing 0.00% to 100.00%)
+    // Compare LAB images - Reference already has mask applied (background = (0,128,128))
+    // Returns similarity score on integer scale 0-10000 (representing 0.00% to 100.00%)
 
-// Get pre-computed crop bounds to skip padding pixels
-const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
+    const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
 
-uint64_t totalDistanceSq = 0;
-int pixelCount = 0;
+    uint64_t totalDistanceSq = 0;
+    int pixelCount = 0;
 
-// Use pre-computed bounds to skip leading/trailing black rows and columns
-for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
-    const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
-    const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
+    IterateNonBlackPixels(img1Lab, img2Lab, bounds, 
+        [&](int x, int y, int dL, int da, int db) {
+            totalDistanceSq += dL * dL + da * da + db * db;
+            pixelCount++;
+        });
 
-    for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
-        // Skip background pixels in reference image (already masked to black in LAB)
-        if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
+    if (pixelCount == 0) return 0;
 
-        int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
-        int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
-        int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
-
-        totalDistanceSq += dL * dL + da * da + db * db;
-        pixelCount++;
+    // Calculate similarity based on configured method
+    if (Config::USE_SQRT) {
+        uint64_t avgDistSq = totalDistanceSq / pixelCount;
+        uint64_t sqrtAvg = isqrt(avgDistSq);
+        return static_cast<int>(10000ULL - std::min(sqrtAvg * 100ULL, 10000ULL));
+    } else {
+        if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
+        return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
     }
-}
-
-if (pixelCount == 0) return 0;
-
-// Calculate similarity based on configured method
-if (Config::USE_SQRT) {
-    // Fast integer sqrt: similarity = 1.0 - sqrt(avgDistSq)/100.0, scale 0-10000
-    uint64_t avgDistSq = totalDistanceSq / pixelCount;
-    uint64_t sqrtAvg = isqrt(avgDistSq);
-    return static_cast<int>(10000ULL - std::min(sqrtAvg * 100ULL, 10000ULL));
-} else {
-    // Squared distance without sqrt (monotonic): similarity = 1.0 - avgDistSq/10000.0, scale 0-10000
-    if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
-    return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
-}
 }
 
 __declspec(noinline)
@@ -163,45 +165,28 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
     g_debugBestInput = i1;
     g_debugBestRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
 
-    // Reference LAB image already has mask applied (background = (0,128,128))
-    const cv::Mat& lab2 = img2Lab;
-
     // Generate diff map
     g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
 
-    // Get pre-computed crop bounds to skip padding pixels
     const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
 
-    for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
-        const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
-        const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
-        cv::Vec3b* diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
-
-        for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
-            // Skip background pixels in reference image (already masked to black in LAB)
-            if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
-
-            int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
-            int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
-            int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
-
+    IterateNonBlackPixels(img1Lab, img2Lab, bounds,
+        [&](int x, int y, int dL, int da, int db) {
+            cv::Vec3b* diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
             float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
 
             if (dist < 10.0f) {
                 diffRow[x] = cv::Vec3b(0, 0, 0);
-            }
-            else {
+            } else {
                 float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
                 uchar intensity = static_cast<uchar>(normalized * 255.0f);
                 if (normalized < 0.5f) {
                     diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
-                }
-                else {
+                } else {
                     diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
                 }
             }
-        }
-    }
+        });
 }
 
 // ============================================================================
