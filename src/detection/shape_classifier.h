@@ -3,6 +3,7 @@
 #include "gem_types.h"
 #include <atomic>
 #include <opencv2/opencv.hpp>
+#include "config.h"
 
 // ============================================================================
 // Shape Classification - Color image comparison for gem detection
@@ -20,7 +21,7 @@ namespace ShapeParams {
     inline std::atomic<int> debugStage{0};
 
 // Match threshold percentage (0-100) - if a match exceeds this, stop searching
-    inline std::atomic<int> matchThreshold{80};
+    inline std::atomic<int> matchThreshold{Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT};
 
 /**
  * Create trackbars for shape parameters in the given window.
