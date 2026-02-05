@@ -1,4 +1,5 @@
 #include "overlay.h"
+#include "../bot/bot_main.h"
 #include "../detection/mask_loader.h"
 #include "../detection/shape_classifier.h"
 #include <array>
@@ -368,6 +369,10 @@ void DrawShapeOverlay(cv::Mat&image,
     }
 
     // Draw selected cell highlight on top
+    if (Config::SHOW_BOT_MATCH_LINES && ShapeParams::debugStage.load() >= 1) {
+        DrawMatchableSwaps(image, grid);
+    }
+
     if (debugSelected && g_selectedCol >= 0 && g_selectedRow >= 0) {
         cv::Rect selRect(g_selectedCol * Config::CELL_SIZE,
                          Config::BANNER_HEIGHT + g_selectedRow * Config::CELL_SIZE,

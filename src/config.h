@@ -27,6 +27,11 @@ namespace Config {
     const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
     const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
 
+// Bot debug settings
+    const bool SHOW_BOT_MATCH_LINES = true; // Draw swap lines that create a match
+    const cv::Scalar BOT_MATCH_LINE_COLOR = cv::Scalar(0, 255, 255);
+    const int BOT_MATCH_LINE_THICKNESS = 2;
+
 // Frame deduplication settings
     const int FRAME_DIFF_REGION_WIDTH = 25; // Width of center region (pixels) for frame uniqueness comparison
     const int FRAME_DIFF_REGION_HEIGHT = 45; // Height of center region (pixels) for frame uniqueness comparison
