@@ -73,6 +73,23 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // Color Similarity Calculation
 // ============================================================================
 
+// Fast integer square root using Newton's method (portable, no floating point)
+__forceinline static uint64_t isqrt(uint64_t x) {
+    if (x == 0) return 0;
+    if (x == 1) return 1;
+    
+    // Initial guess: bit_length / 2
+    uint64_t result = x;
+    uint64_t y = (result + 1) >> 1;
+    
+    while (y < result) {
+        result = y;
+        y = (result + x / result) >> 1;
+    }
+    
+    return result;
+}
+
 __declspec(noinline)
 static int CalculateColorSimilarity(const cv::Mat&img1Lab,
                                   const cv::Mat&img2Lab) {
@@ -103,11 +120,17 @@ for (int y = 0; y < img1Lab.rows; y++) {
 
 if (pixelCount == 0) return 0;
 
-// All-integer calculation: similarity = 1.0 - sqrt(avgDistSq)/100.0
-// Using squared distance without sqrt (monotonic), scale 0-10000
-if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
-
-return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
+// Calculate similarity based on configured method
+if (Config::USE_SQRT) {
+    // Fast integer sqrt: similarity = 1.0 - sqrt(avgDistSq)/100.0, scale 0-10000
+    uint64_t avgDistSq = totalDistanceSq / pixelCount;
+    uint64_t sqrtAvg = isqrt(avgDistSq);
+    return static_cast<int>(10000ULL - std::min(sqrtAvg * 100ULL, 10000ULL));
+} else {
+    // Squared distance without sqrt (monotonic): similarity = 1.0 - avgDistSq/10000.0, scale 0-10000
+    if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
+    return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
+}
 }
 
 __declspec(noinline)

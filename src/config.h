@@ -52,5 +52,6 @@ namespace Config {
 // Gem classification settings
     const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 80;  // Early exit threshold during search (0-100)
     const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 60;   // Final fallback threshold for classification (0-100)
+    const bool USE_SQRT = false;    // Use fast integer sqrt vs squared distance without sqrt for similarity calculation
 
 } // namespace Config
