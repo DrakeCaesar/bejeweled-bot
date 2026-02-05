@@ -54,6 +54,14 @@ namespace MaskLoader {
     using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
+// Crop bounds for non-black regions in reference images (optimization to skip padding)
+    struct CropBounds {
+        int minRow, maxRow, minCol, maxCol;
+    };
+    using CropBoundsStorage =
+    std::array<std::array<CropBounds, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+    using HypercubeCropBoundsStorage = std::array<CropBounds, HYPERCUBE_FRAMES>;
+
 /**
  * Load all gem reference images from the assets folder.
  * Images are stored as BGR color images.
@@ -119,6 +127,16 @@ namespace MaskLoader {
  * Get the number of frames for a given gem type.
  */
     int GetFrameCount(GemType type);
+
+/**
+ * Get the crop bounds for a specific mask (non-black region).
+ * Used to skip padding pixels during color similarity comparison.
+ *
+ * @param type The gem type
+ * @param frameIndex Frame index
+ * @return CropBounds containing minRow, maxRow, minCol, maxCol of non-black region
+ */
+    const CropBounds& GetCropBounds(GemType type, int frameIndex);
 
 /**
  * Check if static color masks have been loaded.

@@ -92,20 +92,26 @@ __forceinline static uint64_t isqrt(uint64_t x) {
 
 __declspec(noinline)
 static int CalculateColorSimilarity(const cv::Mat&img1Lab,
-                                  const cv::Mat&img2Lab) {
+                                  const cv::Mat&img2Lab,
+                                  GemType type,
+                                  int frame) {
 if (img1Lab.empty() || img2Lab.empty()) return 0;
 
 // Compare LAB images - Reference already has mask applied (background = (0,128,128))
 // Returns similarity score on integer scale 0-10000 (representing 0.00% to 100.00%)
 
+// Get pre-computed crop bounds to skip padding pixels
+const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
+
 uint64_t totalDistanceSq = 0;
 int pixelCount = 0;
 
-for (int y = 0; y < img1Lab.rows; y++) {
+// Use pre-computed bounds to skip leading/trailing black rows and columns
+for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
     const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
     const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
 
-    for (int x = 0; x < img1Lab.cols; x++) {
+    for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
         // Skip background pixels in reference image (already masked to black in LAB)
         if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
 
@@ -136,7 +142,8 @@ if (Config::USE_SQRT) {
 __declspec(noinline)
 static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab,
                                        const cv::Mat&img2Lab,
-                                       const cv::Mat&alphaMask, const cv::Mat&img2Bgr) {
+                                       const cv::Mat&alphaMask, const cv::Mat&img2Bgr,
+                                       GemType type, int frame) {
     if (img1.empty() || img2Lab.empty() || img1Lab.empty()) return;
 
     // Apply mask to BGR for debug visualization
@@ -162,12 +169,15 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
     // Generate diff map
     g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
 
-    for (int y = 0; y < img1Lab.rows; y++) {
+    // Get pre-computed crop bounds to skip padding pixels
+    const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
+
+    for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
         const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
         const cv::Vec3b* row2 = lab2.ptr<cv::Vec3b>(y);
         cv::Vec3b* diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
 
-        for (int x = 0; x < img1Lab.cols; x++) {
+        for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
             // Skip background pixels in reference image (already masked to black in LAB)
             if (row2[x][0] == 0 && row2[x][1] == 128 && row2[x][2] == 128) continue;
 
@@ -219,7 +229,7 @@ static int CheckMatchScore(
     const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
     int score = 0;
     if (!refImageLab.empty()) {
-        score = CalculateColorSimilarity(processedImageLab, refImageLab);
+        score = CalculateColorSimilarity(processedImageLab, refImageLab, type, frame);
     }
     
     // Cache result
@@ -251,7 +261,7 @@ static GemType FinalizeMatch(
         const cv::Mat& refImageBgr = MaskLoader::GetMask(type, frame);
         GenerateDebugVisualization(processedImage, processedImageLab,
             MaskLoader::GetLabMask(type, frame),
-            MaskLoader::GetAlphaMask(type, frame), refImageBgr);
+            MaskLoader::GetAlphaMask(type, frame), refImageBgr, type, frame);
     }
     return type;
 }
@@ -408,7 +418,7 @@ if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
     const cv::Mat&refImageBgr = MaskLoader::GetMask(bestType, bestFrame);
     const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(bestType, bestFrame);
     if (!refImageLab.empty()) {
-        GenerateDebugVisualization(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr);
+        GenerateDebugVisualization(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr, bestType, bestFrame);
     }
 }
 

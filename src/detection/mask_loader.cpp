@@ -14,6 +14,10 @@ namespace MaskLoader {
     static bool s_loaded = false;
     static cv::Mat s_emptyMask;
 
+// Crop bounds for non-black regions (optimization to skip padding during comparison)
+    static CropBoundsStorage s_cropBounds;
+    static HypercubeCropBoundsStorage s_hypercubeCropBounds;
+
 // Static color reference images (first frame replacements for Phase 1)
     static MaskStorage s_staticColorMasks;
     static bool s_staticColorsLoaded = false;
@@ -44,6 +48,64 @@ namespace MaskLoader {
         cv::bitwise_and(outer, innerInverted, ring);
 
         return ring;
+    }
+
+// Calculate crop bounds for non-black region in LAB image (background = 0,128,128)
+    static CropBounds CalculateCropBounds(const cv::Mat&labImage) {
+        CropBounds bounds = {0, labImage.rows - 1, 0, labImage.cols - 1};
+        
+        if (labImage.empty()) {
+            return bounds;
+        }
+
+        // Find first and last non-black rows
+        int minRow = labImage.rows;
+        int maxRow = -1;
+        
+        for (int y = 0; y < labImage.rows; y++) {
+            const cv::Vec3b* row = labImage.ptr<cv::Vec3b>(y);
+            bool hasNonBlack = false;
+            
+            for (int x = 0; x < labImage.cols; x++) {
+                if (!(row[x][0] == 0 && row[x][1] == 128 && row[x][2] == 128)) {
+                    hasNonBlack = true;
+                    break;
+                }
+            }
+            
+            if (hasNonBlack) {
+                if (y < minRow) minRow = y;
+                if (y > maxRow) maxRow = y;
+            }
+        }
+
+        // Find first and last non-black columns
+        int minCol = labImage.cols;
+        int maxCol = -1;
+        
+        for (int x = 0; x < labImage.cols; x++) {
+            bool hasNonBlack = false;
+            
+            for (int y = 0; y < labImage.rows; y++) {
+                const cv::Vec3b* row = labImage.ptr<cv::Vec3b>(y);
+                if (!(row[x][0] == 0 && row[x][1] == 128 && row[x][2] == 128)) {
+                    hasNonBlack = true;
+                    break;
+                }
+            }
+            
+            if (hasNonBlack) {
+                if (x < minCol) minCol = x;
+                if (x > maxCol) maxCol = x;
+            }
+        }
+
+        bounds.minRow = (minRow == labImage.rows) ? 0 : minRow;
+        bounds.maxRow = (maxRow == -1) ? labImage.rows - 1 : maxRow;
+        bounds.minCol = (minCol == labImage.cols) ? 0 : minCol;
+        bounds.maxCol = (maxCol == -1) ? labImage.cols - 1 : maxCol;
+        
+        return bounds;
     }
 
 // Map GemType to filename
@@ -197,6 +259,10 @@ namespace MaskLoader {
                 s_labMasks[gemIndex][frameIndex] = labFrame;
                 s_alphaMasks[gemIndex][frameIndex] = maskFrame;
                 s_ringMasks[gemIndex][frameIndex] = ringMask;
+                
+                // Calculate and store crop bounds for optimization
+                s_cropBounds[gemIndex][frameIndex] = CalculateCropBounds(labFrame);
+                
                 frameIndex++;
             }
         }
@@ -264,6 +330,9 @@ namespace MaskLoader {
             s_labMasks[gemIndex][0] = labImage;
             s_alphaMasks[gemIndex][0] = alphaMask;
             s_ringMasks[gemIndex][0] = BuildRingMask(alphaMask);
+            
+            // Calculate and store crop bounds for frame 0
+            s_cropBounds[gemIndex][0] = CalculateCropBounds(labImage);
 
             std::cout << "Loaded static color reference for " << GemTypeToString(type) << std::endl;
         }
@@ -332,6 +401,9 @@ namespace MaskLoader {
                 s_hypercubeLabMasks[frameIndex] = labFrame;
                 s_hypercubeAlphaMasks[frameIndex] = maskFrame;
                 s_hypercubeRingMasks[frameIndex] = ringMask;
+                
+                // Calculate and store crop bounds for optimization
+                s_hypercubeCropBounds[frameIndex] = CalculateCropBounds(labFrame);
                 frameIndex++;
             }
         }
@@ -448,5 +520,22 @@ namespace MaskLoader {
         return FRAMES_PER_GEM;
     }
 
+    const CropBounds& GetCropBounds(GemType type, int frameIndex) {
+        static const CropBounds emptyBounds = {0, 0, 0, 0};
+        
+        if (type == GemType::HYPERCUBE) {
+            if (frameIndex >= 0 && frameIndex < HYPERCUBE_FRAMES) {
+                return s_hypercubeCropBounds[frameIndex];
+            }
+        } else {
+            int gemIndex = static_cast<int>(type) - 1;
+            if (gemIndex >= 0 && gemIndex < NUM_GEM_TYPES &&
+                frameIndex >= 0 && frameIndex < FRAMES_PER_GEM) {
+                return s_cropBounds[gemIndex][frameIndex];
+            }
+        }
+        return emptyBounds;
+    }
+
     bool AreStaticColorsLoaded() { return s_staticColorsLoaded; }
-} // namespace MaskLoader
+}
