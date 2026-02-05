@@ -7,7 +7,9 @@
 #include "../detection/shape_classifier.h"
 #include "../rendering/overlay.h"
 #include "../rendering/control_panel.h"
+#include "../assets/game_asset_extractor.h"
 #include <iostream>
+#include <vector>
 
 namespace {
   // Recording UI controls (trackbars)
@@ -95,6 +97,63 @@ bool Application::Initialize() {
 
   if (!FindAndSetupGameWindow()) {
     return false;
+  }
+
+  // Extract game assets from main.pak.bac archive
+  std::string gameDirectory = AssetExtractor::GetGameExecutableDirectory(gameWindow_);
+  if (!gameDirectory.empty()) {
+    // Determine resolution folder based on window height
+    RECT windowRect;
+    GetClientRect(gameWindow_, &windowRect);
+    int height = windowRect.bottom - windowRect.top;
+
+    if (height != 600 && height != 768 && height != 1200) {
+      std::cerr << "Error: Unsupported window height: " << height << std::endl;
+      std::cerr << "Expected 600, 768, or 1200" << std::endl;
+      return false;
+    }
+    
+    std::string resFolder = "images\\" + std::to_string(height) + "\\";
+    
+    // List of all assets to extract
+    std::vector<std::string> assetFiles = {
+      "gemoutlines_.gif",
+      "gems_shadowed.jp2",
+      "bombgems.jp2",
+      "bombgems_.gif",
+      "doomgem_.gif",
+      "doomgem.jp2",
+      "butterfly shadow_.gif",
+      "butterfly body.jp2",
+      "butterfly body_.gif",
+      "butterfly shadow.gif",
+      "hypercube\\colorglow.jp2",
+      "hypercube\\frame.jp2",
+      "hypercube\\frame_.gif",
+      "Gems\\Blue.jp2",
+      "Gems\\Blue_.gif",
+      "Gems\\Green.jp2",
+      "Gems\\Green_.gif",
+      "Gems\\Orange.jp2",
+      "Gems\\Orange_.gif",
+      "Gems\\Purple.jp2",
+      "Gems\\Purple_.gif",
+      "Gems\\Red.jp2",
+      "Gems\\Red_.gif",
+      "Gems\\White.jp2",
+      "Gems\\White_.gif",
+      "Gems\\Yellow.jp2",
+      "Gems\\Yellow_.gif",
+      "sm_shards_outline_.gif",
+      "sm_shards_.gif"
+    };
+    
+    // Extract all assets
+    for (const auto& file : assetFiles) {
+      std::string archivePath = resFolder + file;
+      std::string outputPath = "assets\\" + file;
+      AssetExtractor::ExtractFile(gameDirectory, archivePath, outputPath);
+    }
   }
 
   if (!InitializeCapture()) {
