@@ -1,5 +1,7 @@
 #include "mask_loader.h"
+#include <filesystem>
 #include <iostream>
+#include <opencv2/opencv.hpp>
 
 namespace MaskLoader {
 // Static storage for masks
@@ -275,52 +277,78 @@ namespace MaskLoader {
     bool LoadStaticColorMasks(const std::string&assetsPath) {
         bool success = true;
 
-        static const GemType gemTypes[] = {
-            GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
-            GemType::BLUE, GemType::PURPLE, GemType::WHITE
+        // gems_shadowed.jp2 contains 7 frames side-by-side in this order:
+        // red, white, green, yellow, purple, orange, blue
+        static const GemType gemOrder[] = {
+            GemType::RED, GemType::WHITE, GemType::GREEN, GemType::YELLOW,
+            GemType::PURPLE, GemType::ORANGE, GemType::BLUE
         };
 
-        for (GemType type: gemTypes) {
-            const char* filename = GemTypeToFilename(type);
-            if (!filename) {
-                success = false;
-                continue;
-            }
+        std::string staticPath = assetsPath + "/gems_shadowed.jp2";
+        cv::Mat spriteSheet = cv::imread(staticPath, cv::IMREAD_COLOR);
+        if (spriteSheet.empty()) {
+            std::cerr << "Failed to load static color image: " << staticPath << std::endl;
+            return false;
+        }
 
+        std::string maskPath = assetsPath + "/gems_shadowed_.gif";
+        cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
+        if (maskSheet.empty()) {
+            std::cerr << "Failed to load static mask image: " << maskPath << std::endl;
+            return false;
+        }
+
+        if (maskSheet.channels() == 4) {
+            cv::Mat channels[4];
+            cv::split(maskSheet, channels);
+            maskSheet = channels[0];
+        }
+        else if (maskSheet.channels() == 3) {
+            cv::cvtColor(maskSheet, maskSheet, cv::COLOR_BGR2GRAY);
+        }
+
+        std::string debugDir = assetsPath + "/debug";
+        std::filesystem::create_directories(debugDir);
+
+        int expectedWidth = FRAME_WIDTH * NUM_GEM_TYPES;
+        if (spriteSheet.rows != FRAME_HEIGHT || spriteSheet.cols != expectedWidth) {
+            std::cerr << "Unexpected static color sheet size for " << staticPath << ": "
+                    << spriteSheet.cols << "x" << spriteSheet.rows << " (expected "
+                    << expectedWidth << "x" << FRAME_HEIGHT << ")" << std::endl;
+            return false;
+        }
+
+        if (maskSheet.rows != FRAME_HEIGHT || maskSheet.cols != expectedWidth) {
+            std::cerr << "Unexpected static mask sheet size for " << maskPath << ": "
+                << maskSheet.cols << "x" << maskSheet.rows << " (expected "
+                << expectedWidth << "x" << FRAME_HEIGHT << "), resizing" << std::endl;
+            cv::resize(maskSheet, maskSheet, cv::Size(expectedWidth, FRAME_HEIGHT), 0, 0, cv::INTER_NEAREST);
+        }
+
+        for (int i = 0; i < NUM_GEM_TYPES; i++) {
+            GemType type = gemOrder[i];
             int gemIndex = GemTypeToIndex(type);
             if (gemIndex < 0) {
                 success = false;
                 continue;
             }
 
-            // Load static color image from static_color folder
-            std::string staticPath = assetsPath + "/static_color/" + filename;
-            cv::Mat staticImage = cv::imread(staticPath, cv::IMREAD_COLOR);
-            if (staticImage.empty()) {
-                std::cerr << "Failed to load static color image: " << staticPath << std::endl;
-                success = false;
-                continue;
-            }
+            cv::Rect roi(i * FRAME_WIDTH, 0, FRAME_WIDTH, FRAME_HEIGHT);
+            cv::Mat staticImage = spriteSheet(roi).clone();
+            cv::Mat maskFrame = maskSheet(roi).clone();
 
-            // Resize to standard FRAME_WIDTH x FRAME_HEIGHT if needed
-            if (staticImage.cols != FRAME_WIDTH || staticImage.rows != FRAME_HEIGHT) {
-                cv::Mat resized;
-                cv::resize(staticImage, resized, cv::Size(FRAME_WIDTH, FRAME_HEIGHT), 0, 0, cv::INTER_LANCZOS4);
-                staticImage = resized;
-            }
+            std::string debugPath = debugDir + "/static_" + std::to_string(i) + ".png";
+            cv::imwrite(debugPath, staticImage);
 
-            // Generate alpha mask from black background
-            cv::Mat alphaMask = cv::Mat::zeros(staticImage.size(), CV_8UC1);
-            for (int y = 0; y < staticImage.rows; y++) {
-                const cv::Vec3b* colorRow = staticImage.ptr<cv::Vec3b>(y);
-                uchar* maskRow = alphaMask.ptr<uchar>(y);
-                for (int x = 0; x < staticImage.cols; x++) {
-                    if (colorRow[x][0] > 0 || colorRow[x][1] > 0 || colorRow[x][2] > 0) {
-                        maskRow[x] = 255;
-                    }
-                }
-            }
+            // Threshold so only 255 stays white, 254 and below becomes black
+            cv::Mat alphaMask;
+            cv::threshold(maskFrame, alphaMask, 254, 255, cv::THRESH_BINARY);
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
+            cv::erode(alphaMask, alphaMask, kernel, cv::Point(-1, -1), 1);
 
+            std::string alphaDebugPath = debugDir + "/static_alpha_" + std::to_string(i) + ".png";
+            cv::imwrite(alphaDebugPath, alphaMask);
+            
             // Convert to Lab color space for pre-conversion optimization
             cv::Mat labImage;
             cv::cvtColor(staticImage, labImage, cv::COLOR_BGR2Lab);
@@ -333,8 +361,6 @@ namespace MaskLoader {
             
             // Calculate and store crop bounds for frame 0
             s_cropBounds[gemIndex][0] = CalculateCropBounds(labImage);
-
-            std::cout << "Loaded static color reference for " << GemTypeToString(type) << std::endl;
         }
 
         s_staticColorsLoaded = success;

@@ -12,7 +12,7 @@
 // Adjustable parameters for shape processing (thread-safe for trackbar updates)
 namespace ShapeParams {
     // Debug stage: 0=nothing, 1=input, 2=best ref, 3=diff map, 4=overlay, 5=ring/HSV
-    inline std::atomic<int> debugStage{0};
+    inline std::atomic<int> debugStage{3};
     // Match threshold percentage (0-100)
     inline std::atomic<int> matchThreshold{Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT};
 

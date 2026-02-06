@@ -118,6 +118,7 @@ bool Application::Initialize() {
     // List of all assets to extract
     std::vector<std::string> assetFiles = {
       "gemoutlines_.gif",
+      "gems_shadowed_.gif",
       "gems_shadowed.jp2",
       "bombgems.jp2",
       "bombgems_.gif",

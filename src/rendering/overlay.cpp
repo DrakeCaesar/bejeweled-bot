@@ -161,6 +161,7 @@ void DrawShapeOverlay(cv::Mat&image,
             if (!gem.shapeMask.empty()) {
                 // Check if the mask is grayscale or color
                 bool isColorMask = (gem.shapeMask.channels() == 3);
+                int stage = ShapeParams::debugStage.load();
 
                 cv::Mat maskColored;
 
@@ -168,8 +169,6 @@ void DrawShapeOverlay(cv::Mat&image,
                     // New color-based system: shapeMask is already a BGR image
                     // Apply alpha mask to captured gem for visualization
                     cv::Mat capturedGem = gem.shapeMask.clone();
-
-                    int stage = ShapeParams::debugStage.load();
 
                     // Stage 5: Show only ring pixels
                     if (stage == 5 && isKnown && gem.bestMatchFrame >= 0 && MaskLoader::AreMasksLoaded()) {
@@ -269,6 +268,18 @@ void DrawShapeOverlay(cv::Mat&image,
                 if (maskColored.size() != offsetRoi.size()) {
                     cv::resize(maskColored, maskColored, offsetRoi.size(), 0, 0,
                                cv::INTER_NEAREST);
+                }
+
+                if (stage == 3 && gem.bestMatchFrame >= 0) {
+                    std::string frameText = "F" + std::to_string(gem.bestMatchFrame);
+                    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+                    double fontScale = 0.45;
+                    int thickness = 1;
+                    cv::Size textSize = cv::getTextSize(frameText, fontFace, fontScale, thickness, nullptr);
+                    int textX = (maskColored.cols - textSize.width) / 2;
+                    int textY = (maskColored.rows + textSize.height) / 2;
+                    cv::putText(maskColored, frameText, cv::Point(textX, textY),
+                                fontFace, fontScale, cv::Scalar(255, 255, 255), thickness, cv::LINE_AA);
                 }
 
                 // Copy the mask onto the image at the gem's position
