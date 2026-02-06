@@ -24,6 +24,45 @@ namespace MaskLoader {
     static MaskStorage s_staticColorMasks;
     static bool s_staticColorsLoaded = false;
 
+    // Half-texel offset configuration
+    namespace TexelOffsetConfig {
+        // Offset values (in pixels)
+        constexpr double OFFSET_X = 0.5;  // Options: -0.5, 0.0, 0.5
+        constexpr double OFFSET_Y = 0.5;  // Options: -0.5, 0.0, 0.5
+        
+        // Interpolation method for color image
+        // 0 = INTER_NEAREST, 1 = INTER_LINEAR, 2 = INTER_CUBIC, 3 = INTER_AREA
+        constexpr int COLOR_INTERPOLATION = 1;  // 0=Nearest, 1=Bilinear, 2=Bicubic, 3=Area
+        
+        // Interpolation method for alpha mask
+        constexpr int ALPHA_INTERPOLATION = 0;  // Usually keep at 0 (Nearest)
+        
+        inline int GetInterpolationFlag(int method) {
+            switch (method) {
+                case 0: return cv::INTER_NEAREST;
+                case 1: return cv::INTER_LINEAR;
+                case 2: return cv::INTER_CUBIC;
+                case 3: return cv::INTER_AREA;
+                default: return cv::INTER_NEAREST;
+            }
+        }
+    }
+    // namespace TexelOffsetConfig
+
+            static cv::Mat ApplyHalfTexelOffset(const cv::Mat&image, int interpolation) {
+        if (image.empty()) {
+            return cv::Mat();
+        }
+
+        cv::Mat shifted;
+        cv::Mat transform = (cv::Mat_<double>(2, 3) << 
+            1.0, 0.0, TexelOffsetConfig::OFFSET_X,
+            0.0, 1.0, TexelOffsetConfig::OFFSET_Y);
+        cv::warpAffine(image, shifted, transform, image.size(), interpolation,
+                       cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+        return shifted;
+    }
+
     static cv::Mat BuildRingMask(const cv::Mat&alphaMask) {
         if (alphaMask.empty()) {
             return cv::Mat();
@@ -51,6 +90,8 @@ namespace MaskLoader {
 
         return ring;
     }
+
+
 
 // Calculate crop bounds for non-black region in LAB image (background = 0,128,128)
     static CropBounds CalculateCropBounds(const cv::Mat&labImage) {
@@ -338,7 +379,7 @@ namespace MaskLoader {
             cv::Mat maskFrame = maskSheet(roi).clone();
 
             std::string debugPath = debugDir + "/static_" + std::to_string(i) + ".png";
-            cv::imwrite(debugPath, staticImage);
+            // cv::imwrite(debugPath, staticImage);
 
             // Threshold so only 255 stays white, 254 and below becomes black
             cv::Mat alphaMask;
@@ -346,8 +387,25 @@ namespace MaskLoader {
             cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
             cv::erode(alphaMask, alphaMask, kernel, cv::Point(-1, -1), 1);
 
+            // Apply half-texel offset to match in-game rendering
+            staticImage = ApplyHalfTexelOffset(staticImage, 
+                TexelOffsetConfig::GetInterpolationFlag(TexelOffsetConfig::COLOR_INTERPOLATION));
+            alphaMask = ApplyHalfTexelOffset(alphaMask, 
+                TexelOffsetConfig::GetInterpolationFlag(TexelOffsetConfig::ALPHA_INTERPOLATION));
+
             std::string alphaDebugPath = debugDir + "/static_alpha_" + std::to_string(i) + ".png";
-            cv::imwrite(alphaDebugPath, alphaMask);
+            // cv::imwrite(alphaDebugPath, alphaMask);
+
+            // Apply alpha mask to color frame (set background pixels to black)
+            for (int y = 0; y < staticImage.rows; y++) {
+                cv::Vec3b* colorRow = staticImage.ptr<cv::Vec3b>(y);
+                const uchar* maskRow = alphaMask.ptr<uchar>(y);
+                for (int x = 0; x < staticImage.cols; x++) {
+                    if (maskRow[x] == 0) {
+                        colorRow[x] = cv::Vec3b(0, 0, 0);
+                    }
+                }
+            }
             
             // Convert to Lab color space for pre-conversion optimization
             cv::Mat labImage;
