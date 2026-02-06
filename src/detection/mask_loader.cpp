@@ -384,7 +384,7 @@ namespace MaskLoader {
             // Threshold so only 255 stays white, 254 and below becomes black
             cv::Mat alphaMask;
             cv::threshold(maskFrame, alphaMask, 254, 255, cv::THRESH_BINARY);
-            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
+            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
             cv::erode(alphaMask, alphaMask, kernel, cv::Point(-1, -1), 1);
 
             // Apply half-texel offset to match in-game rendering
