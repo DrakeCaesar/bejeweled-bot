@@ -246,8 +246,11 @@ bool LoadHypercube(const std::string& assetsPath) {
     return true;
 }
 
-bool LoadAllMasks(const std::string& assetsPath) {
+bool LoadAllMasks(const std::string& assetsPath, int resolution) {
     bool success = true;
+
+    // Build resolution-specific path
+    std::string resAssetsPath = assetsPath + "\\" + std::to_string(resolution);
 
     static const GemType gemTypes[] = {
         GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
@@ -255,16 +258,16 @@ bool LoadAllMasks(const std::string& assetsPath) {
     };
 
     for (GemType type : gemTypes) {
-        if (!LoadMasksForGem(assetsPath, type)) {
+        if (!LoadMasksForGem(resAssetsPath, type)) {
             success = false;
         }
     }
 
-    if (!LoadStaticColorMasks(assetsPath)) {
+    if (!LoadStaticColorMasks(resAssetsPath)) {
         success = false;
     }
 
-    if (!LoadHypercube(assetsPath)) {
+    if (!LoadHypercube(resAssetsPath)) {
         success = false;
     }
 
@@ -272,7 +275,7 @@ bool LoadAllMasks(const std::string& assetsPath) {
 
     if (success) {
         std::cout << "Loaded " << (NUM_GEM_TYPES * FRAMES_PER_GEM + HYPERCUBE_FRAMES)
-                << " gem reference images total" << std::endl;
+                << " gem reference images from " << resAssetsPath << std::endl;
     }
 
     return success;

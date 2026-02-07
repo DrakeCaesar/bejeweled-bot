@@ -77,9 +77,10 @@ namespace MaskLoader {
  * Images are stored as BGR color images.
  *
  * @param assetsPath Path to the assets folder (e.g., "../assets")
+ * @param resolution Game resolution (600, 768, or 1200)
  * @return True if all reference images loaded successfully
  */
-    bool LoadAllMasks(const std::string&assetsPath);
+    bool LoadAllMasks(const std::string&assetsPath, int resolution);
 
 /**
  * Get the loaded masks storage.

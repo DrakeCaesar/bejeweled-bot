@@ -101,20 +101,23 @@ bool Application::Initialize() {
 
   // Extract game assets from main.pak.bac archive
   std::string gameDirectory = AssetExtractor::GetGameExecutableDirectory(gameWindow_);
+  int height = 0;
+
   if (!gameDirectory.empty()) {
     // Determine resolution folder based on window height
     RECT windowRect;
     GetClientRect(gameWindow_, &windowRect);
-    int height = windowRect.bottom - windowRect.top;
+    height = windowRect.bottom - windowRect.top;
 
     if (height != 600 && height != 768 && height != 1200) {
       std::cerr << "Error: Unsupported window height: " << height << std::endl;
       std::cerr << "Expected 600, 768, or 1200" << std::endl;
       return false;
     }
-    
+
     std::string resFolder = "images\\" + std::to_string(height) + "\\";
-    
+    std::string outputResFolder = "assets\\" + std::to_string(height) + "\\";
+
     // List of all assets to extract
     std::vector<std::string> assetFiles = {
       "gemoutlines_.gif",
@@ -148,13 +151,18 @@ bool Application::Initialize() {
       "sm_shards_outline_.gif",
       "sm_shards_.gif"
     };
-    
-    // Extract all assets
+
+    // Extract all assets in a single pass
+    std::vector<std::pair<std::string, std::string>> filesToExtract;
     for (const auto& file : assetFiles) {
       std::string archivePath = resFolder + file;
-      std::string outputPath = "assets\\" + file;
-      AssetExtractor::ExtractFile(gameDirectory, archivePath, outputPath);
+      std::string outputPath = outputResFolder + file;
+      filesToExtract.emplace_back(archivePath, outputPath);
     }
+
+    int extractedCount = AssetExtractor::ExtractFiles(gameDirectory, filesToExtract);
+    std::cout << "Successfully extracted " << extractedCount << " of "
+              << assetFiles.size() << " asset files to " << outputResFolder << std::endl;
   }
 
   if (!InitializeCapture()) {
@@ -175,14 +183,22 @@ bool Application::Initialize() {
 
   // Recording controls
 
-  // Load gem masks for shape classification
-  // Now running from project root, so use simple path
-  bool masksLoaded = MaskLoader::LoadAllMasks("assets");
+  // Load gem masks for shape classification from resolution-specific folder
+  // Only attempt to load if we successfully extracted assets
+  bool masksLoaded = false;
+  if (height > 0) {
+    masksLoaded = MaskLoader::LoadAllMasks("assets", height);
+  }
 
   if (!masksLoaded) {
-    std::cerr << "Warning: Failed to load gem masks from 'assets' directory. "
-        "Shape classification will not work."
-        << std::endl;
+    if (height > 0) {
+      std::cerr << "Warning: Failed to load gem masks from assets\\" << height
+                << " directory. Shape classification will not work." << std::endl;
+    } else {
+      std::cerr << "Warning: Game assets not extracted. Shape classification will not work."
+                << " Please ensure Bejeweled 3 is running and the assets folder exists."
+                << std::endl;
+    }
   }
 
   // Print controls

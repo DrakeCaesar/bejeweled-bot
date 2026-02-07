@@ -185,28 +185,43 @@ std::string GetGameExecutableDirectory(HWND gameWindow) {
 bool ExtractFile(const std::string& gameDirectory,
                  const std::string& filePathInArchive,
                  const std::string& outputPath) {
+  // Single file extraction using the batch method
+  std::vector<std::pair<std::string, std::string>> files;
+  files.emplace_back(filePathInArchive, outputPath);
+  return ExtractFiles(gameDirectory, files) > 0;
+}
+
+int ExtractFiles(const std::string& gameDirectory,
+                 const std::vector<std::pair<std::string, std::string>>& files) {
   // Construct archive path
   std::string archivePath = gameDirectory + "\\main.pak.bac";
-  
+
   if (!std::filesystem::exists(archivePath)) {
-    return false;
+    return 0;
   }
 
-  // Parse archive and decrypt all data
+  // Parse archive and decrypt all data (once for all files)
   std::vector<FileEntry> entries;
   std::vector<uint8_t> decryptedData;
   if (!Parse7x7MArchive(archivePath, entries, decryptedData)) {
-    return false;
+    return 0;
   }
 
-  // Find the requested file
-  for (const auto& entry : entries) {
-    if (entry.name == filePathInArchive) {
-      return ExtractFileFromArchive(decryptedData, entry, outputPath);
+  // Extract all requested files
+  int extractedCount = 0;
+  for (const auto& [filePathInArchive, outputPath] : files) {
+    // Find the requested file
+    for (const auto& entry : entries) {
+      if (entry.name == filePathInArchive) {
+        if (ExtractFileFromArchive(decryptedData, entry, outputPath)) {
+          extractedCount++;
+        }
+        break;
+      }
     }
   }
 
-  return false;
+  return extractedCount;
 }
 
 }  // namespace AssetExtractor
