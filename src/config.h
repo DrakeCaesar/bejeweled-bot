@@ -39,8 +39,8 @@ namespace Config {
 // Gem classification settings
 // Note: SEARCH threshold controls early exit during matching phases (can be adjusted via UI)
 // Note: FINAL threshold is hard-coded minimum before returning UNKNOWN type
-    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 90;  // Default search threshold (0-100) - shown in UI
-    const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 80;   // Hard minimum threshold (0-100) - classification threshold
+    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 85;  // Default search threshold (0-100) - shown in UI
+    const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 50;   // Hard minimum threshold (0-100) - classification threshold
 
 // Internal thresholds for squared-distance comparison (pre-sqrt)
 // These ensure the final sqrt-converted percentages match the config values above
