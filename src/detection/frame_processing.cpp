@@ -15,33 +15,6 @@ namespace TexelOffsetConfig {
     }
 }
 
-// Default parameters for different gem types
-const FrameProcessingParams kStandardGemParams = {
-    254,                          // thresholdValue
-    cv::MORPH_ELLIPSE,            // kernelShape
-    cv::Size(3, 3),               // kernelSize
-    false,                        // applyHalfTexelOffset
-    TexelOffsetConfig::COLOR_INTERPOLATION,
-    TexelOffsetConfig::ALPHA_INTERPOLATION
-};
-
-const FrameProcessingParams kStaticColorParams = {
-    254,                          // thresholdValue
-    cv::MORPH_ELLIPSE,            // kernelShape
-    cv::Size(7, 7),               // kernelSize
-    true,                         // applyHalfTexelOffset
-    TexelOffsetConfig::COLOR_INTERPOLATION,
-    TexelOffsetConfig::ALPHA_INTERPOLATION
-};
-
-const FrameProcessingParams kHypercubeParams = {
-    254,                          // thresholdValue
-    cv::MORPH_ELLIPSE,            // kernelShape (not used)
-    cv::Size(0, 0),               // kernelSize (no erosion)
-    false,                        // applyHalfTexelOffset
-    TexelOffsetConfig::COLOR_INTERPOLATION,
-    TexelOffsetConfig::ALPHA_INTERPOLATION
-};
 
 cv::Mat ApplyHalfTexelOffset(const cv::Mat& image, int interpolation) {
     if (image.empty()) {
@@ -149,20 +122,23 @@ void ProcessSingleFrame(
     cv::Mat colorFrame = colorRoi.clone();
     cv::Mat maskFrame = maskRoi.clone();
 
-    cv::threshold(maskFrame, maskFrame, params.thresholdValue, 255, cv::THRESH_BINARY);
+    // Apply constant thresholdValue = 254
+    cv::threshold(maskFrame, maskFrame, 254, 255, cv::THRESH_BINARY);
 
+    // Apply kernel erosion if kernel size > 0
     if (params.kernelSize.width > 0 && params.kernelSize.height > 0) {
-        cv::Mat kernel = cv::getStructuringElement(params.kernelShape, params.kernelSize);
+        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, params.kernelSize);
         cv::erode(maskFrame, maskFrame, kernel, cv::Point(-1, -1), 1);
     }
 
     cv::Mat ringMask = BuildRingMask(maskFrame);
 
+    // Apply half-texel offset based on params
     if (params.applyHalfTexelOffset) {
         colorFrame = ApplyHalfTexelOffset(colorFrame,
-            TexelOffsetConfig::GetInterpolationFlag(params.colorInterpolation));
+            TexelOffsetConfig::GetInterpolationFlag(TexelOffsetConfig::COLOR_INTERPOLATION));
         maskFrame = ApplyHalfTexelOffset(maskFrame,
-            TexelOffsetConfig::GetInterpolationFlag(params.alphaInterpolation));
+            TexelOffsetConfig::GetInterpolationFlag(TexelOffsetConfig::ALPHA_INTERPOLATION));
         ringMask = BuildRingMask(maskFrame);
     }
 

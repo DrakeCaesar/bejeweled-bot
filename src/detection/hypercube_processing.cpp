@@ -100,14 +100,14 @@ void ProcessHypercubeFrame(
     }
 
     cv::Mat processedMask = maskFrame.clone();
-    cv::threshold(processedMask, processedMask, params.thresholdValue, 255, cv::THRESH_BINARY);
+    cv::threshold(processedMask, processedMask, 254, 255, cv::THRESH_BINARY);
 
     cv::Mat processedColor = colorFrame.clone();
     if (params.applyHalfTexelOffset) {
         processedColor = FrameProcessing::ApplyHalfTexelOffset(processedColor,
-            FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(params.colorInterpolation));
+            FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(FrameProcessing::TexelOffsetConfig::COLOR_INTERPOLATION));
         processedMask = FrameProcessing::ApplyHalfTexelOffset(processedMask,
-            FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(params.alphaInterpolation));
+            FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(FrameProcessing::TexelOffsetConfig::ALPHA_INTERPOLATION));
     }
 
     cv::cvtColor(processedColor, outLab, cv::COLOR_BGR2Lab);

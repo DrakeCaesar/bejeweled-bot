@@ -128,12 +128,23 @@ bool Application::Initialize() {
   MaskLoader::HYPERCUBE_FRAME_WIDTH = resConfig.cellSize;
   MaskLoader::HYPERCUBE_FRAME_HEIGHT = resConfig.cellSize;
 
+  // Set half-texel offset values based on resolution
+  // 768p needs negative offsets, 600p/1200p need positive
+  if (height == 768) {
+    FrameProcessing::TexelOffsetConfig::OFFSET_X = -0.5;
+    FrameProcessing::TexelOffsetConfig::OFFSET_Y = -0.5;
+  } else {
+    FrameProcessing::TexelOffsetConfig::OFFSET_X = 0.5;
+    FrameProcessing::TexelOffsetConfig::OFFSET_Y = 0.5;
+  }
+
   std::cout << "Detected resolution " << height << "p:" << std::endl;
   std::cout << "  Board position: (" << Config::BOARD_X << ", " << Config::BOARD_Y << ")" << std::endl;
   std::cout << "  Board size: " << Config::BOARD_WIDTH << "x" << Config::BOARD_HEIGHT << std::endl;
   std::cout << "  Cell size: " << Config::CELL_SIZE << std::endl;
   std::cout << "  Gem frame size: " << MaskLoader::FRAME_WIDTH << "x" << MaskLoader::FRAME_HEIGHT << std::endl;
   std::cout << "  Hypercube frame size: " << MaskLoader::HYPERCUBE_FRAME_WIDTH << "x" << MaskLoader::HYPERCUBE_FRAME_HEIGHT << std::endl;
+  std::cout << "  Texel offset: (" << FrameProcessing::TexelOffsetConfig::OFFSET_X << ", " << FrameProcessing::TexelOffsetConfig::OFFSET_Y << ")" << std::endl;
   std::cout << std::endl;
 
   if (!gameDirectory.empty()) {

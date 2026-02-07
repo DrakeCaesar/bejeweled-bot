@@ -120,7 +120,7 @@ bool LoadMasksForGem(const std::string& assetsPath, GemType type) {
 
             // Process the frame using standard gem parameters
             FrameProcessing::CropBounds cropBounds;
-            FrameProcessing::ProcessSingleFrame(colorRoi, maskRoi, FrameProcessing::kStandardGemParams,
+            FrameProcessing::ProcessSingleFrame(colorRoi, maskRoi, FrameProcessing::GetStandardGemParams(),
                                   s_masks[gemIndex][frameIndex], s_alphaMasks[gemIndex][frameIndex],
                                   s_ringMasks[gemIndex][frameIndex], s_labMasks[gemIndex][frameIndex],
                                   cropBounds);
@@ -182,7 +182,7 @@ bool LoadStaticColorMasks(const std::string& assetsPath) {
         cv::Mat maskRoi = maskSheet(roi);
 
         FrameProcessing::CropBounds cropBounds;
-        FrameProcessing::ProcessSingleFrame(colorRoi, maskRoi, FrameProcessing::kStaticColorParams,
+        FrameProcessing::ProcessSingleFrame(colorRoi, maskRoi, FrameProcessing::GetStaticColorParams(),
                                s_masks[gemIndex][0], s_alphaMasks[gemIndex][0],
                                s_ringMasks[gemIndex][0], s_labMasks[gemIndex][0],
                                cropBounds);
@@ -240,7 +240,7 @@ bool LoadHypercube(const std::string& assetsPath) {
             FrameProcessing::CropBounds cropBounds;
             HypercubeProcessing::ProcessHypercubeFrame(
                 colorSheet, maskSheet, glowSheet, row, col, frameIndex,
-                FrameProcessing::kHypercubeParams,
+                FrameProcessing::GetHypercubeParams(),
                 sourceCellWidth, sourceCellHeight,
                 HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT,
                 glowCellWidth, glowCellHeight,

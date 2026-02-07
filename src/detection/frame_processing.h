@@ -35,24 +35,38 @@ struct CropBounds {
 using CropBoundsStorage = std::array<std::array<CropBounds, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 using HypercubeCropBoundsStorage = std::array<CropBounds, HYPERCUBE_FRAMES>;
 
-// Frame processing parameters
+// Resolution-dependent kernel sizes (set by application)
+// Can be adjusted per resolution if needed
+inline cv::Size kStandardGemKernelSize = cv::Size(3, 3);
+inline cv::Size kStaticColorKernelSize = cv::Size(7, 7);
+inline cv::Size kHypercubeKernelSize = cv::Size(0, 0);
+
+// Common frame processing parameters (only varying fields are exposed)
 struct FrameProcessingParams {
-    int thresholdValue;           // 127 or 254
-    int kernelShape;              // cv::MorphShapes enum value
-    cv::Size kernelSize;          // e.g., Size(3,3), Size(7,7)
-    bool applyHalfTexelOffset;    // whether to apply offset
-    int colorInterpolation;       // interpolation for color offset
-    int alphaInterpolation;       // interpolation for alpha offset
+    cv::Size kernelSize;          // e.g., Size(3,3), Size(7,7), Size(0,0)
+    bool applyHalfTexelOffset;    // whether to apply half-texel offset
 };
 
-// Predefined parameter sets
-extern const FrameProcessingParams kStandardGemParams;
-extern const FrameProcessingParams kStaticColorParams;
-extern const FrameProcessingParams kHypercubeParams;
+// Get parameter sets with the appropriate kernel size
+// Other values are constant: threshold=254, kernelShape=ELLIPSE,
+// colorInterp=LINEAR, alphaInterp=NEAREST
+inline FrameProcessingParams GetStandardGemParams() {
+    return {kStandardGemKernelSize, true}; // applyHalfTexelOffset controlled via TexelOffsetConfig::OFFSET_X/Y
+}
+
+inline FrameProcessingParams GetStaticColorParams() {
+    return {kStaticColorKernelSize, true};
+}
+
+inline FrameProcessingParams GetHypercubeParams() {
+    return {kHypercubeKernelSize, false};
+}
 
 namespace TexelOffsetConfig {
-    constexpr double OFFSET_X = 0.5;
-    constexpr double OFFSET_Y = 0.5;
+    // Half texel offset values (resolution-dependent, set by application)
+    // For 600p/1200p: 0.5, 0.5 | For 768p: -0.5, -0.5
+    inline double OFFSET_X = 0.5;
+    inline double OFFSET_Y = 0.5;
     constexpr int COLOR_INTERPOLATION = 1;
     constexpr int ALPHA_INTERPOLATION = 0;
 
