@@ -621,8 +621,7 @@ namespace MaskLoader {
                     cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
                     cv::Mat glowCropped = glowCell(cropRect);
 
-                    // Apply glow additively to color frame where mask is non-zero
-                    // Note: mask is already applied, so we only add glow to visible gem pixels
+                    // Simple alpha blending: glow brightness controls blend amount
                     for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
                         cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
                         const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
@@ -630,50 +629,10 @@ namespace MaskLoader {
 
                         for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
                             if (maskRow[x] > 0) {
-                                // Additive blending with clamping
-                                int b = colorRow[x][0] + glowRow[x][0];
-                                int g = colorRow[x][1] + glowRow[x][1];
-                                int r = colorRow[x][2] + glowRow[x][2];
 
-                                colorRow[x][0] = cv::saturate_cast<uchar>(b);
-                                colorRow[x][1] = cv::saturate_cast<uchar>(g);
-                                colorRow[x][2] = cv::saturate_cast<uchar>(r);
-                            }
-                        }
-                    }
-                }
-                if (!glowSheet.empty()) {
-                    // Calculate glow ROI (160x160)
-                    cv::Rect glowRoi(col * HYPERCUBE_GLOW_CELL_WIDTH,
-                                   row * HYPERCUBE_GLOW_CELL_HEIGHT,
-                                   HYPERCUBE_GLOW_CELL_WIDTH,
-                                   HYPERCUBE_GLOW_CELL_HEIGHT);
-
-                    // Extract glow cell
-                    cv::Mat glowCell = glowSheet(glowRoi);
-
-                    // Convert to 8-bit if needed
-                    if (glowCell.depth() != CV_8U) {
-                        glowCell.convertTo(glowCell, CV_8U, 255.0);
-                    }
-
-                    // Center-crop glow to 128x128 (remove 16 pixels from each side)
-                    int cropOffset = (HYPERCUBE_GLOW_CELL_WIDTH - HYPERCUBE_FRAME_WIDTH) / 2; // (160-128)/2 = 16
-                    cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
-                    cv::Mat glowCropped = glowCell(cropRect);
-
-                    // Apply glow additively to color frame where mask is non-zero
-                    for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
-                        cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
-                        const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
-                        const uchar* maskRow = maskFrame.ptr<uchar>(y);
-
-                        for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
-                            if (maskRow[x] > 0) {
-                                // Additive blending with clamping
-                                int b = colorRow[x][0] + glowRow[x][0];
-                                int g = colorRow[x][1] + glowRow[x][1];
-                                int r = colorRow[x][2] + glowRow[x][2];
+                                int b = (colorRow[x][0] * 2 + glowRow[x][0]) / 3;                             
+                                int g = (colorRow[x][1] * 2 + glowRow[x][1]) / 3;                             
+                                int r = (colorRow[x][2] * 2 + glowRow[x][2]) / 3;    
 
                                 colorRow[x][0] = cv::saturate_cast<uchar>(b);
                                 colorRow[x][1] = cv::saturate_cast<uchar>(g);
@@ -768,6 +727,161 @@ namespace MaskLoader {
     const MaskStorage& GetMasks() { return s_masks; }
 
     bool AreMasksLoaded() { return s_loaded; }
+
+// Helper function to reprocess a hypercube frame with current glow blend weight
+    static void ProcessHypercubeFrame(
+        const cv::Mat& colorSheet,
+        const cv::Mat& maskSheet,
+        const cv::Mat& glowSheet,
+        int row, int col,
+        int frameIndex)
+    {
+        // Calculate source ROI for color and mask (114x120)
+        cv::Rect colorRoi(col * HYPERCUBE_SOURCE_CELL_WIDTH,
+                         row * HYPERCUBE_SOURCE_CELL_HEIGHT,
+                         HYPERCUBE_SOURCE_CELL_WIDTH,
+                         HYPERCUBE_SOURCE_CELL_HEIGHT);
+
+        // Center the 114x120 frame in a 128x128 canvas
+        cv::Mat colorFrame = cv::Mat::zeros(HYPERCUBE_FRAME_HEIGHT, HYPERCUBE_FRAME_WIDTH, CV_8UC3);
+        cv::Mat maskFrame = cv::Mat::zeros(HYPERCUBE_FRAME_HEIGHT, HYPERCUBE_FRAME_WIDTH, CV_8UC1);
+
+        // Calculate center position
+        int xOffset = (HYPERCUBE_FRAME_WIDTH - HYPERCUBE_SOURCE_CELL_WIDTH) / 2;  // (128-114)/2 = 7
+        int yOffset = (HYPERCUBE_FRAME_HEIGHT - HYPERCUBE_SOURCE_CELL_HEIGHT) / 2; // (128-120)/2 = 4
+
+        // Copy color and mask to centered position
+        colorSheet(colorRoi).copyTo(colorFrame(cv::Rect(xOffset, yOffset, HYPERCUBE_SOURCE_CELL_WIDTH, HYPERCUBE_SOURCE_CELL_HEIGHT)));
+        maskSheet(colorRoi).copyTo(maskFrame(cv::Rect(xOffset, yOffset, HYPERCUBE_SOURCE_CELL_WIDTH, HYPERCUBE_SOURCE_CELL_HEIGHT)));
+
+        // Apply threshold to mask (same as static gems use 254)
+        cv::threshold(maskFrame, maskFrame, 254, 255, cv::THRESH_BINARY);
+
+        // Apply mask to color frame (set background pixels to black)
+        for (int y = 0; y < colorFrame.rows; y++) {
+            cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
+            const uchar* maskRow = maskFrame.ptr<uchar>(y);
+            for (int x = 0; x < colorFrame.cols; x++) {
+                if (maskRow[x] == 0) {
+                    colorRow[x] = cv::Vec3b(0, 0, 0);
+                }
+            }
+        }
+
+        // Add glow overlay using intensity-based alpha blending
+        if (!glowSheet.empty()) {
+            // Calculate glow ROI (160x160)
+            cv::Rect glowRoi(col * HYPERCUBE_GLOW_CELL_WIDTH,
+                           row * HYPERCUBE_GLOW_CELL_HEIGHT,
+                           HYPERCUBE_GLOW_CELL_WIDTH,
+                           HYPERCUBE_GLOW_CELL_HEIGHT);
+
+            // Extract glow cell
+            cv::Mat glowCell = glowSheet(glowRoi);
+
+            // Convert to 8-bit if needed
+            if (glowCell.depth() != CV_8U) {
+                glowCell.convertTo(glowCell, CV_8U, 255.0);
+            }
+
+            // Center-crop glow to 128x128 (remove 16 pixels from each side)
+            int cropOffset = (HYPERCUBE_GLOW_CELL_WIDTH - HYPERCUBE_FRAME_WIDTH) / 2;
+            cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
+            cv::Mat glowCropped = glowCell(cropRect);
+
+            // Apply intensity-based alpha blending
+            for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
+                cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
+                const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
+                const uchar* maskRow = maskFrame.ptr<uchar>(y);
+
+                for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
+                    if (maskRow[x] > 0) {
+                        // Calculate glow intensity (brightness)
+                        int glowIntensity = std::max({glowRow[x][0], glowRow[x][1], glowRow[x][2]});
+
+                        if (glowIntensity > 0) {
+                            // Alpha blend: result = base * (1-alpha) + glow * alpha
+                            int b = (colorRow[x][0] * (255 - glowIntensity) + glowRow[x][0] * glowIntensity) / 255;
+                            int g = (colorRow[x][1] * (255 - glowIntensity) + glowRow[x][1] * glowIntensity) / 255;
+                            int r = (colorRow[x][2] * (255 - glowIntensity) + glowRow[x][2] * glowIntensity) / 255;
+
+                            colorRow[x][0] = cv::saturate_cast<uchar>(b);
+                            colorRow[x][1] = cv::saturate_cast<uchar>(g);
+                            colorRow[x][2] = cv::saturate_cast<uchar>(r);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process the final frame using hypercube parameters
+        cv::Mat ringMask, labFrame;
+        CropBounds cropBounds;
+
+        cv::Mat processedMask = maskFrame.clone();
+        cv::threshold(processedMask, processedMask, kHypercubeParams.thresholdValue, 255, cv::THRESH_BINARY);
+
+        ringMask = BuildRingMask(processedMask);
+
+        cv::Mat processedColor = colorFrame.clone();
+        if (kHypercubeParams.applyHalfTexelOffset) {
+            processedColor = ApplyHalfTexelOffset(processedColor,
+                TexelOffsetConfig::GetInterpolationFlag(kHypercubeParams.colorInterpolation));
+            processedMask = ApplyHalfTexelOffset(processedMask,
+                TexelOffsetConfig::GetInterpolationFlag(kHypercubeParams.alphaInterpolation));
+            ringMask = BuildRingMask(processedMask);
+        }
+
+        cv::cvtColor(processedColor, labFrame, cv::COLOR_BGR2Lab);
+        cropBounds = CalculateCropBounds(labFrame);
+
+        // Store processed images and crop bounds
+        s_hypercubeMasks[frameIndex] = processedColor;
+        s_hypercubeLabMasks[frameIndex] = labFrame;
+        s_hypercubeAlphaMasks[frameIndex] = processedMask;
+        s_hypercubeRingMasks[frameIndex] = ringMask;
+        s_hypercubeCropBounds[frameIndex] = cropBounds;
+    }
+
+    void ReloadHypercubes(const std::string& assetsPath) {
+        if (!s_loaded) {
+            std::cerr << "Cannot reload hypercubes: masks not loaded yet" << std::endl;
+            return;
+        }
+
+        std::string hypercubePath = assetsPath + "/hypercube/";
+
+        // Load the images again
+        cv::Mat colorSheet = cv::imread(hypercubePath + "frame.jp2", cv::IMREAD_COLOR);
+        cv::Mat maskSheet = cv::imread(hypercubePath + "frame_.gif", cv::IMREAD_UNCHANGED);
+        cv::Mat glowSheet = cv::imread(hypercubePath + "colorglow.jp2", cv::IMREAD_COLOR);
+
+        if (colorSheet.empty() || maskSheet.empty()) {
+            std::cerr << "Failed to reload hypercube images for path: " << hypercubePath << std::endl;
+            return;
+        }
+
+        // Convert mask to grayscale
+        if (maskSheet.channels() == 4) {
+            cv::Mat channels[4];
+            cv::split(maskSheet, channels);
+            maskSheet = channels[0];
+        } else if (maskSheet.channels() == 3) {
+            cv::cvtColor(maskSheet, maskSheet, cv::COLOR_BGR2GRAY);
+        }
+
+        // Reprocess all 60 frames
+        int frameIndex = 0;
+        for (int row = 0; row < HYPERCUBE_ROWS; row++) {
+            for (int col = 0; col < HYPERCUBE_COLS; col++) {
+                ProcessHypercubeFrame(colorSheet, maskSheet, glowSheet, row, col, frameIndex);
+                frameIndex++;
+            }
+        }
+
+        std::cout << "Reloaded " << frameIndex << " hypercube frames" << std::endl;
+    }
 
     const cv::Mat& GetMask(GemType type, int frameIndex) {
         if (type == GemType::HYPERCUBE) {

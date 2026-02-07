@@ -1,6 +1,7 @@
 #include "control_panel.h"
 #include "../config.h"
 #include "../detection/shape_classifier.h"
+#include "../detection/loader.h"
 #include <algorithm>
 #include <array>
 #include <sstream>
@@ -16,7 +17,7 @@ namespace {
     constexpr int kPanelX = 10;
     constexpr int kPanelY = 25;
     constexpr int kPanelW = 380;
-    constexpr int kPanelH = 140;
+    constexpr int kPanelH = 165;
 
     constexpr int kSliderX = kPanelX + 140;
     constexpr int kSliderW = 200;
@@ -26,9 +27,10 @@ namespace {
 
     int g_activeSlider = -1;
 
-    const std::array<SliderDef, 2> kSliders = {
+    const std::array<SliderDef, 3> kSliders = {
         SliderDef{"Debug", 0, 5, &ShapeParams::debugStage},
-        SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold}
+        SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold},
+        SliderDef{"Glow%", 0, 100, &MaskLoader::HypercubeParams::glowBlendStrength}
     };
 
     cv::Rect GetSliderTrackRect(int index) {
