@@ -25,9 +25,6 @@ cmake -B builds/msbuild-vcpkg -S . -DCMAKE_TOOLCHAIN_FILE=[path-to-vcpkg]/script
 
 # Build the project
 cmake --build build --config Release
-# OR for VS Code tasks:
-cmake --build builds/msbuild-vcpkg --config Release
-```
 
 ### Development Commands (from .vscode/tasks.json)
 - **Rebuild and Run**: Debug build and execution (kills existing process, builds, runs)
