@@ -13,7 +13,6 @@ static FrameProcessing::RingMaskStorage s_ringMasks;
 static FrameProcessing::HypercubeMaskStorage s_hypercubeMasks;
 static FrameProcessing::HypercubeLabMaskStorage s_hypercubeLabMasks;
 static FrameProcessing::HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
-static FrameProcessing::HypercubeRingMaskStorage s_hypercubeRingMasks;
 static bool s_loaded = false;
 static cv::Mat s_emptyMask;
 
@@ -235,7 +234,7 @@ bool LoadHypercube(const std::string& assetsPath) {
                 HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT,
                 HYPERCUBE_GLOW_CELL_WIDTH, HYPERCUBE_GLOW_CELL_HEIGHT,
                 s_hypercubeMasks[frameIndex], s_hypercubeAlphaMasks[frameIndex],
-                s_hypercubeRingMasks[frameIndex], s_hypercubeLabMasks[frameIndex],
+                s_hypercubeLabMasks[frameIndex],
                 cropBounds);
 
             s_hypercubeCropBounds[frameIndex] = cropBounds;
@@ -315,13 +314,6 @@ const cv::Mat& GetAlphaMask(GemType type, int frameIndex) {
 }
 
 const cv::Mat& GetRingMask(GemType type, int frameIndex) {
-    if (type == GemType::HYPERCUBE) {
-        if (frameIndex < 0 || frameIndex >= HYPERCUBE_FRAMES) {
-            return s_emptyMask;
-        }
-        return s_hypercubeRingMasks[frameIndex];
-    }
-
     int gemIndex = GemTypeToIndex(type);
     if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
         return s_emptyMask;

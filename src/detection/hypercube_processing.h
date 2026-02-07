@@ -36,7 +36,6 @@ void ProcessHypercubeFrame(
     int glowCellHeight,
     cv::Mat& outColor,
     cv::Mat& outMask,
-    cv::Mat& outRingMask,
     cv::Mat& outLab,
     FrameProcessing::CropBounds& outCropBounds
 );

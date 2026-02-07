@@ -64,7 +64,6 @@ void ProcessHypercubeFrame(
     int glowCellHeight,
     cv::Mat& outColor,
     cv::Mat& outMask,
-    cv::Mat& outRingMask,
     cv::Mat& outLab,
     FrameProcessing::CropBounds& outCropBounds)
 {
@@ -103,15 +102,12 @@ void ProcessHypercubeFrame(
     cv::Mat processedMask = maskFrame.clone();
     cv::threshold(processedMask, processedMask, params.thresholdValue, 255, cv::THRESH_BINARY);
 
-    cv::Mat ringMask = FrameProcessing::BuildRingMask(processedMask);
-
     cv::Mat processedColor = colorFrame.clone();
     if (params.applyHalfTexelOffset) {
         processedColor = FrameProcessing::ApplyHalfTexelOffset(processedColor,
             FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(params.colorInterpolation));
         processedMask = FrameProcessing::ApplyHalfTexelOffset(processedMask,
             FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(params.alphaInterpolation));
-        ringMask = FrameProcessing::BuildRingMask(processedMask);
     }
 
     cv::cvtColor(processedColor, outLab, cv::COLOR_BGR2Lab);
@@ -119,7 +115,7 @@ void ProcessHypercubeFrame(
 
     outColor = processedColor;
     outMask = processedMask;
-    outRingMask = ringMask;
 }
+
 
 } // namespace HypercubeProcessing
