@@ -1,5 +1,5 @@
 #include "shape_classifier.h"
-#include "mask_loader.h"
+#include "loader.h"
 #include "config.h"
 #include <cmath>
 #include <opencv2/opencv.hpp>

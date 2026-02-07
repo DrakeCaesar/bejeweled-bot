@@ -1,4 +1,4 @@
-#include "mask_loader.h"
+#include "loader.h"
 #include <filesystem>
 #include <iostream>
 #include <opencv2/opencv.hpp>

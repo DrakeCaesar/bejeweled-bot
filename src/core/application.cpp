@@ -2,7 +2,7 @@
 #include "../capture/capture_thread.h"
 #include "../config.h"
 #include "../detection/gem_detector.h"
-#include "../detection/mask_loader.h"
+#include "../detection/loader.h"
 #include "../detection/process_thread.h"
 #include "../detection/shape_classifier.h"
 #include "../rendering/overlay.h"

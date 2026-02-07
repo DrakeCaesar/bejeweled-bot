@@ -54,11 +54,6 @@ Three buffers flow through sequential states:
 - Thread-safe synchronization with mutexes and condition variables
 - Defined in `src/types/frame_data.h`
 
-### Static Thread Pool
-- 8 persistent worker threads for parallel gem detection (`src/detection/thread_pool.h`)
-- Processes 8x8 grid cells in parallel
-- Reduces thread creation overhead
-
 ### Key Components
 - **`src/core/application.{h,cpp}`**: Main application lifecycle
 - **`src/capture/window_capture.{h,cpp}`**: Window capture system (GDI/Desktop Duplication)
@@ -66,7 +61,7 @@ Three buffers flow through sequential states:
 - **`src/detection/gem_detector.{h,cpp}`**: Grid-based gem detection
 - **`src/detection/shape_classifier.{h,cpp}`**: Color-based gem classification
 - **`src/detection/gem_types.{h,cpp}`**: Gem type definitions and constants
-- **`src/detection/mask_loader.{h,cpp}`**: Asset loading and management
+- **`src/detection/loader.{h,cpp}`**: Asset loading and management
 - **`src/detection/process_thread.{h,cpp}`**: Processing thread implementation
 - **`src/detection/thread_pool.h`**: Static thread pool for parallel processing
 - **`src/rendering/overlay.{h,cpp}`**: Debug overlay rendering
@@ -108,7 +103,7 @@ Defined in `src/detection/gem_types.{h,cpp}`:
 - Standard gems: 5x4 grids of 20 animated frames (128x128 each)
 - Hypercube special: 10x6 grid of 60 frames
 - Pre-converted to Lab color space for performance
-- Loaded at startup by `src/detection/mask_loader.{h,cpp}`
+- Loaded at startup by `src/detection/loader.{h,cpp}`
 
 ### Frame Recording System
 - Press 'R' to record frames from specific grid positions
@@ -116,12 +111,6 @@ Defined in `src/detection/gem_types.{h,cpp}`:
 - Used for creating new sprite sheets and assets
 - See `RECORDING_INSTRUCTIONS.md` for details
 - Recording disables gem processing for maximum capture performance
-
-### Asset Creation Workflow
-1. Record frames from game using 'R' key (default: column 3, row 2, 100 frames)
-2. Use `stitch_animation.sh` to create sprite sheets from recorded frames
-3. Place new assets in appropriate `assets/` subdirectories
-4. Update gem type definitions in `src/detection/gem_types.{h,cpp}` if needed
 
 ## Development Workflow
 

@@ -1,6 +1,6 @@
 #include "overlay.h"
 #include "../bot/bot_main.h"
-#include "../detection/mask_loader.h"
+#include "../detection/loader.h"
 #include "../detection/shape_classifier.h"
 #include <array>
 #include <iomanip>

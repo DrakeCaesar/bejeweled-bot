@@ -1,5 +1,5 @@
 #include "gem_detector.h"
-#include "mask_loader.h"
+#include "loader.h"
 #include "shape_classifier.h"
 #include "thread_pool.h"
 #include <iostream>
