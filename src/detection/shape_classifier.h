@@ -13,8 +13,9 @@
 namespace ShapeParams {
     // Debug stage: 0=nothing, 1=input, 2=best ref, 3=diff map, 4=overlay, 5=ring/HSV
     inline std::atomic<int> debugStage{3};
-    // Match threshold percentage (0-100)
-    inline std::atomic<int> matchThreshold{Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT};
+    // Match threshold percentage (0-100) - controls early exit during search
+    // User adjusts this value, which gets converted to internal threshold during comparison
+    inline std::atomic<int> matchThreshold{Config::GEM_MATCH_SEARCH_THRESHOLD_PERCENT};
 
     void CreateTrackbars(const std::string&windowName);
 } // namespace ShapeParams

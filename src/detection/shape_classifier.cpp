@@ -47,6 +47,8 @@ namespace {
 }
 
 cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
+    // No-op wrapper maintained for API compatibility
+    // Returns a clone of the region (or empty if input is empty)
     return gemRegion.empty() ? cv::Mat() : gemRegion.clone();
 }
 
@@ -70,21 +72,18 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // Color Similarity Calculation
 // ============================================================================
 
-// Fast integer square root using Newton's method (portable, no floating point)
-__forceinline static uint64_t isqrt(uint64_t x) {
-    if (x == 0) return 0;
-    if (x == 1) return 1;
-    
-    // Initial guess: bit_length / 2
-    uint64_t result = x;
-    uint64_t y = (result + 1) >> 1;
-    
-    while (y < result) {
-        result = y;
-        y = (result + x / result) >> 1;
-    }
-    
-    return result;
+// Helper: Convert integer similarity score (0-10000) to percentage (0.0-1.0)
+// Applies sqrt conversion for better distance-to-similarity mapping
+static float ConvertScoreToPercentage(int score) {
+    // Apply sqrt for accurate distance-to-similarity conversion
+    // score = 10000 - avgDistSq, so avgDistSq = 10000 - score
+    // final_score = 10000 - sqrt(avgDistSq) * 100
+    float avgDistSq = 10000.0f - static_cast<float>(score);
+    avgDistSq = std::max(avgDistSq, 0.0f);
+    float sqrtDist = std::sqrt(avgDistSq);
+    float finalScore = 10000.0f - sqrtDist * 100.0f;
+    finalScore = std::max(finalScore, 0.0f);
+    return finalScore / 10000.0f;
 }
 
 // Helper: Iterate over non-background pixels in crop-bounded region
@@ -108,6 +107,8 @@ static void IterateNonBlackPixels(const cv::Mat& img1Lab, const cv::Mat& img2Lab
 }
 
 __declspec(noinline)
+// Calculate color similarity score (0-10000) between two LAB images
+// __declspec(noinline) preserves call site for debugging/profiling
 static int CalculateColorSimilarity(const cv::Mat&img1Lab,
                                   const cv::Mat&img2Lab,
                                   GemType type,
@@ -130,15 +131,10 @@ static int CalculateColorSimilarity(const cv::Mat&img1Lab,
 
     if (pixelCount == 0) return 0;
 
-    // Calculate similarity based on configured method
-    if (Config::USE_SQRT) {
-        uint64_t avgDistSq = totalDistanceSq / pixelCount;
-        uint64_t sqrtAvg = isqrt(avgDistSq);
-        return static_cast<int>(10000ULL - std::min(sqrtAvg * 100ULL, 10000ULL));
-    } else {
-        if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
-        return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
-    }
+    // Always use squared distance for fast comparison (order preserved)
+    // The sqrt is only applied later when converting to final percentage
+    if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
+    return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
 }
 
 __declspec(noinline)
@@ -240,7 +236,11 @@ static GemType FinalizeMatch(
 {
     cache.type = type;
     cache.frame = frame;
-    if (outBestMatch) *outBestMatch = score / 10000.0f;  // Convert int (0-10000) to float (0.0-1.0)
+
+    // Convert score to percentage (0.0-1.0)
+    if (outBestMatch) {
+        *outBestMatch = ConvertScoreToPercentage(score);
+    }
     if (outBestFrame) *outBestFrame = frame;
     if (needDebugMap) {
         const cv::Mat& refImageBgr = MaskLoader::GetMask(type, frame);
@@ -293,8 +293,10 @@ static const GemType allGemTypes[] = {
 };
 static const int numAllGemTypes = 8;
 
-// Use integer threshold (0-10000 scale representing 0.00%-100.00%)
-int threshold = ShapeParams::matchThreshold.load() * 100;
+// Convert user's desired final percentage to internal threshold for comparison
+// Derived from: internalThreshold = finalPercentage * (200 - finalPercentage)
+int finalThresholdPercent = ShapeParams::matchThreshold.load();  // User's desired final percentage (0-100)
+int threshold = finalThresholdPercent * (200 - finalThresholdPercent);
 GemType bestType = GemType::UNKNOWN;
 int bestScore = 0;
 int bestFrame = -1;
@@ -394,7 +396,10 @@ for (int i = 0; i < numAllGemTypes; i++) {
 cache.type = bestType;
 cache.frame = bestFrame;
 
-if (outBestMatch) *outBestMatch = bestScore / 10000.0f;  // Convert int (0-10000) to float (0.0-1.0)
+// Convert score to percentage (0.0-1.0)
+if (outBestMatch) {
+    *outBestMatch = ConvertScoreToPercentage(bestScore);
+}
 if (outBestFrame) *outBestFrame = bestFrame;
 
 // Generate debug visualization for best match if needed
@@ -407,8 +412,8 @@ if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
     }
 }
 
-// Integer comparison: bestScore is 0-10000, threshold is 0-10000
-if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT * 100) return GemType::UNKNOWN;
+// Integer comparison: bestScore is 0-10000, using internal threshold that accounts for sqrt scaling
+if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL) return GemType::UNKNOWN;
 
 return bestType;
 }

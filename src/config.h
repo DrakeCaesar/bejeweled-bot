@@ -37,9 +37,18 @@ namespace Config {
             true; // Reduce FPS drop when window loses focus
 
 // Gem classification settings
-    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 90;  // Early exit threshold during search (0-100)
-    const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 80;   // Final fallback threshold for classification (0-100)
-    const bool USE_SQRT = false;    // Use fast integer sqrt vs squared distance without sqrt for similarity calculation
+// Note: SEARCH threshold controls early exit during matching phases (can be adjusted via UI)
+// Note: FINAL threshold is hard-coded minimum before returning UNKNOWN type
+    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 90;  // Default search threshold (0-100) - shown in UI
+    const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 80;   // Hard minimum threshold (0-100) - classification threshold
+
+// Internal thresholds for squared-distance comparison (pre-sqrt)
+// These ensure the final sqrt-converted percentages match the config values above
+// Derived from: score = 10000 - (100 - finalPercentage)^2 = finalPercentage * (200 - finalPercentage)
+// For GEM_MATCH_SEARCH_THRESHOLD_PERCENT=90: 90 * (200 - 90) = 9900
+// For GEM_MATCH_FINAL_THRESHOLD_PERCENT=80: 80 * (200 - 80) = 9600
+    constexpr int GEM_MATCH_SEARCH_THRESHOLD_INTERNAL = GEM_MATCH_SEARCH_THRESHOLD_PERCENT * (200 - GEM_MATCH_SEARCH_THRESHOLD_PERCENT);
+    constexpr int GEM_MATCH_FINAL_THRESHOLD_INTERNAL = GEM_MATCH_FINAL_THRESHOLD_PERCENT * (200 - GEM_MATCH_FINAL_THRESHOLD_PERCENT);
 
 // Resolution-dependent values that will be set at runtime
 inline int BOARD_X = 523;           // Will be set by application based on resolution
