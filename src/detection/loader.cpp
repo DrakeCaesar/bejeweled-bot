@@ -505,6 +505,13 @@ namespace MaskLoader {
         return success;
     }
 
+// Forward declaration for hypercube glow blending
+    static void ApplyGlowOverlay(
+        cv::Mat& colorFrame,
+        const cv::Mat& maskFrame,
+        const cv::Mat& glowSheet,
+        int row, int col);
+
     bool LoadHypercube(const std::string&assetsPath) {
         // New hypercube assets location and format
         const std::string hypercubePath = assetsPath + "/hypercube/";
@@ -602,44 +609,7 @@ namespace MaskLoader {
 
                 // Add glow overlay if available
                 if (!glowSheet.empty()) {
-                    // Calculate glow ROI (160x160)
-                    cv::Rect glowRoi(col * HYPERCUBE_GLOW_CELL_WIDTH,
-                                   row * HYPERCUBE_GLOW_CELL_HEIGHT,
-                                   HYPERCUBE_GLOW_CELL_WIDTH,
-                                   HYPERCUBE_GLOW_CELL_HEIGHT);
-
-                    // Extract glow cell
-                    cv::Mat glowCell = glowSheet(glowRoi);
-
-                    // Convert to 8-bit if needed
-                    if (glowCell.depth() != CV_8U) {
-                        glowCell.convertTo(glowCell, CV_8U, 255.0);
-                    }
-
-                    // Center-crop glow to 128x128 (remove 16 pixels from each side)
-                    int cropOffset = (HYPERCUBE_GLOW_CELL_WIDTH - HYPERCUBE_FRAME_WIDTH) / 2; // (160-128)/2 = 16
-                    cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
-                    cv::Mat glowCropped = glowCell(cropRect);
-
-                    // Simple alpha blending: glow brightness controls blend amount
-                    for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
-                        cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
-                        const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
-                        const uchar* maskRow = maskFrame.ptr<uchar>(y);
-
-                        for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
-                            if (maskRow[x] > 0) {
-
-                                int b = (colorRow[x][0] * 2 + glowRow[x][0]) / 3;                             
-                                int g = (colorRow[x][1] * 2 + glowRow[x][1]) / 3;                             
-                                int r = (colorRow[x][2] * 2 + glowRow[x][2]) / 3;    
-
-                                colorRow[x][0] = cv::saturate_cast<uchar>(b);
-                                colorRow[x][1] = cv::saturate_cast<uchar>(g);
-                                colorRow[x][2] = cv::saturate_cast<uchar>(r);
-                            }
-                        }
-                    }
+                    ApplyGlowOverlay(colorFrame, maskFrame, glowSheet, row, col);
                 }
 
                 // Process the final frame using hypercube parameters
@@ -728,6 +698,58 @@ namespace MaskLoader {
 
     bool AreMasksLoaded() { return s_loaded; }
 
+// Helper function to apply glow overlay with intensity-based alpha blending
+    static void ApplyGlowOverlay(
+        cv::Mat& colorFrame,
+        const cv::Mat& maskFrame,
+        const cv::Mat& glowSheet,
+        int row, int col)
+    {
+        // Calculate glow ROI (160x160)
+        cv::Rect glowRoi(col * HYPERCUBE_GLOW_CELL_WIDTH,
+                       row * HYPERCUBE_GLOW_CELL_HEIGHT,
+                       HYPERCUBE_GLOW_CELL_WIDTH,
+                       HYPERCUBE_GLOW_CELL_HEIGHT);
+
+        // Extract glow cell
+        cv::Mat glowCell = glowSheet(glowRoi);
+
+        // Convert to 8-bit if needed
+        if (glowCell.depth() != CV_8U) {
+            glowCell.convertTo(glowCell, CV_8U, 255.0);
+        }
+
+        // Center-crop glow to 128x128 (remove 16 pixels from each side)
+        int cropOffset = (HYPERCUBE_GLOW_CELL_WIDTH - HYPERCUBE_FRAME_WIDTH) / 2;
+        cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
+        cv::Mat glowCropped = glowCell(cropRect);
+
+        // Apply intensity-based alpha blending
+        for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
+            cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
+            const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
+            const uchar* maskRow = maskFrame.ptr<uchar>(y);
+
+            for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
+                if (maskRow[x] > 0) {
+                    // Calculate glow intensity (brightness)
+                    int glowIntensity = std::max({glowRow[x][0], glowRow[x][1], glowRow[x][2]});
+
+                    if (glowIntensity > 0) {
+                        // Alpha blend: result = base * (1-alpha) + glow * alpha
+                        int b = (colorRow[x][0] * (255 - glowIntensity) + glowRow[x][0] * glowIntensity) / 255;
+                        int g = (colorRow[x][1] * (255 - glowIntensity) + glowRow[x][1] * glowIntensity) / 255;
+                        int r = (colorRow[x][2] * (255 - glowIntensity) + glowRow[x][2] * glowIntensity) / 255;
+
+                        colorRow[x][0] = cv::saturate_cast<uchar>(b);
+                        colorRow[x][1] = cv::saturate_cast<uchar>(g);
+                        colorRow[x][2] = cv::saturate_cast<uchar>(r);
+                    }
+                }
+            }
+        }
+    }
+
 // Helper function to reprocess a hypercube frame with current glow blend weight
     static void ProcessHypercubeFrame(
         const cv::Mat& colorSheet,
@@ -770,49 +792,7 @@ namespace MaskLoader {
 
         // Add glow overlay using intensity-based alpha blending
         if (!glowSheet.empty()) {
-            // Calculate glow ROI (160x160)
-            cv::Rect glowRoi(col * HYPERCUBE_GLOW_CELL_WIDTH,
-                           row * HYPERCUBE_GLOW_CELL_HEIGHT,
-                           HYPERCUBE_GLOW_CELL_WIDTH,
-                           HYPERCUBE_GLOW_CELL_HEIGHT);
-
-            // Extract glow cell
-            cv::Mat glowCell = glowSheet(glowRoi);
-
-            // Convert to 8-bit if needed
-            if (glowCell.depth() != CV_8U) {
-                glowCell.convertTo(glowCell, CV_8U, 255.0);
-            }
-
-            // Center-crop glow to 128x128 (remove 16 pixels from each side)
-            int cropOffset = (HYPERCUBE_GLOW_CELL_WIDTH - HYPERCUBE_FRAME_WIDTH) / 2;
-            cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
-            cv::Mat glowCropped = glowCell(cropRect);
-
-            // Apply intensity-based alpha blending
-            for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
-                cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
-                const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
-                const uchar* maskRow = maskFrame.ptr<uchar>(y);
-
-                for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
-                    if (maskRow[x] > 0) {
-                        // Calculate glow intensity (brightness)
-                        int glowIntensity = std::max({glowRow[x][0], glowRow[x][1], glowRow[x][2]});
-
-                        if (glowIntensity > 0) {
-                            // Alpha blend: result = base * (1-alpha) + glow * alpha
-                            int b = (colorRow[x][0] * (255 - glowIntensity) + glowRow[x][0] * glowIntensity) / 255;
-                            int g = (colorRow[x][1] * (255 - glowIntensity) + glowRow[x][1] * glowIntensity) / 255;
-                            int r = (colorRow[x][2] * (255 - glowIntensity) + glowRow[x][2] * glowIntensity) / 255;
-
-                            colorRow[x][0] = cv::saturate_cast<uchar>(b);
-                            colorRow[x][1] = cv::saturate_cast<uchar>(g);
-                            colorRow[x][2] = cv::saturate_cast<uchar>(r);
-                        }
-                    }
-                }
-            }
+            ApplyGlowOverlay(colorFrame, maskFrame, glowSheet, row, col);
         }
 
         // Process the final frame using hypercube parameters
