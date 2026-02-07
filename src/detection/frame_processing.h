@@ -5,29 +5,20 @@
 
 namespace FrameProcessing {
 
-// Constants for mask storage
+// Grid dimensions (constant across all resolutions)
 constexpr int MASK_COLS = 5;
 constexpr int MASK_ROWS = 4;
 constexpr int FRAMES_PER_GEM = 21;  // 1 static + 20 animated
-constexpr int FRAME_WIDTH = 128;
-constexpr int FRAME_HEIGHT = 128;
-constexpr int SPRITE_WIDTH = 640;
-constexpr int SPRITE_HEIGHT = 512;
+constexpr int FRAME_WIDTH = 128;    // Output frame width (standardized)
+constexpr int FRAME_HEIGHT = 128;   // Output frame height (standardized)
 
-// Hypercube constants
+// Hypercube grid dimensions
 constexpr int HYPERCUBE_COLS = 10;
 constexpr int HYPERCUBE_ROWS = 6;
 constexpr int HYPERCUBE_FRAMES = 60;
-constexpr int HYPERCUBE_SOURCE_WIDTH = 1140;
-constexpr int HYPERCUBE_SOURCE_HEIGHT = 720;
-constexpr int HYPERCUBE_SOURCE_CELL_WIDTH = HYPERCUBE_SOURCE_WIDTH / HYPERCUBE_COLS;
-constexpr int HYPERCUBE_SOURCE_CELL_HEIGHT = HYPERCUBE_SOURCE_HEIGHT / HYPERCUBE_ROWS;
-constexpr int HYPERCUBE_GLOW_WIDTH = 1600;
-constexpr int HYPERCUBE_GLOW_HEIGHT = 960;
-constexpr int HYPERCUBE_GLOW_CELL_WIDTH = HYPERCUBE_GLOW_WIDTH / HYPERCUBE_COLS;
-constexpr int HYPERCUBE_GLOW_CELL_HEIGHT = HYPERCUBE_GLOW_HEIGHT / HYPERCUBE_ROWS;
-constexpr int HYPERCUBE_FRAME_WIDTH = 128;
-constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
+constexpr int HYPERCUBE_FRAME_WIDTH = 128;   // Output frame width (standardized)
+constexpr int HYPERCUBE_FRAME_HEIGHT = 128;  // Output frame height (standardized)
+
 constexpr int NUM_GEM_TYPES = 7;
 
 // Storage type definitions

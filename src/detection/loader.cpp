@@ -108,9 +108,12 @@ bool LoadMasksForGem(const std::string& assetsPath, GemType type) {
     // Extract each frame from sprite sheet (20 frames go into indices 1-20)
     // Frame 0 is reserved for static image loaded separately
     int frameIndex = 1;
+    int frameWidth = spriteSheet.cols / MASK_COLS;
+    int frameHeight = spriteSheet.rows / MASK_ROWS;
+
     for (int row = 0; row < MASK_ROWS; row++) {
         for (int col = 0; col < MASK_COLS; col++) {
-            cv::Rect roi(col * FRAME_WIDTH, row * FRAME_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT);
+            cv::Rect roi(col * frameWidth, row * frameHeight, frameWidth, frameHeight);
 
             cv::Mat colorRoi = spriteSheet(roi);
             cv::Mat maskRoi = maskSheet(roi);
@@ -163,6 +166,9 @@ bool LoadStaticColorMasks(const std::string& assetsPath) {
         cv::cvtColor(maskSheet, maskSheet, cv::COLOR_BGR2GRAY);
     }
 
+    int frameWidth = spriteSheet.cols / NUM_GEM_TYPES;
+    int frameHeight = spriteSheet.rows;
+
     for (int i = 0; i < NUM_GEM_TYPES; i++) {
         GemType type = gemOrder[i];
         int gemIndex = GemTypeToIndex(type);
@@ -171,7 +177,7 @@ bool LoadStaticColorMasks(const std::string& assetsPath) {
             continue;
         }
 
-        cv::Rect roi(i * FRAME_WIDTH, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        cv::Rect roi(i * frameWidth, 0, frameWidth, frameHeight);
         cv::Mat colorRoi = spriteSheet(roi);
         cv::Mat maskRoi = maskSheet(roi);
 
@@ -204,7 +210,7 @@ bool LoadHypercube(const std::string& assetsPath) {
     cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
     if (maskSheet.empty()) {
         std::cerr << "Failed to load hypercube mask: " << maskPath << std::endl;
-        maskSheet = cv::Mat::ones(HYPERCUBE_SOURCE_HEIGHT, HYPERCUBE_SOURCE_WIDTH, CV_8UC1) * 255;
+        maskSheet = cv::Mat::ones(colorSheet.rows, colorSheet.cols, CV_8UC1) * 255;
     } else {
         if (maskSheet.channels() == 4) {
             cv::Mat channels[4];
@@ -224,15 +230,20 @@ bool LoadHypercube(const std::string& assetsPath) {
 
     // Extract each frame from the grid
     int frameIndex = 0;
+    int sourceCellWidth = colorSheet.cols / HYPERCUBE_COLS;
+    int sourceCellHeight = colorSheet.rows / HYPERCUBE_ROWS;
+    int glowCellWidth = glowSheet.empty() ? 0 : glowSheet.cols / HYPERCUBE_COLS;
+    int glowCellHeight = glowSheet.empty() ? 0 : glowSheet.rows / HYPERCUBE_ROWS;
+
     for (int row = 0; row < HYPERCUBE_ROWS; row++) {
         for (int col = 0; col < HYPERCUBE_COLS; col++) {
             FrameProcessing::CropBounds cropBounds;
             HypercubeProcessing::ProcessHypercubeFrame(
                 colorSheet, maskSheet, glowSheet, row, col, frameIndex,
                 FrameProcessing::kHypercubeParams,
-                HYPERCUBE_SOURCE_CELL_WIDTH, HYPERCUBE_SOURCE_CELL_HEIGHT,
+                sourceCellWidth, sourceCellHeight,
                 HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT,
-                HYPERCUBE_GLOW_CELL_WIDTH, HYPERCUBE_GLOW_CELL_HEIGHT,
+                glowCellWidth, glowCellHeight,
                 s_hypercubeMasks[frameIndex], s_hypercubeAlphaMasks[frameIndex],
                 s_hypercubeLabMasks[frameIndex],
                 cropBounds);
