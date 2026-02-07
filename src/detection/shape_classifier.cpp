@@ -89,7 +89,8 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
 }
 
 // Keep original implementation accessible for comparison
-static int CalculateColorSimilarity_Original(const cv::Mat&img1Lab,
+// __declspec(noinline)
+static int CalculateColorSimilarity(const cv::Mat&img1Lab,
                                               const cv::Mat&img2Lab,
                                               const MaskLoader::CropBounds& bounds) {
     uint64_t totalDistanceSq = 0;
@@ -140,101 +141,6 @@ static float ConvertScoreToPercentage(int score) {
     return finalScore / 10000.0f;
 }
 
-// Optimized version that eliminates callback overhead and uses direct processing
-// Key insight: The callback lambda adds indirection even when inlined
-// This version is ~15-25% faster by processing pixels directly
-static int CalculateColorSimilarity_FastPath(const cv::Mat& img1Lab,
-                                              const cv::Mat& img2Lab,
-                                              const MaskLoader::CropBounds& bounds) {
-    uint64_t totalDistanceSq = 0;
-    int pixelCount = 0;
-
-    // Extract bounds once (avoids repeated struct field access)
-    const int rowStart = bounds.minRow;
-    const int rowEnd = bounds.maxRow;
-    const int colStart = bounds.minCol;
-    const int colEnd = bounds.maxCol;
-
-    // Background color constants
-    const uchar bgL = 0;
-    const uchar bgA = 128;
-    const uchar bgB = 128;
-
-    // Process one row at a time for better cache locality
-    for (int y = rowStart; y <= rowEnd; ++y) {
-        const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
-        const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
-
-        int x = colStart;
-
-        // Main loop - process 4 pixels at a time (unrolled)
-        // The key optimization: no callback, direct computation
-        for (; x <= colEnd - 3; x += 4) {
-            // Process pixel 0
-            const cv::Vec3b& p0_1 = row1[x];
-            const cv::Vec3b& p0_2 = row2[x];
-            if (!(p0_2[0] == bgL && p0_2[1] == bgA && p0_2[2] == bgB)) {
-                int dL0 = static_cast<int>(p0_1[0]) - static_cast<int>(p0_2[0]);
-                int da0 = static_cast<int>(p0_1[1]) - static_cast<int>(p0_2[1]);
-                int db0 = static_cast<int>(p0_1[2]) - static_cast<int>(p0_2[2]);
-                totalDistanceSq += dL0 * dL0 + da0 * da0 + db0 * db0;
-                ++pixelCount;
-            }
-
-            // Process pixel 1
-            const cv::Vec3b& p1_1 = row1[x + 1];
-            const cv::Vec3b& p1_2 = row2[x + 1];
-            if (!(p1_2[0] == bgL && p1_2[1] == bgA && p1_2[2] == bgB)) {
-                int dL1 = static_cast<int>(p1_1[0]) - static_cast<int>(p1_2[0]);
-                int da1 = static_cast<int>(p1_1[1]) - static_cast<int>(p1_2[1]);
-                int db1 = static_cast<int>(p1_1[2]) - static_cast<int>(p1_2[2]);
-                totalDistanceSq += dL1 * dL1 + da1 * da1 + db1 * db1;
-                ++pixelCount;
-            }
-
-            // Process pixel 2
-            const cv::Vec3b& p2_1 = row1[x + 2];
-            const cv::Vec3b& p2_2 = row2[x + 2];
-            if (!(p2_2[0] == bgL && p2_2[1] == bgA && p2_2[2] == bgB)) {
-                int dL2 = static_cast<int>(p2_1[0]) - static_cast<int>(p2_2[0]);
-                int da2 = static_cast<int>(p2_1[1]) - static_cast<int>(p2_2[1]);
-                int db2 = static_cast<int>(p2_1[2]) - static_cast<int>(p2_2[2]);
-                totalDistanceSq += dL2 * dL2 + da2 * da2 + db2 * db2;
-                ++pixelCount;
-            }
-
-            // Process pixel 3
-            const cv::Vec3b& p3_1 = row1[x + 3];
-            const cv::Vec3b& p3_2 = row2[x + 3];
-            if (!(p3_2[0] == bgL && p3_2[1] == bgA && p3_2[2] == bgB)) {
-                int dL3 = static_cast<int>(p3_1[0]) - static_cast<int>(p3_2[0]);
-                int da3 = static_cast<int>(p3_1[1]) - static_cast<int>(p3_2[1]);
-                int db3 = static_cast<int>(p3_1[2]) - static_cast<int>(p3_2[2]);
-                totalDistanceSq += dL3 * dL3 + da3 * da3 + db3 * db3;
-                ++pixelCount;
-            }
-        }
-
-        // Handle remaining pixels (0-3 left)
-        for (; x <= colEnd; ++x) {
-            const cv::Vec3b& pixel2 = row2[x];
-            if (!(pixel2[0] == bgL && pixel2[1] == bgA && pixel2[2] == bgB)) {
-                const cv::Vec3b& pixel1 = row1[x];
-                int dL = static_cast<int>(pixel1[0]) - static_cast<int>(pixel2[0]);
-                int da = static_cast<int>(pixel1[1]) - static_cast<int>(pixel2[1]);
-                int db = static_cast<int>(pixel1[2]) - static_cast<int>(pixel2[2]);
-                totalDistanceSq += dL * dL + da * da + db * db;
-                ++pixelCount;
-            }
-        }
-    }
-
-    if (pixelCount == 0) return 0;
-    if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
-    return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
-}
-
-__declspec(noinline)
 // Calculate color similarity score (0-10000) between two LAB images
 // __declspec(noinline) preserves call site for debugging/profiling
 static int CalculateColorSimilarity(const cv::Mat&img1Lab,
@@ -248,15 +154,10 @@ static int CalculateColorSimilarity(const cv::Mat&img1Lab,
 
     const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
 
-    // Toggle between implementations at runtime
-    if (Config::USE_OPTIMIZED_GEM_MATCHING) {
-        return CalculateColorSimilarity_FastPath(img1Lab, img2Lab, bounds);
-    } else {
-        return CalculateColorSimilarity_Original(img1Lab, img2Lab, bounds);
-    }
+    return CalculateColorSimilarity(img1Lab, img2Lab, bounds);
 }
 
-__declspec(noinline)
+// __declspec(noinline)
 static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab,
                                        const cv::Mat&img2Lab,
                                        const cv::Mat&alphaMask, const cv::Mat&img2Bgr,
@@ -310,7 +211,7 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
 
 // Check a specific type/frame with caching to avoid redundant comparisons
 static int CheckMatchScore(
-    GemType type, 
+    GemType type,
     int frame,
     const cv::Mat& processedImageLab,
     int* scoreCache,
@@ -319,25 +220,25 @@ static int CheckMatchScore(
     int maxFramesPerType)
 {
     int idx = static_cast<int>(type) * maxFramesPerType + frame;
-    
+
     // Return cached score if already checked
     if (idx >= 0 && idx < maxCacheSize && checkedFlags[idx]) {
         return scoreCache[idx];
     }
-    
+
     // Compute score
     const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
     int score = 0;
     if (!refImageLab.empty()) {
         score = CalculateColorSimilarity(processedImageLab, refImageLab, type, frame);
     }
-    
+
     // Cache result
     if (idx >= 0 && idx < maxCacheSize) {
         scoreCache[idx] = score;
         checkedFlags[idx] = true;
     }
-    
+
     return score;
 }
 
@@ -384,8 +285,8 @@ static bool TryMatch(
     int& bestScore,
     int& bestFrame)
 {
-    int score = CheckMatchScore(type, frame, processedImageLab, 
-                                   scoreCache, checkedFlags, 
+    int score = CheckMatchScore(type, frame, processedImageLab,
+                                   scoreCache, checkedFlags,
                                    maxCacheSize, maxFramesPerType);
     if (score > bestScore) {
         bestScore = score;
@@ -436,14 +337,14 @@ std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
 // Phase 0: Temporal coherence - check cached match and next animation frame
 if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     // Check the exact cached position first
-    if (TryMatch(lastType, lastFrame, processedImageLab, 
+    if (TryMatch(lastType, lastFrame, processedImageLab,
                  scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
                  threshold, bestType, bestScore, bestFrame)) {
         return FinalizeMatch(lastType, lastFrame, bestScore, cache,
                             outBestMatch, outBestFrame, needDebugMap,
                             processedImage, processedImageLab);
     }
-    
+
     // If we were in an animation, check the next frame
     if (lastFrame > 0) {
         int frameCount = MaskLoader::GetFrameCount(lastType);
@@ -470,13 +371,13 @@ for (int i = 0; i < numAllGemTypes; i++) {
                                    scoreCache, checkedFlags,
                                    MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE);
     firstFrameScores[i] = {allGemTypes[i], score};
-    
+
     if (score > bestScore) {
         bestScore = score;
         bestType = allGemTypes[i];
         bestFrame = 0;
     }
-    
+
     if (score >= threshold) {
         return FinalizeMatch(allGemTypes[i], 0, score, cache,
                             outBestMatch, outBestFrame, needDebugMap,
