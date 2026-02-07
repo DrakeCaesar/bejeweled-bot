@@ -59,6 +59,19 @@ namespace MaskLoader {
     std::array<std::array<CropBounds, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
     using HypercubeCropBoundsStorage = std::array<CropBounds, HYPERCUBE_FRAMES>;
 
+// Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel, 0=background)
+    constexpr int PIXELS_PER_MASK = 64;
+    // Note: MASKS_PER_FRAME calculated at runtime based on actual frame dimensions
+    using BitmaskFrame = std::vector<uint64_t>;
+    using BitmaskStorage =
+    std::array<std::array<BitmaskFrame, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+    using HypercubeBitmaskStorage = std::array<BitmaskFrame, HYPERCUBE_FRAMES>;
+
+// Background color in LAB color space
+    constexpr uchar LAB_BG_L = 0;
+    constexpr uchar LAB_BG_A = 128;
+    constexpr uchar LAB_BG_B = 128;
+
 /**
  * Load all gem reference images from the assets folder.
  * Images are stored as BGR color images.
@@ -140,4 +153,14 @@ namespace MaskLoader {
  * Check if static color masks have been loaded.
  */
     bool AreStaticColorsLoaded();
+
+/**
+ * Get bitmask for SIMD gem matching optimization.
+ * Each uint64_t represents 64 pixels (1=gem pixel, 0=background in LAB space).
+ *
+ * @param type The gem type
+ * @param frameIndex Frame index
+ * @return Reference to the bitmask vector
+ */
+    const BitmaskFrame& GetBitmask(GemType type, int frameIndex);
 } // namespace MaskLoader

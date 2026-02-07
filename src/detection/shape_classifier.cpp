@@ -107,6 +107,83 @@ static int CalculateColorSimilarity(const cv::Mat&img1Lab,
     return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
 }
 
+#if defined(_MSC_VER) && defined(ENABLE_AVX2)
+#pragma message("Compiling with SIMD optimization enabled for gem matching")
+// SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
+static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
+                                        const cv::Mat& referenceLab,
+                                        const std::vector<uint64_t>& bitmask,
+                                        const MaskLoader::CropBounds& bounds) {
+    // Early exit if bounds are empty
+    if (bounds.minRow == 0 && bounds.maxRow == 0 &&
+        bounds.minCol == 0 && bounds.maxCol == 0) {
+        return 0;
+    }
+
+    // Initialize SIMD accumulators
+    __m256i totalDistSqVec = _mm256_setzero_si256();
+    __m256i pixelCountVec = _mm256_setzero_si256();
+
+    // Background color constants
+    const uchar bgL = MaskLoader::LAB_BG_L;
+    const uchar bgA = MaskLoader::LAB_BG_A;
+    const uchar bgB = MaskLoader::LAB_BG_B;
+
+    // Process each pixel within the bounds
+    for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
+        const cv::Vec3b* capturedRow = capturedLab.ptr<cv::Vec3b>(y);
+        const cv::Vec3b* referenceRow = referenceLab.ptr<cv::Vec3b>(y);
+
+        for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
+            // Calculate which 8x8 block this pixel belongs to
+            int blockRow = y / 8;  // Which row of 8x8 blocks (0-15 for 128x128)
+            int blockCol = x / 8;  // Which column of 8x8 blocks (0-15 for 128x128)
+            int maskIdx = blockRow * (MaskLoader::FRAME_WIDTH / 8) + blockCol;
+
+            // Calculate position within the 8x8 block
+            int dy = y % 8;  // Row within the block (0-7)
+            int dx = x % 8;  // Column within the block (0-7)
+            int bitPos = dy * 8 + dx;  // Bit position in the mask (0-63)
+
+            // Check if this pixel should be processed (not background)
+            if ((bitmask[maskIdx] & (1ULL << bitPos)) == 0) continue;
+
+            // Pixel is foreground, compute difference
+            int dL = static_cast<int>(capturedRow[x][0]) - static_cast<int>(referenceRow[x][0]);
+            int da = static_cast<int>(capturedRow[x][1]) - static_cast<int>(referenceRow[x][1]);
+            int db = static_cast<int>(capturedRow[x][2]) - static_cast<int>(referenceRow[x][2]);
+
+            int distSq = dL * dL + da * da + db * db;
+
+            // Accumulate using scalar for simplicity (SIMD for individual pixels would be overkill)
+            __m256i distSqVec = _mm256_set1_epi32(distSq);
+            totalDistSqVec = _mm256_add_epi32(totalDistSqVec, distSqVec);
+
+            __m256i oneVec = _mm256_set1_epi32(1);
+            pixelCountVec = _mm256_add_epi32(pixelCountVec, oneVec);
+        }
+    }
+
+    // Horizontal sum of SIMD vectors to scalars
+    alignas(32) int totalDistSqArray[8];
+    alignas(32) int pixelCountArray[8];
+    _mm256_store_si256(reinterpret_cast<__m256i*>(totalDistSqArray), totalDistSqVec);
+    _mm256_store_si256(reinterpret_cast<__m256i*>(pixelCountArray), pixelCountVec);
+
+    uint64_t totalDistanceSq = 0;
+    int pixelCount = 0;
+
+    for (int i = 0; i < 8; i++) {
+        totalDistanceSq += totalDistSqArray[i];
+        pixelCount += pixelCountArray[i];
+    }
+
+    if (pixelCount == 0) return 0;
+    if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
+    return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
+}
+#endif
+
 cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
     int stage = ShapeParams::debugStage.load();
 
@@ -230,7 +307,19 @@ static int CheckMatchScore(
     const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
     int score = 0;
     if (!refImageLab.empty()) {
-        score = CalculateColorSimilarity(processedImageLab, refImageLab, type, frame);
+        // Use SIMD path if available and enabled
+#if defined(_MSC_VER) && defined(ENABLE_AVX2)
+        if (cv::checkHardwareSupport(CV_CPU_AVX2)) {
+            const auto& bitmask = MaskLoader::GetBitmask(type, frame);
+            const auto& bounds = MaskLoader::GetCropBounds(type, frame);
+            // std::cout << "[SIMD] Using AVX2 path for " << GemTypeToString(type) << " frame " << frame << std::endl;
+            score = CalculateColorSimilaritySIMD(processedImageLab, refImageLab, bitmask, bounds);
+        } else
+#endif
+        {
+            // std::cout << "[SCALAR] Using scalar path for " << GemTypeToString(type) << " frame " << frame << std::endl;
+            score = CalculateColorSimilarity(processedImageLab, refImageLab, type, frame);
+        }
     }
 
     // Cache result

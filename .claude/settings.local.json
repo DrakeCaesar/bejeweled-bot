@@ -8,7 +8,9 @@
       "Bash(taskkill //F //IM bejeweled-bot.exe 2>&1:*)",
       "Bash(taskkill:*)",
       "Bash(find:*)",
-      "Bash(make help:*)"
+      "Bash(make help:*)",
+      "Bash(./build/bejeweled-bot.exe)",
+      "Bash(findstr \"error\")"
     ]
   }
 }
