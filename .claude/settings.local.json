@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git log:*)",
       "Bash(cmake:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(TASKKILL /F /IM bejeweled-bot.exe:*)"
     ]
   }
 }

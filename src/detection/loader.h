@@ -19,12 +19,24 @@ namespace MaskLoader {
     constexpr int FRAME_WIDTH = 128;
     constexpr int FRAME_HEIGHT = 128;
 
-// Hypercube has different dimensions
+// Hypercube has different dimensions (game assets)
     constexpr int HYPERCUBE_COLS = 10;
     constexpr int HYPERCUBE_ROWS = 6;
     constexpr int HYPERCUBE_FRAMES = 60;
-    constexpr int HYPERCUBE_SPRITE_WIDTH = 1280;
-    constexpr int HYPERCUBE_SPRITE_HEIGHT = 768;
+
+    // Source sprite sheet dimensions (input files)
+    constexpr int HYPERCUBE_SOURCE_WIDTH = 1140;
+    constexpr int HYPERCUBE_SOURCE_HEIGHT = 720;
+    constexpr int HYPERCUBE_SOURCE_CELL_WIDTH = HYPERCUBE_SOURCE_WIDTH / HYPERCUBE_COLS; // 114
+    constexpr int HYPERCUBE_SOURCE_CELL_HEIGHT = HYPERCUBE_SOURCE_HEIGHT / HYPERCUBE_ROWS; // 120
+
+    // Glow overlay dimensions
+    constexpr int HYPERCUBE_GLOW_WIDTH = 1600;
+    constexpr int HYPERCUBE_GLOW_HEIGHT = 960;
+    constexpr int HYPERCUBE_GLOW_CELL_WIDTH = HYPERCUBE_GLOW_WIDTH / HYPERCUBE_COLS; // 160
+    constexpr int HYPERCUBE_GLOW_CELL_HEIGHT = HYPERCUBE_GLOW_HEIGHT / HYPERCUBE_ROWS; // 160
+
+    // Output frame dimensions (centered in 128x128)
     constexpr int HYPERCUBE_FRAME_WIDTH = 128;
     constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
 
