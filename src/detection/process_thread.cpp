@@ -18,18 +18,8 @@ void ProcessThreadFunc(
     SharedFrameData&frameData, TimingInfo&timingInfo, float&currentFps,
     int&frameCount,
     std::chrono::high_resolution_clock::time_point&lastFpsUpdateTime) {
-    // Track the last hypercube glow blend strength to detect changes
-    static int lastHypercubeGlowStrength = -1;
 
     while (true) {
-        // Check if hypercube glow blend strength changed
-        int currentGlowStrength = MaskLoader::HypercubeParams::glowBlendStrength.load();
-        if (currentGlowStrength != lastHypercubeGlowStrength) {
-            std::cout << "Hypercube glow blend changed from " << lastHypercubeGlowStrength
-                     << " to " << currentGlowStrength << ", reloading hypercubes...\n";
-            MaskLoader::ReloadHypercubes("./assets");
-            lastHypercubeGlowStrength = currentGlowStrength;
-        }
         // Find a CAPTURED buffer to process
         int bufferIndex = -1; {
             std::unique_lock<std::mutex> lock(frameData.mutex);

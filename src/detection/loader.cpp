@@ -698,7 +698,8 @@ namespace MaskLoader {
 
     bool AreMasksLoaded() { return s_loaded; }
 
-// Helper function to apply glow overlay with intensity-based alpha blending
+// Helper function to apply glow overlay additively (simple game engine approach)
+    // This matches Bejeweled 3's rendering - strength fixed at 100%
     static void ApplyGlowOverlay(
         cv::Mat& colorFrame,
         const cv::Mat& maskFrame,
@@ -724,7 +725,8 @@ namespace MaskLoader {
         cv::Rect cropRect(cropOffset, cropOffset, HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
         cv::Mat glowCropped = glowCell(cropRect);
 
-        // Apply intensity-based alpha blending
+        // Apply glow additively - this is the correct formula for Bejeweled 3
+        // Strength is fixed at 100 (full brightness)
         for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y++) {
             cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
             const cv::Vec3b* glowRow = glowCropped.ptr<cv::Vec3b>(y);
@@ -732,19 +734,15 @@ namespace MaskLoader {
 
             for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x++) {
                 if (maskRow[x] > 0) {
-                    // Calculate glow intensity (brightness)
-                    int glowIntensity = std::max({glowRow[x][0], glowRow[x][1], glowRow[x][2]});
+                    // Simple additive: base + glow (strength=100)
+                    int b = colorRow[x][0] + glowRow[x][0];
+                    int g = colorRow[x][1] + glowRow[x][1];
+                    int r = colorRow[x][2] + glowRow[x][2];
 
-                    if (glowIntensity > 0) {
-                        // Alpha blend: result = base * (1-alpha) + glow * alpha
-                        int b = (colorRow[x][0] * (255 - glowIntensity) + glowRow[x][0] * glowIntensity) / 255;
-                        int g = (colorRow[x][1] * (255 - glowIntensity) + glowRow[x][1] * glowIntensity) / 255;
-                        int r = (colorRow[x][2] * (255 - glowIntensity) + glowRow[x][2] * glowIntensity) / 255;
-
-                        colorRow[x][0] = cv::saturate_cast<uchar>(b);
-                        colorRow[x][1] = cv::saturate_cast<uchar>(g);
-                        colorRow[x][2] = cv::saturate_cast<uchar>(r);
-                    }
+                    // Clamp to prevent overflow
+                    colorRow[x][0] = cv::saturate_cast<uchar>(b);
+                    colorRow[x][1] = cv::saturate_cast<uchar>(g);
+                    colorRow[x][2] = cv::saturate_cast<uchar>(r);
                 }
             }
         }

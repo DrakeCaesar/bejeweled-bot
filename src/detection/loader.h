@@ -67,12 +67,6 @@ namespace MaskLoader {
     using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 // Adjustable parameter for hypercube glow blending strength (0-100)
-    // Controls how much glow to blend: base * (1 - strength/100) + glow * (strength/100)
-    // 0 = no glow, 35 = about right, 100 = full glow
-    namespace HypercubeParams {
-        inline std::atomic<int> glowBlendStrength{35}; // Default to 35%
-    } // namespace HypercubeParams
-
 // Crop bounds for non-black regions in reference images (optimization to skip padding)
     struct CropBounds {
         int minRow, maxRow, minCol, maxCol;
@@ -161,12 +155,4 @@ namespace MaskLoader {
  * Check if static color masks have been loaded.
  */
     bool AreStaticColorsLoaded();
-
-/**
- * Reload hypercube frames with current glow blend weight.
- * Call this when the glowBlendWeight parameter changes.
- *
- * @param assetsPath Path to the assets folder (e.g., "../assets")
- */
-    void ReloadHypercubes(const std::string&assetsPath);
 } // namespace MaskLoader
