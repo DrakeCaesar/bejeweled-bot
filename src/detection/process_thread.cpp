@@ -5,10 +5,7 @@
 #include "../rendering/control_panel.h"
 #include "gem_detector.h"
 #include "shape_classifier.h"
-#include "loader.h"
 #include <chrono>
-#include <iomanip>
-#include <iostream>
 
 // ============================================================================
 // Process Thread Implementation

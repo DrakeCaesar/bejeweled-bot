@@ -1,10 +1,10 @@
 #pragma once
 
 #include "gem_types.h"
+#include "frame_processing.h"
 #include <array>
 #include <opencv2/opencv.hpp>
 #include <string>
-#include <vector>
 
 // ============================================================================
 // Reference Image Loading - Load color reference images for gem matching
@@ -66,11 +66,8 @@ namespace MaskLoader {
     using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
-// Adjustable parameter for hypercube glow blending strength (0-100)
 // Crop bounds for non-black regions in reference images (optimization to skip padding)
-    struct CropBounds {
-        int minRow, maxRow, minCol, maxCol;
-    };
+    using CropBounds = FrameProcessing::CropBounds;
     using CropBoundsStorage =
     std::array<std::array<CropBounds, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
     using HypercubeCropBoundsStorage = std::array<CropBounds, HYPERCUBE_FRAMES>;

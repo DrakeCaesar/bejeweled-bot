@@ -1,7 +1,5 @@
 #include "control_panel.h"
-#include "../config.h"
 #include "../detection/shape_classifier.h"
-#include "../detection/loader.h"
 #include <algorithm>
 #include <array>
 #include <sstream>

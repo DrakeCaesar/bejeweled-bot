@@ -4,7 +4,9 @@
       "Bash(git log:*)",
       "Bash(cmake:*)",
       "Bash(timeout:*)",
-      "Bash(TASKKILL /F /IM bejeweled-bot.exe:*)"
+      "Bash(TASKKILL /F /IM bejeweled-bot.exe:*)",
+      "Bash(taskkill //F //IM bejeweled-bot.exe 2>&1:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }
