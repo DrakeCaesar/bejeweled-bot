@@ -16,13 +16,16 @@ namespace MaskLoader {
     constexpr int FRAMES_PER_GEM = 21;  // 1 static + 20 animated
 
 // Hypercube has different dimensions (game assets)
-    constexpr int HYPERCUBE_COLS = 10;
-    constexpr int HYPERCUBE_ROWS = 6;
-    constexpr int HYPERCUBE_FRAMES = 60;
+    constexpr int HYPERCUBE_COLS = 10;      // Grid columns in source sprite sheet
+    constexpr int HYPERCUBE_ROWS = 6;       // Grid rows in source sprite sheet
+    constexpr int HYPERCUBE_FRAMES = 60;    // Total frames (10x6)
 
-    // Output frame dimensions (centered in 128x128)
-    constexpr int HYPERCUBE_FRAME_WIDTH = 128;
-    constexpr int HYPERCUBE_FRAME_HEIGHT = 128;
+    // Output frame dimensions (resolution dependent - equals cell size)
+    // For 1200p: 128x128, for 768p: 82x82, for 600p: 64x64
+    inline int FRAME_WIDTH = 128;
+    inline int FRAME_HEIGHT = 128;
+    inline int HYPERCUBE_FRAME_WIDTH = 128;
+    inline int HYPERCUBE_FRAME_HEIGHT = 128;
 
 // Number of gem types (excluding EMPTY, HYPERCUBE and UNKNOWN)
     constexpr int NUM_GEM_TYPES = 7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE

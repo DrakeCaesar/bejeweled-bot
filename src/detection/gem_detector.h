@@ -14,7 +14,7 @@
  * Detect all gems in the game board grid.
  * Returns a reference to a static grid that is reused across calls.
  *
- * @param gameBoard The game board image (1024x1024)
+ * @param gameBoard The game board image (resolution-dependent size)
  * @param needDebugMap Whether debug visualization is needed (to avoid atomic loads)
  * @return Reference to internal 2D vector representing the 8x8 grid of detected
  * gems

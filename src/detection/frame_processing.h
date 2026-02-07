@@ -9,15 +9,11 @@ namespace FrameProcessing {
 constexpr int MASK_COLS = 5;
 constexpr int MASK_ROWS = 4;
 constexpr int FRAMES_PER_GEM = 21;  // 1 static + 20 animated
-constexpr int FRAME_WIDTH = 128;    // Output frame width (standardized)
-constexpr int FRAME_HEIGHT = 128;   // Output frame height (standardized)
 
 // Hypercube grid dimensions
 constexpr int HYPERCUBE_COLS = 10;
 constexpr int HYPERCUBE_ROWS = 6;
 constexpr int HYPERCUBE_FRAMES = 60;
-constexpr int HYPERCUBE_FRAME_WIDTH = 128;   // Output frame width (standardized)
-constexpr int HYPERCUBE_FRAME_HEIGHT = 128;  // Output frame height (standardized)
 
 constexpr int NUM_GEM_TYPES = 7;
 

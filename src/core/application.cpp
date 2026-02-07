@@ -101,20 +101,42 @@ bool Application::Initialize() {
 
   // Extract game assets from main.pak.bac archive
   std::string gameDirectory = AssetExtractor::GetGameExecutableDirectory(gameWindow_);
-  int height = 0;
+
+  // Determine resolution based on window height
+  RECT windowRect;
+  GetClientRect(gameWindow_, &windowRect);
+  int height = windowRect.bottom - windowRect.top;
+
+  if (height != 600 && height != 768 && height != 1200) {
+    std::cerr << "Error: Unsupported window height: " << height << std::endl;
+    std::cerr << "Expected 600, 768, or 1200" << std::endl;
+    return false;
+  }
+
+  // Set resolution-specific configuration before any allocations
+  auto resConfig = Config::GetResolutionConfig(height);
+  Config::BOARD_X = resConfig.boardX;
+  Config::BOARD_Y = resConfig.boardY;
+  Config::CELL_SIZE = resConfig.cellSize;
+  Config::BOARD_WIDTH = Config::CELL_SIZE * Config::GRID_SIZE;  // Calculate from cell size
+  Config::BOARD_HEIGHT = Config::CELL_SIZE * Config::GRID_SIZE; // Calculate from cell size
+  Config::BANNER_HEIGHT = resConfig.bannerHeight;
+  Config::FRAME_DIFF_REGION_WIDTH = resConfig.frameDiffRegionWidth;
+  Config::FRAME_DIFF_REGION_HEIGHT = resConfig.frameDiffRegionHeight;
+  MaskLoader::FRAME_WIDTH = resConfig.cellSize;
+  MaskLoader::FRAME_HEIGHT = resConfig.cellSize;
+  MaskLoader::HYPERCUBE_FRAME_WIDTH = resConfig.cellSize;
+  MaskLoader::HYPERCUBE_FRAME_HEIGHT = resConfig.cellSize;
+
+  std::cout << "Detected resolution " << height << "p:" << std::endl;
+  std::cout << "  Board position: (" << Config::BOARD_X << ", " << Config::BOARD_Y << ")" << std::endl;
+  std::cout << "  Board size: " << Config::BOARD_WIDTH << "x" << Config::BOARD_HEIGHT << std::endl;
+  std::cout << "  Cell size: " << Config::CELL_SIZE << std::endl;
+  std::cout << "  Gem frame size: " << MaskLoader::FRAME_WIDTH << "x" << MaskLoader::FRAME_HEIGHT << std::endl;
+  std::cout << "  Hypercube frame size: " << MaskLoader::HYPERCUBE_FRAME_WIDTH << "x" << MaskLoader::HYPERCUBE_FRAME_HEIGHT << std::endl;
+  std::cout << std::endl;
 
   if (!gameDirectory.empty()) {
-    // Determine resolution folder based on window height
-    RECT windowRect;
-    GetClientRect(gameWindow_, &windowRect);
-    height = windowRect.bottom - windowRect.top;
-
-    if (height != 600 && height != 768 && height != 1200) {
-      std::cerr << "Error: Unsupported window height: " << height << std::endl;
-      std::cerr << "Expected 600, 768, or 1200" << std::endl;
-      return false;
-    }
-
     std::string resFolder = "images\\" + std::to_string(height) + "\\";
     std::string outputResFolder = "assets\\" + std::to_string(height) + "\\";
 
@@ -315,7 +337,7 @@ bool Application::AllocateBuffers() {
   int boardType = dummyBoard.type();
 
   // Pre-allocate all buffers with exact size and type
-  // Buffers are 1224px tall (200px banner + 1024px game)
+  // Buffers are board height + banner height (resolution-dependent)
   for (int i = 0; i < 3; i++) {
     frameData_.frameBuffer[i] = cv::Mat(dummyBoard.rows + Config::BANNER_HEIGHT,
                                         dummyBoard.cols, boardType);

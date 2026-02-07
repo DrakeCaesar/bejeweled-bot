@@ -13,3 +13,5 @@ vcpkg_installed/
 bejeweled-bot.pdb
 enc_temp_folder/
 assets/
+bejeweled-bot.idb
+.gitignore
