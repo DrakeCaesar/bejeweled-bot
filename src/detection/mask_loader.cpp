@@ -49,19 +49,60 @@ namespace MaskLoader {
     }
     // namespace TexelOffsetConfig
 
-            static cv::Mat ApplyHalfTexelOffset(const cv::Mat&image, int interpolation) {
+    // Frame processing parameters
+    struct FrameProcessingParams {
+        int thresholdValue;           // 127 or 254
+        int kernelShape;              // cv::MorphShapes enum value
+        cv::Size kernelSize;          // e.g., Size(3,3), Size(7,7)
+        bool applyHalfTexelOffset;    // whether to apply offset
+        int colorInterpolation;       // interpolation for color offset
+        int alphaInterpolation;       // interpolation for alpha offset
+    };
+
+    // Default parameters for different gem types
+    static const FrameProcessingParams kStandardGemParams = {
+        254,                          // thresholdValue
+        cv::MORPH_RECT,               // kernelShape
+        cv::Size(3, 3),               // kernelSize
+        false,                        // applyHalfTexelOffset
+        TexelOffsetConfig::COLOR_INTERPOLATION,
+        TexelOffsetConfig::ALPHA_INTERPOLATION
+    };
+
+    static const FrameProcessingParams kStaticColorParams = {
+        254,                          // thresholdValue
+        cv::MORPH_ELLIPSE,            // kernelShape
+        cv::Size(7, 7),               // kernelSize
+        true,                         // applyHalfTexelOffset
+        TexelOffsetConfig::COLOR_INTERPOLATION,
+        TexelOffsetConfig::ALPHA_INTERPOLATION
+    };
+
+    static const FrameProcessingParams kHypercubeParams = {
+        127,                          // thresholdValue
+        cv::MORPH_RECT,               // kernelShape (not used)
+        cv::Size(0, 0),               // kernelSize (no erosion)
+        false,                        // applyHalfTexelOffset
+        TexelOffsetConfig::COLOR_INTERPOLATION,
+        TexelOffsetConfig::ALPHA_INTERPOLATION
+    };
+
+    static cv::Mat ApplyHalfTexelOffset(const cv::Mat&image, int interpolation) {
         if (image.empty()) {
             return cv::Mat();
         }
 
         cv::Mat shifted;
-        cv::Mat transform = (cv::Mat_<double>(2, 3) << 
+        cv::Mat transform = (cv::Mat_<double>(2, 3) <<
             1.0, 0.0, TexelOffsetConfig::OFFSET_X,
             0.0, 1.0, TexelOffsetConfig::OFFSET_Y);
         cv::warpAffine(image, shifted, transform, image.size(), interpolation,
                        cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
         return shifted;
     }
+
+    // Process a single frame (color ROI and mask ROI) according to parameters
+    // Outputs processed color, mask, ringMask, labImage, and cropBounds
 
     static cv::Mat BuildRingMask(const cv::Mat&alphaMask) {
         if (alphaMask.empty()) {
@@ -151,23 +192,107 @@ namespace MaskLoader {
         return bounds;
     }
 
+    static void ProcessSingleFrame(
+        const cv::Mat& colorRoi,
+        const cv::Mat& maskRoi,
+        const FrameProcessingParams& params,
+        cv::Mat& outColor,
+        cv::Mat& outMask,
+        cv::Mat& outRingMask,
+        cv::Mat& outLab,
+        CropBounds& outCropBounds)
+    {
+        // Clone inputs
+        cv::Mat colorFrame = colorRoi.clone();
+        cv::Mat maskFrame = maskRoi.clone();
+
+        // Threshold mask
+        cv::threshold(maskFrame, maskFrame, params.thresholdValue, 255, cv::THRESH_BINARY);
+
+        // Erode mask if kernel size is non-zero
+        if (params.kernelSize.width > 0 && params.kernelSize.height > 0) {
+            cv::Mat kernel = cv::getStructuringElement(params.kernelShape, params.kernelSize);
+            cv::erode(maskFrame, maskFrame, kernel, cv::Point(-1, -1), 1);
+        }
+
+        // Build ring mask
+        cv::Mat ringMask = BuildRingMask(maskFrame);
+
+        // Apply half-texel offset if requested
+        if (params.applyHalfTexelOffset) {
+            colorFrame = ApplyHalfTexelOffset(colorFrame,
+                TexelOffsetConfig::GetInterpolationFlag(params.colorInterpolation));
+            maskFrame = ApplyHalfTexelOffset(maskFrame,
+                TexelOffsetConfig::GetInterpolationFlag(params.alphaInterpolation));
+            // Rebuild ring mask after offset (mask changed)
+            ringMask = BuildRingMask(maskFrame);
+        }
+
+        // Apply mask to color frame (set background pixels to black)
+        for (int y = 0; y < colorFrame.rows; y++) {
+            cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
+            const uchar* maskRow = maskFrame.ptr<uchar>(y);
+            for (int x = 0; x < colorFrame.cols; x++) {
+                if (maskRow[x] == 0) {
+                    colorRow[x] = cv::Vec3b(0, 0, 0);
+                }
+            }
+        }
+
+        // Convert to Lab color space
+        cv::Mat labFrame;
+        cv::cvtColor(colorFrame, labFrame, cv::COLOR_BGR2Lab);
+
+        // Calculate crop bounds
+        outCropBounds = CalculateCropBounds(labFrame);
+
+        // Return processed images
+        outColor = colorFrame;
+        outMask = maskFrame;
+        outRingMask = ringMask;
+        outLab = labFrame;
+    }
+
 // Map GemType to filename
-    static const char* GemTypeToFilename(GemType type) {
+    static const char* GemTypeToColorFilename(GemType type) {
         switch (type) {
             case GemType::RED:
-                return "red.png";
+                return "Red.jp2";
             case GemType::ORANGE:
-                return "orange.png";
+                return "Orange.jp2";
             case GemType::YELLOW:
-                return "yellow.png";
+                return "Yellow.jp2";
             case GemType::GREEN:
-                return "green.png";
+                return "Green.jp2";
             case GemType::BLUE:
-                return "blue.png";
+                return "Blue.jp2";
             case GemType::PURPLE:
-                return "purple.png";
+                return "Purple.jp2";
             case GemType::WHITE:
-                return "white.png";
+                return "White.jp2";
+            case GemType::HYPERCUBE:
+                return "hypercube.png";
+            default:
+                return nullptr;
+        }
+    }
+
+    static const char* GemTypeToMaskFilename(GemType type) {
+        switch (type) {
+            case GemType::RED:
+                return "Red_.gif";
+            case GemType::ORANGE:
+                return "Orange_.gif";
+            case GemType::YELLOW:
+                return "Yellow_.gif";
+            case GemType::GREEN:
+                return "Green_.gif";
+            case GemType::BLUE:
+                return "Blue_.gif";
+            case GemType::PURPLE:
+                return "Purple_.gif";
+            case GemType::WHITE:
+                return "White_.gif";
             case GemType::HYPERCUBE:
                 return "hypercube.png";
             default:
@@ -201,8 +326,9 @@ namespace MaskLoader {
         // Skip hypercube - it's loaded separately
         if (type == GemType::HYPERCUBE) return true;
 
-        const char* filename = GemTypeToFilename(type);
-        if (!filename)
+        const char* colorFilename = GemTypeToColorFilename(type);
+        const char* maskFilename = GemTypeToMaskFilename(type);
+        if (!colorFilename || !maskFilename)
             return false;
 
         int gemIndex = GemTypeToIndex(type);
@@ -210,7 +336,7 @@ namespace MaskLoader {
             return false;
 
         // Load the color sprite sheet
-        std::string colorPath = assetsPath + "/color/" + filename;
+        std::string colorPath = assetsPath + "/Gems/" + colorFilename;
         cv::Mat spriteSheet = cv::imread(colorPath, cv::IMREAD_COLOR);
         if (spriteSheet.empty()) {
             std::cerr << "Failed to load reference image: " << colorPath << std::endl;
@@ -218,7 +344,7 @@ namespace MaskLoader {
         }
 
         // Load the alpha mask sprite sheet
-        std::string maskPath = assetsPath + "/mask/" + filename;
+        std::string maskPath = assetsPath + "/Gems/" + maskFilename;
         cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
         if (maskSheet.empty()) {
             std::cerr << "Failed to load alpha mask: " << maskPath << std::endl;
@@ -265,47 +391,23 @@ namespace MaskLoader {
                 cv::Rect roi(col * FRAME_WIDTH, row * FRAME_HEIGHT, FRAME_WIDTH,
                              FRAME_HEIGHT);
 
-                // Extract and clone the color frame
-                cv::Mat colorFrame = spriteSheet(roi).clone();
+                // Extract color and mask ROIs
+                cv::Mat colorRoi = spriteSheet(roi);
+                cv::Mat maskRoi = maskSheet(roi);
 
-                // Extract and clone the mask frame
-                cv::Mat maskFrame = maskSheet(roi).clone();
+                // Process the frame using standard gem parameters
+                cv::Mat colorFrame, maskFrame, ringMask, labFrame;
+                CropBounds cropBounds;
+                ProcessSingleFrame(colorRoi, maskRoi, kStandardGemParams,
+                                  colorFrame, maskFrame, ringMask, labFrame, cropBounds);
 
-                // Threshold mask to ensure binary (white = foreground, black = background)
-                cv::threshold(maskFrame, maskFrame, 254, 255, cv::THRESH_BINARY);
-
-                // Erode mask by 1 pixel to clean up edges for rotating frames
-                cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-                cv::erode(maskFrame, maskFrame, kernel, cv::Point(-1, -1), 1);
-
-                // Build ring mask (scaled alpha minus original)
-                cv::Mat ringMask = BuildRingMask(maskFrame);
-
-                // Apply mask to color frame (set background to black)
-                for (int y = 0; y < colorFrame.rows; y++) {
-                    cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
-                    const uchar* maskRow = maskFrame.ptr<uchar>(y);
-
-                    for (int x = 0; x < colorFrame.cols; x++) {
-                        if (maskRow[x] == 0) {
-                            // Background pixel - set to black
-                            colorRow[x] = cv::Vec3b(0, 0, 0);
-                        }
-                    }
-                }
-
-                // Convert to Lab color space for pre-conversion optimization
-                cv::Mat labFrame;
-                cv::cvtColor(colorFrame, labFrame, cv::COLOR_BGR2Lab);
-
+                // Store processed images and crop bounds
                 s_masks[gemIndex][frameIndex] = colorFrame;
                 s_labMasks[gemIndex][frameIndex] = labFrame;
                 s_alphaMasks[gemIndex][frameIndex] = maskFrame;
                 s_ringMasks[gemIndex][frameIndex] = ringMask;
-                
-                // Calculate and store crop bounds for optimization
-                s_cropBounds[gemIndex][frameIndex] = CalculateCropBounds(labFrame);
-                
+                s_cropBounds[gemIndex][frameIndex] = cropBounds;
+
                 frameIndex++;
             }
         }
@@ -375,50 +477,28 @@ namespace MaskLoader {
             }
 
             cv::Rect roi(i * FRAME_WIDTH, 0, FRAME_WIDTH, FRAME_HEIGHT);
-            cv::Mat staticImage = spriteSheet(roi).clone();
-            cv::Mat maskFrame = maskSheet(roi).clone();
+            cv::Mat colorRoi = spriteSheet(roi);
+            cv::Mat maskRoi = maskSheet(roi);
 
+            // Debug paths (commented out)
             std::string debugPath = debugDir + "/static_" + std::to_string(i) + ".png";
-            // cv::imwrite(debugPath, staticImage);
+            // cv::imwrite(debugPath, colorRoi);
 
-            // Threshold so only 255 stays white, 254 and below becomes black
-            cv::Mat alphaMask;
-            cv::threshold(maskFrame, alphaMask, 254, 255, cv::THRESH_BINARY);
-            cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(7, 7));
-            cv::erode(alphaMask, alphaMask, kernel, cv::Point(-1, -1), 1);
-
-            // Apply half-texel offset to match in-game rendering
-            staticImage = ApplyHalfTexelOffset(staticImage, 
-                TexelOffsetConfig::GetInterpolationFlag(TexelOffsetConfig::COLOR_INTERPOLATION));
-            alphaMask = ApplyHalfTexelOffset(alphaMask, 
-                TexelOffsetConfig::GetInterpolationFlag(TexelOffsetConfig::ALPHA_INTERPOLATION));
+            // Process the frame using static color parameters
+            cv::Mat colorFrame, maskFrame, ringMask, labImage;
+            CropBounds cropBounds;
+            ProcessSingleFrame(colorRoi, maskRoi, kStaticColorParams,
+                               colorFrame, maskFrame, ringMask, labImage, cropBounds);
 
             std::string alphaDebugPath = debugDir + "/static_alpha_" + std::to_string(i) + ".png";
-            // cv::imwrite(alphaDebugPath, alphaMask);
-
-            // Apply alpha mask to color frame (set background pixels to black)
-            for (int y = 0; y < staticImage.rows; y++) {
-                cv::Vec3b* colorRow = staticImage.ptr<cv::Vec3b>(y);
-                const uchar* maskRow = alphaMask.ptr<uchar>(y);
-                for (int x = 0; x < staticImage.cols; x++) {
-                    if (maskRow[x] == 0) {
-                        colorRow[x] = cv::Vec3b(0, 0, 0);
-                    }
-                }
-            }
-            
-            // Convert to Lab color space for pre-conversion optimization
-            cv::Mat labImage;
-            cv::cvtColor(staticImage, labImage, cv::COLOR_BGR2Lab);
+            // cv::imwrite(alphaDebugPath, maskFrame);
 
             // Store as frame 0 in main storage
-            s_masks[gemIndex][0] = staticImage;
+            s_masks[gemIndex][0] = colorFrame;
             s_labMasks[gemIndex][0] = labImage;
-            s_alphaMasks[gemIndex][0] = alphaMask;
-            s_ringMasks[gemIndex][0] = BuildRingMask(alphaMask);
-            
-            // Calculate and store crop bounds for frame 0
-            s_cropBounds[gemIndex][0] = CalculateCropBounds(labImage);
+            s_alphaMasks[gemIndex][0] = maskFrame;
+            s_ringMasks[gemIndex][0] = ringMask;
+            s_cropBounds[gemIndex][0] = cropBounds;
         }
 
         s_staticColorsLoaded = success;
@@ -459,35 +539,20 @@ namespace MaskLoader {
                 cv::Rect roi(col * HYPERCUBE_FRAME_WIDTH, row * HYPERCUBE_FRAME_HEIGHT,
                              HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT);
 
-                cv::Mat colorFrame = spriteSheet(roi).clone();
-                cv::Mat maskFrame = maskSheet(roi).clone();
+                cv::Mat colorRoi = spriteSheet(roi);
+                cv::Mat maskRoi = maskSheet(roi);
 
-                cv::threshold(maskFrame, maskFrame, 127, 255, cv::THRESH_BINARY);
-
-                cv::Mat ringMask = BuildRingMask(maskFrame);
-
-                // Apply mask to color
-                for (int y = 0; y < colorFrame.rows; y++) {
-                    cv::Vec3b* colorRow = colorFrame.ptr<cv::Vec3b>(y);
-                    const uchar* maskRow = maskFrame.ptr<uchar>(y);
-                    for (int x = 0; x < colorFrame.cols; x++) {
-                        if (maskRow[x] == 0) {
-                            colorRow[x] = cv::Vec3b(0, 0, 0);
-                        }
-                    }
-                }
-
-                // Convert to Lab color space for pre-conversion optimization
-                cv::Mat labFrame;
-                cv::cvtColor(colorFrame, labFrame, cv::COLOR_BGR2Lab);
+                // Process the frame using hypercube parameters
+                cv::Mat colorFrame, maskFrame, ringMask, labFrame;
+                CropBounds cropBounds;
+                ProcessSingleFrame(colorRoi, maskRoi, kHypercubeParams,
+                                   colorFrame, maskFrame, ringMask, labFrame, cropBounds);
 
                 s_hypercubeMasks[frameIndex] = colorFrame;
                 s_hypercubeLabMasks[frameIndex] = labFrame;
                 s_hypercubeAlphaMasks[frameIndex] = maskFrame;
                 s_hypercubeRingMasks[frameIndex] = ringMask;
-                
-                // Calculate and store crop bounds for optimization
-                s_hypercubeCropBounds[frameIndex] = CalculateCropBounds(labFrame);
+                s_hypercubeCropBounds[frameIndex] = cropBounds;
                 frameIndex++;
             }
         }
