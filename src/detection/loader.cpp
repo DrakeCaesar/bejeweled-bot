@@ -822,44 +822,6 @@ namespace MaskLoader {
         s_hypercubeCropBounds[frameIndex] = cropBounds;
     }
 
-    void ReloadHypercubes(const std::string& assetsPath) {
-        if (!s_loaded) {
-            std::cerr << "Cannot reload hypercubes: masks not loaded yet" << std::endl;
-            return;
-        }
-
-        std::string hypercubePath = assetsPath + "/hypercube/";
-
-        // Load the images again
-        cv::Mat colorSheet = cv::imread(hypercubePath + "frame.jp2", cv::IMREAD_COLOR);
-        cv::Mat maskSheet = cv::imread(hypercubePath + "frame_.gif", cv::IMREAD_UNCHANGED);
-        cv::Mat glowSheet = cv::imread(hypercubePath + "colorglow.jp2", cv::IMREAD_COLOR);
-
-        if (colorSheet.empty() || maskSheet.empty()) {
-            std::cerr << "Failed to reload hypercube images for path: " << hypercubePath << std::endl;
-            return;
-        }
-
-        // Convert mask to grayscale
-        if (maskSheet.channels() == 4) {
-            cv::Mat channels[4];
-            cv::split(maskSheet, channels);
-            maskSheet = channels[0];
-        } else if (maskSheet.channels() == 3) {
-            cv::cvtColor(maskSheet, maskSheet, cv::COLOR_BGR2GRAY);
-        }
-
-        // Reprocess all 60 frames
-        int frameIndex = 0;
-        for (int row = 0; row < HYPERCUBE_ROWS; row++) {
-            for (int col = 0; col < HYPERCUBE_COLS; col++) {
-                ProcessHypercubeFrame(colorSheet, maskSheet, glowSheet, row, col, frameIndex);
-                frameIndex++;
-            }
-        }
-
-        std::cout << "Reloaded " << frameIndex << " hypercube frames" << std::endl;
-    }
 
     const cv::Mat& GetMask(GemType type, int frameIndex) {
         if (type == GemType::HYPERCUBE) {
