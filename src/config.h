@@ -43,6 +43,9 @@ namespace Config {
     const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 85;  // Default search threshold (0-100) - shown in UI
     const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 50;   // Hard minimum threshold (0-100) - classification threshold
 
+// Performance optimization toggle
+    inline bool USE_OPTIMIZED_GEM_MATCHING = true; // Toggle between original (false) and optimized (true) implementation
+
 // Internal thresholds for squared-distance comparison (pre-sqrt)
 // These ensure the final sqrt-converted percentages match the config values above
 // Derived from: score = 10000 - (100 - finalPercentage)^2 = finalPercentage * (200 - finalPercentage)

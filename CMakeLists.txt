@@ -62,6 +62,9 @@ target_include_directories(bejeweled-bot PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
+# Add AVX2/optimization flag for both compilers
+target_compile_definitions(bejeweled-bot PRIVATE ENABLE_AVX2)
+
 # Performance optimizations
 if(MSVC)
     target_compile_options(bejeweled-bot PRIVATE

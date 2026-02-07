@@ -6,7 +6,9 @@
       "Bash(timeout:*)",
       "Bash(TASKKILL /F /IM bejeweled-bot.exe:*)",
       "Bash(taskkill //F //IM bejeweled-bot.exe 2>&1:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(find:*)",
+      "Bash(make help:*)"
     ]
   }
 }

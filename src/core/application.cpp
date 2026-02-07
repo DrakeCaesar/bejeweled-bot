@@ -467,6 +467,11 @@ void Application::HandleKeyboardInput(int key) {
       std::cout << "Not currently recording. Press 'R' to start." << std::endl;
     }
   }
+  else if (key == 'm' || key == 'M') {
+    Config::USE_OPTIMIZED_GEM_MATCHING = !Config::USE_OPTIMIZED_GEM_MATCHING;
+    std::cout << "Gem matching: " << (Config::USE_OPTIMIZED_GEM_MATCHING ? "Optimized" : "Original")
+        << " implementation" << std::endl;
+  }
 }
 
 void Application::Shutdown() {
