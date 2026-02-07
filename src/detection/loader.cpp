@@ -29,14 +29,14 @@ namespace MaskLoader {
         // Offset values (in pixels)
         constexpr double OFFSET_X = 0.5;  // Options: -0.5, 0.0, 0.5
         constexpr double OFFSET_Y = 0.5;  // Options: -0.5, 0.0, 0.5
-        
+
         // Interpolation method for color image
         // 0 = INTER_NEAREST, 1 = INTER_LINEAR, 2 = INTER_CUBIC, 3 = INTER_AREA
         constexpr int COLOR_INTERPOLATION = 1;  // 0=Nearest, 1=Bilinear, 2=Bicubic, 3=Area
-        
+
         // Interpolation method for alpha mask
         constexpr int ALPHA_INTERPOLATION = 0;  // Usually keep at 0 (Nearest)
-        
+
         inline int GetInterpolationFlag(int method) {
             switch (method) {
                 case 0: return cv::INTER_NEAREST;
@@ -62,9 +62,9 @@ namespace MaskLoader {
     // Default parameters for different gem types
     static const FrameProcessingParams kStandardGemParams = {
         254,                          // thresholdValue
-        cv::MORPH_RECT,               // kernelShape
+        cv::MORPH_ELLIPSE,               // kernelShape
         cv::Size(3, 3),               // kernelSize
-        false,                        // applyHalfTexelOffset
+        false,                        // applyHalfTexelOffset - NOW ENABLED for animated gems
         TexelOffsetConfig::COLOR_INTERPOLATION,
         TexelOffsetConfig::ALPHA_INTERPOLATION
     };
@@ -79,8 +79,8 @@ namespace MaskLoader {
     };
 
     static const FrameProcessingParams kHypercubeParams = {
-        127,                          // thresholdValue
-        cv::MORPH_RECT,               // kernelShape (not used)
+        254,                          // thresholdValue
+        cv::MORPH_ELLIPSE,               // kernelShape (not used)
         cv::Size(0, 0),               // kernelSize (no erosion)
         false,                        // applyHalfTexelOffset
         TexelOffsetConfig::COLOR_INTERPOLATION,
@@ -628,7 +628,7 @@ namespace MaskLoader {
                 // Build ring mask
                 ringMask = BuildRingMask(processedMask);
 
-                // Apply half-texel offset if configured
+                // Apply half-texel offset if configured (ALWAYS after glow overlay for correct results)
                 cv::Mat processedColor = colorFrame.clone();
                 if (params.applyHalfTexelOffset) {
                     processedColor = ApplyHalfTexelOffset(processedColor,
