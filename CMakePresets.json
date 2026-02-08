@@ -36,7 +36,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
       }
     },
     {
@@ -46,7 +47,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
       }
     },
     {
@@ -56,7 +58,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
       }
     },
     {
@@ -66,7 +69,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
       }
     },
     {
@@ -76,7 +80,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
       }
     },
     {
@@ -86,7 +91,8 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
       }
     }
   ],
