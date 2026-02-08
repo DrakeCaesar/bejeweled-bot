@@ -46,15 +46,6 @@ add_executable(bejeweled-bot ${SOURCES})
 
 target_link_libraries(bejeweled-bot PRIVATE ${OpenCV_LIBS})
 set_target_properties(bejeweled-bot PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
-    # Ensure PDB files are generated in the same directory as the executable
-    PDB_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    PDB_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}"
-    PDB_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
-    PDB_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}"
     # Set PDB file name to match executable
     COMPILE_PDB_NAME "bejeweled-bot"
     COMPILE_PDB_NAME_DEBUG "bejeweled-bot"
