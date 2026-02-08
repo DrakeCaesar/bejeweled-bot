@@ -5,7 +5,6 @@
     "minor": 20,
     "patch": 0
   },
-
   "configurePresets": [
     {
       "name": "base",
@@ -17,14 +16,14 @@
       }
     },
     {
-      "name": "msvc",
+      "name": "msvc-base",
       "hidden": true,
       "inherits": "base",
       "generator": "Visual Studio 18 2026",
       "architecture": "x64"
     },
     {
-      "name": "clangcl",
+      "name": "clangcl-base",
       "hidden": true,
       "inherits": "base",
       "generator": "Visual Studio 18 2026",
@@ -32,7 +31,7 @@
       "toolset": "ClangCL"
     },
     {
-      "name": "dynamic",
+      "name": "dynamic-base",
       "hidden": true,
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
@@ -40,7 +39,7 @@
       }
     },
     {
-      "name": "static",
+      "name": "static-base",
       "hidden": true,
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static",
@@ -48,108 +47,164 @@
       }
     },
     {
-      "name": "debug",
+      "name": "debug-base",
       "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "release",
+      "name": "release-base",
       "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
-      "name": "relwithdebinfo",
+      "name": "relwithdebinfo-base",
       "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     },
     {
-      "name": "x64-Debug",
-      "displayName": "x64 Debug (Dynamic, MSVC)",
-      "inherits": [ "msvc", "dynamic", "debug" ]
+      "name": "dynamic-clang-debug",
+      "displayName": "Dynamic - Clang - Debug",
+      "inherits": ["clangcl-base", "dynamic-base", "debug-base"]
     },
     {
-      "name": "x64-Debug-Static",
-      "displayName": "x64 Debug (Static, MSVC)",
-      "inherits": [ "msvc", "static", "debug" ]
+      "name": "dynamic-clang-release",
+      "displayName": "Dynamic - Clang - Release",
+      "inherits": ["clangcl-base", "dynamic-base", "release-base"]
     },
     {
-      "name": "x64-Release",
-      "displayName": "x64 Release (Dynamic, MSVC)",
-      "inherits": [ "msvc", "dynamic", "release" ]
+      "name": "dynamic-clang-relwithdebinfo",
+      "displayName": "Dynamic - Clang - RelWithDebInfo",
+      "inherits": ["clangcl-base", "dynamic-base", "relwithdebinfo-base"]
     },
     {
-      "name": "x64-Release-Static",
-      "displayName": "x64 Release (Static, MSVC)",
-      "inherits": [ "msvc", "static", "release" ]
+      "name": "dynamic-msvc-debug",
+      "displayName": "Dynamic - MSVC - Debug",
+      "inherits": ["msvc-base", "dynamic-base", "debug-base"]
     },
     {
-      "name": "x64-RelWithDebInfo",
-      "displayName": "x64 RelWithDebInfo (Dynamic, MSVC)",
-      "inherits": [ "msvc", "dynamic", "relwithdebinfo" ]
+      "name": "dynamic-msvc-release",
+      "displayName": "Dynamic - MSVC - Release",
+      "inherits": ["msvc-base", "dynamic-base", "release-base"]
     },
     {
-      "name": "x64-RelWithDebInfo-Static",
-      "displayName": "x64 RelWithDebInfo (Static, MSVC)",
-      "inherits": [ "msvc", "static", "relwithdebinfo" ]
-    },
-
-    {
-      "name": "x64-Debug-Clang",
-      "displayName": "x64 Debug (Dynamic, Clang)",
-      "inherits": [ "clangcl", "dynamic", "debug" ]
+      "name": "dynamic-msvc-relwithdebinfo",
+      "displayName": "Dynamic - MSVC - RelWithDebInfo",
+      "inherits": ["msvc-base", "dynamic-base", "relwithdebinfo-base"]
     },
     {
-      "name": "x64-Debug-Clang-Static",
-      "displayName": "x64 Debug (Static, Clang)",
-      "inherits": [ "clangcl", "static", "debug" ]
+      "name": "static-clang-debug",
+      "displayName": "Static - Clang - Debug",
+      "inherits": ["clangcl-base", "static-base", "debug-base"]
     },
     {
-      "name": "x64-Release-Clang",
-      "displayName": "x64 Release (Dynamic, Clang)",
-      "inherits": [ "clangcl", "dynamic", "release" ]
+      "name": "static-clang-release",
+      "displayName": "Static - Clang - Release",
+      "inherits": ["clangcl-base", "static-base", "release-base"]
     },
     {
-      "name": "x64-Release-Clang-Static",
-      "displayName": "x64 Release (Static, Clang)",
-      "inherits": [ "clangcl", "static", "release" ]
+      "name": "static-clang-relwithdebinfo",
+      "displayName": "Static - Clang - RelWithDebInfo",
+      "inherits": ["clangcl-base", "static-base", "relwithdebinfo-base"]
     },
     {
-      "name": "x64-RelWithDebInfo-Clang",
-      "displayName": "x64 RelWithDebInfo (Dynamic, Clang)",
-      "inherits": [ "clangcl", "dynamic", "relwithdebinfo" ]
+      "name": "static-msvc-debug",
+      "displayName": "Static - MSVC - Debug",
+      "inherits": ["msvc-base", "static-base", "debug-base"]
     },
     {
-      "name": "x64-RelWithDebInfo-Clang-Static",
-      "displayName": "x64 RelWithDebInfo (Static, Clang)",
-      "inherits": [ "clangcl", "static", "relwithdebinfo" ]
+      "name": "static-msvc-release",
+      "displayName": "Static - MSVC - Release",
+      "inherits": ["msvc-base", "static-base", "release-base"]
+    },
+    {
+      "name": "static-msvc-relwithdebinfo",
+      "displayName": "Static - MSVC - RelWithDebInfo",
+      "inherits": ["msvc-base", "static-base", "relwithdebinfo-base"]
     }
   ],
-
   "buildPresets": [
-    { "name": "x64-Debug", "configurePreset": "x64-Debug", "configuration": "Debug" },
-    { "name": "x64-Debug-Static", "configurePreset": "x64-Debug-Static", "configuration": "Debug" },
-    { "name": "x64-Release", "configurePreset": "x64-Release", "configuration": "Release" },
-    { "name": "x64-Release-Static", "configurePreset": "x64-Release-Static", "configuration": "Release" },
-    { "name": "x64-RelWithDebInfo", "configurePreset": "x64-RelWithDebInfo", "configuration": "RelWithDebInfo" },
-    { "name": "x64-RelWithDebInfo-Static", "configurePreset": "x64-RelWithDebInfo-Static", "configuration": "RelWithDebInfo" },
-
-    { "name": "x64-Debug-Clang", "configurePreset": "x64-Debug-Clang", "configuration": "Debug" },
-    { "name": "x64-Debug-Clang-Static", "configurePreset": "x64-Debug-Clang-Static", "configuration": "Debug" },
-    { "name": "x64-Release-Clang", "configurePreset": "x64-Release-Clang", "configuration": "Release" },
-    { "name": "x64-Release-Clang-Static", "configurePreset": "x64-Release-Clang-Static", "configuration": "Release" },
-    { "name": "x64-RelWithDebInfo-Clang", "configurePreset": "x64-RelWithDebInfo-Clang", "configuration": "RelWithDebInfo" },
-    { "name": "x64-RelWithDebInfo-Clang-Static", "configurePreset": "x64-RelWithDebInfo-Clang-Static", "configuration": "RelWithDebInfo" }
+    {
+      "name": "dynamic-clang-debug",
+      "configurePreset": "dynamic-clang-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "dynamic-clang-release",
+      "configurePreset": "dynamic-clang-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "dynamic-clang-relwithdebinfo",
+      "configurePreset": "dynamic-clang-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "dynamic-msvc-debug",
+      "configurePreset": "dynamic-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "dynamic-msvc-release",
+      "configurePreset": "dynamic-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "dynamic-msvc-relwithdebinfo",
+      "configurePreset": "dynamic-msvc-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "static-clang-debug",
+      "configurePreset": "static-clang-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "static-clang-release",
+      "configurePreset": "static-clang-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "static-clang-relwithdebinfo",
+      "configurePreset": "static-clang-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "static-msvc-debug",
+      "configurePreset": "static-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "static-msvc-release",
+      "configurePreset": "static-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "static-msvc-relwithdebinfo",
+      "configurePreset": "static-msvc-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    }
   ],
-
   "testPresets": [
-    { "name": "x64-Debug", "configurePreset": "x64-Debug", "configuration": "Debug" },
-    { "name": "x64-Release", "configurePreset": "x64-Release", "configuration": "Release" },
-    { "name": "x64-RelWithDebInfo", "configurePreset": "x64-RelWithDebInfo", "configuration": "RelWithDebInfo" }
+    {
+      "name": "dynamic-msvc-debug",
+      "configurePreset": "dynamic-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "dynamic-msvc-release",
+      "configurePreset": "dynamic-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "dynamic-msvc-relwithdebinfo",
+      "configurePreset": "dynamic-msvc-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    }
   ]
 }
