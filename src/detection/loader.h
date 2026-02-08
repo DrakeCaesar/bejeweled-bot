@@ -1,7 +1,6 @@
 #pragma once
 
 #include "gem_types.h"
-#include "frame_processing.h"
 #include <array>
 #include <opencv2/opencv.hpp>
 #include <string>
