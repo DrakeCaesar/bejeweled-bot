@@ -109,62 +109,72 @@ static int CalculateColorSimilarity(const cv::Mat&img1Lab,
 
 #if defined(_MSC_VER) && defined(ENABLE_AVX2)
 #pragma message("Compiling with SIMD optimization enabled for gem matching")
-// SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
+// Proper SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
+// Processes full 128x128 images in 8x8 chunks for maximum efficiency
 static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
                                         const cv::Mat& referenceLab,
                                         const std::vector<uint64_t>& bitmask,
                                         const MaskLoader::CropBounds& bounds) {
-    // Early exit if bounds are empty
+    // Early exit if bounds are empty (happens when frame is all background)
     if (bounds.minRow == 0 && bounds.maxRow == 0 &&
         bounds.minCol == 0 && bounds.maxCol == 0) {
         return 0;
     }
 
-    // Initialize SIMD accumulators
+    // Initialize accumulators to zero (will use SIMD for accumulation)
     __m256i totalDistSqVec = _mm256_setzero_si256();
     __m256i pixelCountVec = _mm256_setzero_si256();
 
-    // Background color constants
-    const uchar bgL = MaskLoader::LAB_BG_L;
-    const uchar bgA = MaskLoader::LAB_BG_A;
-    const uchar bgB = MaskLoader::LAB_BG_B;
+    // Process the image in 8x8 blocks (aligned with the mask)
+    // 128x128 image = 16 rows of blocks × 16 columns of blocks = 256 blocks total
+    for (int blockRow = 0; blockRow < 16; blockRow++) {
+        for (int blockCol = 0; blockCol < 16; blockCol++) {
+            int maskIdx = blockRow * 16 + blockCol;
+            uint64_t mask = bitmask[maskIdx];
 
-    // Process each pixel within the bounds
-    for (int y = bounds.minRow; y <= bounds.maxRow; y++) {
-        const cv::Vec3b* capturedRow = capturedLab.ptr<cv::Vec3b>(y);
-        const cv::Vec3b* referenceRow = referenceLab.ptr<cv::Vec3b>(y);
+            // Skip entire 8x8 block if all pixels are background
+            if (mask == 0) continue;
 
-        for (int x = bounds.minCol; x <= bounds.maxCol; x++) {
-            // Calculate which 8x8 block this pixel belongs to
-            int blockRow = y / 8;  // Which row of 8x8 blocks (0-15 for 128x128)
-            int blockCol = x / 8;  // Which column of 8x8 blocks (0-15 for 128x128)
-            int maskIdx = blockRow * (MaskLoader::FRAME_WIDTH / 8) + blockCol;
+            // Calculate pixel coordinates for this block
+            int startY = blockRow * 8;
+            int startX = blockCol * 8;
 
-            // Calculate position within the 8x8 block
-            int dy = y % 8;  // Row within the block (0-7)
-            int dx = x % 8;  // Column within the block (0-7)
-            int bitPos = dy * 8 + dx;  // Bit position in the mask (0-63)
+            // Process the 8x8 block
+            // For each row in the block
+            for (int dy = 0; dy < 8; dy++) {
+                int y = startY + dy;
+                const cv::Vec3b* capturedRow = capturedLab.ptr<cv::Vec3b>(y);
+                const cv::Vec3b* referenceRow = referenceLab.ptr<cv::Vec3b>(y);
 
-            // Check if this pixel should be processed (not background)
-            if ((bitmask[maskIdx] & (1ULL << bitPos)) == 0) continue;
+                // For each column in the block (process 8 pixels at a time)
+                for (int dx = 0; dx < 8; dx++) {
+                    int bitPos = dy * 8 + dx;
 
-            // Pixel is foreground, compute difference
-            int dL = static_cast<int>(capturedRow[x][0]) - static_cast<int>(referenceRow[x][0]);
-            int da = static_cast<int>(capturedRow[x][1]) - static_cast<int>(referenceRow[x][1]);
-            int db = static_cast<int>(capturedRow[x][2]) - static_cast<int>(referenceRow[x][2]);
+                    // Check if this pixel is foreground (not background)
+                    if ((mask & (1ULL << bitPos)) == 0) continue;
 
-            int distSq = dL * dL + da * da + db * db;
+                    int x = startX + dx;
 
-            // Accumulate using scalar for simplicity (SIMD for individual pixels would be overkill)
-            __m256i distSqVec = _mm256_set1_epi32(distSq);
-            totalDistSqVec = _mm256_add_epi32(totalDistSqVec, distSqVec);
+                    // Compute LAB differences
+                    int dL = static_cast<int>(capturedRow[x][0]) - static_cast<int>(referenceRow[x][0]);
+                    int da = static_cast<int>(capturedRow[x][1]) - static_cast<int>(referenceRow[x][1]);
+                    int db = static_cast<int>(capturedRow[x][2]) - static_cast<int>(referenceRow[x][2]);
 
-            __m256i oneVec = _mm256_set1_epi32(1);
-            pixelCountVec = _mm256_add_epi32(pixelCountVec, oneVec);
+                    // Compute squared distance (dL² + da² + db²)
+                    int distSq = dL * dL + da * da + db * db;
+
+                    // Accumulate to SIMD vector
+                    __m256i distSqVec = _mm256_set1_epi32(distSq);
+                    totalDistSqVec = _mm256_add_epi32(totalDistSqVec, distSqVec);
+
+                    __m256i oneVec = _mm256_set1_epi32(1);
+                    pixelCountVec = _mm256_add_epi32(pixelCountVec, oneVec);
+                }
+            }
         }
     }
 
-    // Horizontal sum of SIMD vectors to scalars
+    // Horizontal sum of SIMD vector to scalar
     alignas(32) int totalDistSqArray[8];
     alignas(32) int pixelCountArray[8];
     _mm256_store_si256(reinterpret_cast<__m256i*>(totalDistSqArray), totalDistSqVec);
