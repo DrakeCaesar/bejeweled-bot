@@ -164,45 +164,57 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
                 int y = startY + dy;
                 int rowOffset = y * imageWidth;
 
-                // Load 8 pixels from each channel using pre-computed base pointers
-                const uchar* capturedL = capturedL_base + rowOffset + startX;
-                const uchar* capturedA = capturedA_base + rowOffset + startX;
-                const uchar* capturedB = capturedB_base + rowOffset + startX;
+                // OPTIMIZATION: Process channels sequentially to reduce register pressure
+                // Instead of loading all 3 channels simultaneously (~12 active registers),
+                // process one channel at a time (~4 active registers, reused)
 
-                const uchar* referenceL = referenceL_base + rowOffset + startX;
-                const uchar* referenceA = referenceA_base + rowOffset + startX;
-                const uchar* referenceB = referenceB_base + rowOffset + startX;
+                // Initialize accumulator for squared differences
+                __m256i diffSqSum = _mm256_setzero_si256();
 
-                // Load 8 pixels directly into AVX registers (no temporary arrays!)
-                __m128i capturedL_64 = _mm_loadl_epi64((__m128i*)capturedL);
-                __m128i capturedA_64 = _mm_loadl_epi64((__m128i*)capturedA);
-                __m128i capturedB_64 = _mm_loadl_epi64((__m128i*)capturedB);
+                // Process L channel
+                {
+                    const uchar* capturedL = capturedL_base + rowOffset + startX;
+                    const uchar* referenceL = referenceL_base + rowOffset + startX;
 
-                __m128i referenceL_64 = _mm_loadl_epi64((__m128i*)referenceL);
-                __m128i referenceA_64 = _mm_loadl_epi64((__m128i*)referenceA);
-                __m128i referenceB_64 = _mm_loadl_epi64((__m128i*)referenceB);
+                    __m128i capturedL_64 = _mm_loadl_epi64((__m128i*)capturedL);
+                    __m128i referenceL_64 = _mm_loadl_epi64((__m128i*)referenceL);
 
-                // Extend to 32-bit integers for calculations
-                __m256i capturedL_32 = _mm256_cvtepu8_epi32(capturedL_64);
-                __m256i capturedA_32 = _mm256_cvtepu8_epi32(capturedA_64);
-                __m256i capturedB_32 = _mm256_cvtepu8_epi32(capturedB_64);
+                    __m256i capturedL_32 = _mm256_cvtepu8_epi32(capturedL_64);
+                    __m256i referenceL_32 = _mm256_cvtepu8_epi32(referenceL_64);
 
-                __m256i referenceL_32 = _mm256_cvtepu8_epi32(referenceL_64);
-                __m256i referenceA_32 = _mm256_cvtepu8_epi32(referenceA_64);
-                __m256i referenceB_32 = _mm256_cvtepu8_epi32(referenceB_64);
+                    __m256i diffL = _mm256_sub_epi32(capturedL_32, referenceL_32);
+                    diffSqSum = _mm256_mullo_epi32(diffL, diffL);
+                }
 
-                // Compute differences (captured - reference) for each channel
-                __m256i diffL = _mm256_sub_epi32(capturedL_32, referenceL_32);
-                __m256i diffA = _mm256_sub_epi32(capturedA_32, referenceA_32);
-                __m256i diffB = _mm256_sub_epi32(capturedB_32, referenceB_32);
+                // Process A channel and accumulate
+                {
+                    const uchar* capturedA = capturedA_base + rowOffset + startX;
+                    const uchar* referenceA = referenceA_base + rowOffset + startX;
 
-                // Square the differences (d²) for each channel
-                __m256i diffSqL = _mm256_mullo_epi32(diffL, diffL);
-                __m256i diffSqA = _mm256_mullo_epi32(diffA, diffA);
-                __m256i diffSqB = _mm256_mullo_epi32(diffB, diffB);
+                    __m128i capturedA_64 = _mm_loadl_epi64((__m128i*)capturedA);
+                    __m128i referenceA_64 = _mm_loadl_epi64((__m128i*)referenceA);
 
-                // Sum across channels: dL² + dA² + dB²
-                __m256i diffSqSum = _mm256_add_epi32(diffSqL, _mm256_add_epi32(diffSqA, diffSqB));
+                    __m256i capturedA_32 = _mm256_cvtepu8_epi32(capturedA_64);
+                    __m256i referenceA_32 = _mm256_cvtepu8_epi32(referenceA_64);
+
+                    __m256i diffA = _mm256_sub_epi32(capturedA_32, referenceA_32);
+                    diffSqSum = _mm256_add_epi32(diffSqSum, _mm256_mullo_epi32(diffA, diffA));
+                }
+
+                // Process B channel and accumulate
+                {
+                    const uchar* capturedB = capturedB_base + rowOffset + startX;
+                    const uchar* referenceB = referenceB_base + rowOffset + startX;
+
+                    __m128i capturedB_64 = _mm_loadl_epi64((__m128i*)capturedB);
+                    __m128i referenceB_64 = _mm_loadl_epi64((__m128i*)referenceB);
+
+                    __m256i capturedB_32 = _mm256_cvtepu8_epi32(capturedB_64);
+                    __m256i referenceB_32 = _mm256_cvtepu8_epi32(referenceB_64);
+
+                    __m256i diffB = _mm256_sub_epi32(capturedB_32, referenceB_32);
+                    diffSqSum = _mm256_add_epi32(diffSqSum, _mm256_mullo_epi32(diffB, diffB));
+                }
 
                 // Create mask vector from rowMask (one int32 per pixel, -1 if active, 0 if background)
                 // OPTIMIZATION: Create once and reuse for both masking and counting
