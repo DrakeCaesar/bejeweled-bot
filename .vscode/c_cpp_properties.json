@@ -3,11 +3,7 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${vcpkgRoot}/x64-windows/include",
-                "${vcpkgRoot}/x86-windows/include",
-                "${workspaceFolder}/builds/msbuild-vcpkg/vcpkg_installed/x64-windows/include/opencv4",
-                "${workspaceFolder}/build/vcpkg_installed/x64-windows/include/opencv4"
+                "${workspaceFolder}/**"
             ],
             "defines": [
                 "_DEBUG",

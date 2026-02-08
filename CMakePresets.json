@@ -35,7 +35,7 @@
       "hidden": true,
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed"
       }
     },
     {
@@ -43,7 +43,7 @@
       "hidden": true,
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed"
       }
     },
     {
