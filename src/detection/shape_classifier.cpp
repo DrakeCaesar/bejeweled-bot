@@ -82,15 +82,27 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
 }
 
 // SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
-// Processes full 128x128 images in 8x8 chunks for maximum efficiency
+// Processes 8 pixels simultaneously to eliminate per-pixel branching
 static int CalculateColorSimilarity(const cv::Mat& capturedLab,
                                         const cv::Mat& referenceLab,
                                         const std::vector<uint64_t>& bitmask) {
-    // Initialize scalar accumulators (SIMD was inefficient here - broadcasting single values)
-    uint64_t totalDistanceSq = 0;
+    __m256i totalDistSq = _mm256_setzero_si256();
     int pixelCount = 0;
 
-    // Process the image in 8x8 blocks (aligned with the mask)
+    // Generate mask lookup table on first call - converts 8-bit mask to 8 integer masks
+    // Each entry: if bit i is set, value is -1 (all 1s), else 0
+    alignas(32) static int32_t maskTable[256][8];
+    static bool maskTableInitialized = false;
+    if (!maskTableInitialized) {
+        for (int mask = 0; mask < 256; mask++) {
+            for (int i = 0; i < 8; i++) {
+                maskTable[mask][i] = (mask & (1 << i)) ? 0xFFFFFFFF : 0;
+            }
+        }
+        maskTableInitialized = true;
+    }
+
+    // Process the image in 8x8 blocks (aligned with the mask for cache efficiency)
     // 128x128 image = 16 rows of blocks × 16 columns of blocks = 256 blocks total
     for (int blockRow = 0; blockRow < 16; blockRow++) {
         for (int blockCol = 0; blockCol < 16; blockCol++) {
@@ -104,36 +116,71 @@ static int CalculateColorSimilarity(const cv::Mat& capturedLab,
             int startY = blockRow * 8;
             int startX = blockCol * 8;
 
-            // Process the 8x8 block
-            // For each row in the block
+            // Extract 8-bit row masks from 64-bit block mask
+            // Row 0 uses bits 0-7, Row 1 uses bits 8-15, etc.
+            alignas(32) uint8_t rowMasks[8];
+            for (int i = 0; i < 8; i++) {
+                rowMasks[i] = static_cast<uint8_t>((mask >> (i * 8)) & 0xFF);
+            }
+
+            // Process each row in the 8x8 block
             for (int dy = 0; dy < 8; dy++) {
+                uint8_t rowMask = rowMasks[dy];
+                if (rowMask == 0) continue;  // Skip empty rows
+
                 int y = startY + dy;
-                const cv::Vec3b* capturedRow = capturedLab.ptr<cv::Vec3b>(y);
-                const cv::Vec3b* referenceRow = referenceLab.ptr<cv::Vec3b>(y);
+                const uchar* capturedBase = capturedLab.ptr<uchar>(y);
+                const uchar* referenceBase = referenceLab.ptr<uchar>(y);
 
-                // For each column in the block (process 8 pixels at a time)
-                for (int dx = 0; dx < 8; dx++) {
-                    int bitPos = dy * 8 + dx;
+                // Process all 8 pixels in this row using SIMD for each channel
+                // Pixel at (x,y) has byte offset = x * 3 + channel
+                alignas(32) int capturedVals[8];
+                alignas(32) int referenceVals[8];
 
-                    // Check if this pixel is foreground (not background)
-                    if ((mask & (1ULL << bitPos)) == 0) continue;
+                // Process L, A, B channels
+                for (int channel = 0; channel < 3; channel++) {
+                    // Load 8 pixels for this channel
+                    // Calculate byte offsets: (startX + i) * 3 + channel
+                    int channelOffset = channel;
+                    for (int i = 0; i < 8; i++) {
+                        int x = startX + i;
+                        int offset = x * 3 + channelOffset;
+                        capturedVals[i] = capturedBase[offset];
+                        referenceVals[i] = referenceBase[offset];
+                    }
 
-                    int x = startX + dx;
+                    // Load into 256-bit vector registers (8 x 32-bit integers)
+                    __m256i captured = _mm256_load_si256((__m256i*)capturedVals);
+                    __m256i reference = _mm256_load_si256((__m256i*)referenceVals);
 
-                    // Compute LAB differences
-                    int dL = static_cast<int>(capturedRow[x][0]) - static_cast<int>(referenceRow[x][0]);
-                    int da = static_cast<int>(capturedRow[x][1]) - static_cast<int>(referenceRow[x][1]);
-                    int db = static_cast<int>(capturedRow[x][2]) - static_cast<int>(referenceRow[x][2]);
+                    // Compute differences (captured - reference)
+                    __m256i diff = _mm256_sub_epi32(captured, reference);
 
-                    // Compute squared distance (dL² + da² + db²)
-                    int distSq = dL * dL + da * da + db * db;
+                    // Square the differences (d²)
+                    __m256i diffSq = _mm256_mullo_epi32(diff, diff);
 
-                    // Accumulate using scalar variables (much faster than SIMD broadcasting)
-                    totalDistanceSq += distSq;
-                    pixelCount++;
+                    // Apply mask: zero out background pixels
+                    // Load mask vector from lookup table and AND with diffSq
+                    __m256i maskVec = _mm256_load_si256((__m256i*)maskTable[rowMask]);
+                    __m256i maskedDiffSq = _mm256_and_si256(diffSq, maskVec);
+
+                    // Accumulate to total
+                    totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
                 }
+
+                // Count active pixels using builtin popcount
+                pixelCount += _popcnt32(rowMask);
             }
         }
+    }
+
+    // Reduce 8 32-bit values to single sum
+    alignas(32) int temp[8];
+    _mm256_store_si256((__m256i*)temp, totalDistSq);
+
+    uint64_t totalDistanceSq = 0;
+    for (int i = 0; i < 8; i++) {
+        totalDistanceSq += temp[i];
     }
 
     if (pixelCount == 0) return 0;
