@@ -14,25 +14,13 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": {
-          "type": "FILEPATH",
-          "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        },
-        "VCPKG_TARGET_TRIPLET": "$pen{triplet}"
-      },
-      "environment": {
-        "triplet": "x64-windows"
-      },
-      "vendor": {
-        "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "hostOS": ["Windows"]
-        }
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
     },
     {
-      "name": "x64-debug",
-      "displayName": "x64 Debug",
-      "description": "Debug build for x64 with vcpkg dynamic linking",
+      "name": "x64-Debug",
+      "displayName": "x64 Debug (Dynamic)",
+      "description": "Debug build with dynamic linking",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -41,9 +29,9 @@
       }
     },
     {
-      "name": "x64-debug-static",
-      "displayName": "x64 Debug Static",
-      "description": "Debug build for x64 with vcpkg static linking",
+      "name": "x64-Debug-Static",
+      "displayName": "x64 Debug (Static)",
+      "description": "Debug build with static linking",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -52,9 +40,9 @@
       }
     },
     {
-      "name": "x64-release",
-      "displayName": "x64 Release",
-      "description": "Release build for x64 with vcpkg dynamic linking",
+      "name": "x64-Release",
+      "displayName": "x64 Release (Dynamic)",
+      "description": "Release build with dynamic linking",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -63,9 +51,9 @@
       }
     },
     {
-      "name": "x64-release-static",
-      "displayName": "x64 Release Static",
-      "description": "Release build for x64 with vcpkg static linking",
+      "name": "x64-Release-Static",
+      "displayName": "x64 Release (Static)",
+      "description": "Release build with static linking",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -74,9 +62,9 @@
       }
     },
     {
-      "name": "x64-release-debug",
-      "displayName": "x64 RelWithDebInfo",
-      "description": "RelWithDebInfo build for x64 with vcpkg dynamic linking",
+      "name": "x64-RelWithDebInfo",
+      "displayName": "x64 RelWithDebInfo (Dynamic)",
+      "description": "Release with Debug Info build with dynamic linking",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
@@ -85,9 +73,9 @@
       }
     },
     {
-      "name": "x64-release-debug-static",
-      "displayName": "x64 RelWithDebInfo Static",
-      "description": "RelWithDebInfo build for x64 with vcpkg static linking",
+      "name": "x64-RelWithDebInfo-Static",
+      "displayName": "x64 RelWithDebInfo (Static)",
+      "description": "Release with Debug Info build with static linking",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
@@ -98,50 +86,44 @@
   ],
   "buildPresets": [
     {
-      "name": "x64-debug",
-      "configurePreset": "x64-debug",
-      "configuration": "Debug"
+      "name": "x64-Debug",
+      "configurePreset": "x64-Debug"
     },
     {
-      "name": "x64-debug-static",
-      "configurePreset": "x64-debug-static",
-      "configuration": "Debug"
+      "name": "x64-Debug-Static",
+      "configurePreset": "x64-Debug-Static"
     },
     {
-      "name": "x64-release",
-      "configurePreset": "x64-release",
-      "configuration": "Release"
+      "name": "x64-Release",
+      "configurePreset": "x64-Release"
     },
     {
-      "name": "x64-release-static",
-      "configurePreset": "x64-release-static",
-      "configuration": "Release"
+      "name": "x64-Release-Static",
+      "configurePreset": "x64-Release-Static"
     },
     {
-      "name": "x64-release-debug",
-      "configurePreset": "x64-release-debug",
-      "configuration": "RelWithDebInfo"
+      "name": "x64-RelWithDebInfo",
+      "configurePreset": "x64-RelWithDebInfo"
     },
     {
-      "name": "x64-release-debug-static",
-      "configurePreset": "x64-release-debug-static",
-      "configuration": "RelWithDebInfo"
+      "name": "x64-RelWithDebInfo-Static",
+      "configurePreset": "x64-RelWithDebInfo-Static"
     }
   ],
   "testPresets": [
     {
-      "name": "x64-debug",
-      "configurePreset": "x64-debug",
+      "name": "x64-Debug",
+      "configurePreset": "x64-Debug",
       "configuration": "Debug"
     },
     {
-      "name": "x64-release",
-      "configurePreset": "x64-release",
+      "name": "x64-Release",
+      "configurePreset": "x64-Release",
       "configuration": "Release"
     },
     {
-      "name": "x64-release-debug",
-      "configurePreset": "x64-release-debug",
+      "name": "x64-RelWithDebInfo",
+      "configurePreset": "x64-RelWithDebInfo",
       "configuration": "RelWithDebInfo"
     }
   ]
