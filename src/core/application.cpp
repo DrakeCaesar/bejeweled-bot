@@ -4,7 +4,7 @@
 #include "../detection/gem_detector.h"
 #include "../detection/loader.h"
 #include "../detection/process_thread.h"
-#include "../detection/shape_classifier.h"
+#include "../detection/frame_processing.h"
 #include "../rendering/overlay.h"
 #include "../rendering/control_panel.h"
 #include "../assets/game_asset_extractor.h"
