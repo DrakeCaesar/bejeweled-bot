@@ -149,16 +149,14 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
             int startY = blockRow * 8;
             int startX = blockCol * 8;
 
-            // Extract 8-bit row masks from 64-bit block mask
-            // Row 0 uses bits 0-7, Row 1 uses bits 8-15, etc.
-            alignas(32) uint8_t rowMasks[8];
-            for (int i = 0; i < 8; i++) {
-                rowMasks[i] = static_cast<uint8_t>((mask >> (i * 8)) & 0xFF);
-            }
-
             // Process each row in the 8x8 block
+            // OPTIMIZATION: Extract row masks on-demand instead of pre-computing all 8
+            // This eliminates the rowMasks array (32 bytes stack, cache pollution)
+            // and only computes masks for rows we actually process
             for (int dy = 0; dy < 8; dy++) {
-                uint8_t rowMask = rowMasks[dy];
+                // Extract 8-bit row mask from 64-bit block mask on-demand
+                // Row 0 uses bits 0-7, Row 1 uses bits 8-15, etc.
+                uint8_t rowMask = static_cast<uint8_t>((mask >> (dy * 8)) & 0xFF);
                 if (rowMask == 0) continue;  // Skip empty rows
 
                 int y = startY + dy;
