@@ -125,6 +125,16 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
     __m256i totalDistSq = _mm256_setzero_si256();
     __m256i pixelCountVec = _mm256_setzero_si256();  // Vectorized pixel counter
 
+    // OPTIMIZATION: Hoist planar base pointers outside all loops to eliminate
+    // repeated ptr() calls (6 per active row => 12,000+ calls eliminated!)
+    const uchar* __restrict capturedL_base = capturedPlanarLab.ptr<uchar>(0);
+    const uchar* __restrict capturedA_base = capturedPlanarLab.ptr<uchar>(1);
+    const uchar* __restrict capturedB_base = capturedPlanarLab.ptr<uchar>(2);
+
+    const uchar* __restrict referenceL_base = referencePlanarLab.ptr<uchar>(0);
+    const uchar* __restrict referenceA_base = referencePlanarLab.ptr<uchar>(1);
+    const uchar* __restrict referenceB_base = referencePlanarLab.ptr<uchar>(2);
+
     // Process the image in 8x8 blocks (aligned with the mask for cache efficiency)
     // 128x128 image = 16 rows of blocks × 16 columns of blocks = 256 blocks total
     for (int blockRow = 0; blockRow < 16; blockRow++) {
@@ -154,17 +164,14 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
                 int y = startY + dy;
                 int rowOffset = y * imageWidth;
 
-                // Load 8 pixels from each channel directly using planar layout
-                // L channel: row 0 of planar image
-                // A channel: row 1 of planar image
-                // B channel: row 2 of planar image
-                const uchar* capturedL = capturedPlanarLab.ptr<uchar>(0) + rowOffset + startX;
-                const uchar* capturedA = capturedPlanarLab.ptr<uchar>(1) + rowOffset + startX;
-                const uchar* capturedB = capturedPlanarLab.ptr<uchar>(2) + rowOffset + startX;
+                // Load 8 pixels from each channel using pre-computed base pointers
+                const uchar* capturedL = capturedL_base + rowOffset + startX;
+                const uchar* capturedA = capturedA_base + rowOffset + startX;
+                const uchar* capturedB = capturedB_base + rowOffset + startX;
 
-                const uchar* referenceL = referencePlanarLab.ptr<uchar>(0) + rowOffset + startX;
-                const uchar* referenceA = referencePlanarLab.ptr<uchar>(1) + rowOffset + startX;
-                const uchar* referenceB = referencePlanarLab.ptr<uchar>(2) + rowOffset + startX;
+                const uchar* referenceL = referenceL_base + rowOffset + startX;
+                const uchar* referenceA = referenceA_base + rowOffset + startX;
+                const uchar* referenceB = referenceB_base + rowOffset + startX;
 
                 // Load 8 pixels directly into AVX registers (no temporary arrays!)
                 __m128i capturedL_64 = _mm_loadl_epi64((__m128i*)capturedL);
@@ -198,6 +205,7 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
                 __m256i diffSqSum = _mm256_add_epi32(diffSqL, _mm256_add_epi32(diffSqA, diffSqB));
 
                 // Create mask vector from rowMask (one int32 per pixel, -1 if active, 0 if background)
+                // OPTIMIZATION: Create once and reuse for both masking and counting
                 alignas(32) int32_t maskVals[8];
                 for (int i = 0; i < 8; i++) {
                     maskVals[i] = (rowMask & (1 << i)) ? 0xFFFFFFFF : 0;
@@ -210,9 +218,9 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
                 // Accumulate to total
                 totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
 
-                // Count active pixels using SIMD
-                __m256i rowMaskVec = _mm256_load_si256((__m256i*)maskVals);
-                pixelCountVec = _mm256_sub_epi32(pixelCountVec, rowMaskVec);  // Subtract -1 = add 1
+                // Count active pixels using SIMD (reuse maskVec - subtract -1 = add 1)
+                // OPTIMIZATION: Eliminated redundant _mm256_load_si256 by reusing maskVec
+                pixelCountVec = _mm256_sub_epi32(pixelCountVec, maskVec);
             }
         }
     }
@@ -227,12 +235,13 @@ static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
     _mm256_store_si256((__m256i*)temp, sum1);
     uint64_t totalDistanceSq = static_cast<uint64_t>(temp[0]) + static_cast<uint64_t>(temp[4]);
 
-    // Reduce pixel count vector
-    _mm256_store_si256((__m256i*)temp, pixelCountVec);
-    int pixelCount = 0;
-    for (int i = 0; i < 8; i++) {
-        pixelCount += temp[i];
-    }
+    // Reduce pixel count vector using SIMD (eliminate scalar loop)
+    // OPTIMIZATION: Use same horizontal reduction pattern as totalDistanceSq
+    __m256i count4 = _mm256_hadd_epi32(pixelCountVec, pixelCountVec);
+    __m256i count2 = _mm256_hadd_epi32(count4, count4);
+    __m256i count1 = _mm256_shuffle_epi32(count2, _MM_SHUFFLE(2, 0, 2, 0));
+    _mm256_store_si256((__m256i*)temp, count1);
+    int pixelCount = temp[0] + temp[4];  // Sum both 128-bit lanes
 
     if (pixelCount == 0) return 0;
     if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
