@@ -121,9 +121,9 @@ static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
         return 0;
     }
 
-    // Initialize accumulators to zero (will use SIMD for accumulation)
-    __m256i totalDistSqVec = _mm256_setzero_si256();
-    __m256i pixelCountVec = _mm256_setzero_si256();
+    // Initialize scalar accumulators (SIMD was inefficient here - broadcasting single values)
+    uint64_t totalDistanceSq = 0;
+    int pixelCount = 0;
 
     // Process the image in 8x8 blocks (aligned with the mask)
     // 128x128 image = 16 rows of blocks × 16 columns of blocks = 256 blocks total
@@ -163,29 +163,12 @@ static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
                     // Compute squared distance (dL² + da² + db²)
                     int distSq = dL * dL + da * da + db * db;
 
-                    // Accumulate to SIMD vector
-                    __m256i distSqVec = _mm256_set1_epi32(distSq);
-                    totalDistSqVec = _mm256_add_epi32(totalDistSqVec, distSqVec);
-
-                    __m256i oneVec = _mm256_set1_epi32(1);
-                    pixelCountVec = _mm256_add_epi32(pixelCountVec, oneVec);
+                    // Accumulate using scalar variables (much faster than SIMD broadcasting)
+                    totalDistanceSq += distSq;
+                    pixelCount++;
                 }
             }
         }
-    }
-
-    // Horizontal sum of SIMD vector to scalar
-    alignas(32) int totalDistSqArray[8];
-    alignas(32) int pixelCountArray[8];
-    _mm256_store_si256(reinterpret_cast<__m256i*>(totalDistSqArray), totalDistSqVec);
-    _mm256_store_si256(reinterpret_cast<__m256i*>(pixelCountArray), pixelCountVec);
-
-    uint64_t totalDistanceSq = 0;
-    int pixelCount = 0;
-
-    for (int i = 0; i < 8; i++) {
-        totalDistanceSq += totalDistSqArray[i];
-        pixelCount += pixelCountArray[i];
     }
 
     if (pixelCount == 0) return 0;
