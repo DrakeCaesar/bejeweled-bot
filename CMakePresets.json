@@ -5,12 +5,11 @@
     "minor": 20,
     "patch": 0
   },
+
   "configurePresets": [
     {
       "name": "base",
       "hidden": true,
-      "generator": "Visual Studio 18 2026",
-      "architecture": "x64",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
@@ -18,113 +17,139 @@
       }
     },
     {
-      "name": "x64-Debug",
-      "displayName": "x64 Debug (Dynamic)",
-      "description": "Debug build with dynamic linking",
+      "name": "msvc",
+      "hidden": true,
       "inherits": "base",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64"
+    },
+    {
+      "name": "clangcl",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "toolset": "ClangCL"
+    },
+    {
+      "name": "dynamic",
+      "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
       }
+    },
+    {
+      "name": "static",
+      "hidden": true,
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
+      }
+    },
+    {
+      "name": "debug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "relwithdebinfo",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "x64-Debug",
+      "displayName": "x64 Debug (Dynamic, MSVC)",
+      "inherits": [ "msvc", "dynamic", "debug" ]
     },
     {
       "name": "x64-Debug-Static",
-      "displayName": "x64 Debug (Static)",
-      "description": "Debug build with static linking",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
-      }
+      "displayName": "x64 Debug (Static, MSVC)",
+      "inherits": [ "msvc", "static", "debug" ]
     },
     {
       "name": "x64-Release",
-      "displayName": "x64 Release (Dynamic)",
-      "description": "Release build with dynamic linking",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
-      }
+      "displayName": "x64 Release (Dynamic, MSVC)",
+      "inherits": [ "msvc", "dynamic", "release" ]
     },
     {
       "name": "x64-Release-Static",
-      "displayName": "x64 Release (Static)",
-      "description": "Release build with static linking",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
-      }
+      "displayName": "x64 Release (Static, MSVC)",
+      "inherits": [ "msvc", "static", "release" ]
     },
     {
       "name": "x64-RelWithDebInfo",
-      "displayName": "x64 RelWithDebInfo (Dynamic)",
-      "description": "Release with Debug Info build with dynamic linking",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows"
-      }
+      "displayName": "x64 RelWithDebInfo (Dynamic, MSVC)",
+      "inherits": [ "msvc", "dynamic", "relwithdebinfo" ]
     },
     {
       "name": "x64-RelWithDebInfo-Static",
-      "displayName": "x64 RelWithDebInfo (Static)",
-      "description": "Release with Debug Info build with static linking",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "VCPKG_INSTALLED_DIR": "$env{VCPKG_ROOT}/installed-x64-windows-static"
-      }
+      "displayName": "x64 RelWithDebInfo (Static, MSVC)",
+      "inherits": [ "msvc", "static", "relwithdebinfo" ]
+    },
+
+    {
+      "name": "x64-Debug-Clang",
+      "displayName": "x64 Debug (Dynamic, Clang)",
+      "inherits": [ "clangcl", "dynamic", "debug" ]
+    },
+    {
+      "name": "x64-Debug-Clang-Static",
+      "displayName": "x64 Debug (Static, Clang)",
+      "inherits": [ "clangcl", "static", "debug" ]
+    },
+    {
+      "name": "x64-Release-Clang",
+      "displayName": "x64 Release (Dynamic, Clang)",
+      "inherits": [ "clangcl", "dynamic", "release" ]
+    },
+    {
+      "name": "x64-Release-Clang-Static",
+      "displayName": "x64 Release (Static, Clang)",
+      "inherits": [ "clangcl", "static", "release" ]
+    },
+    {
+      "name": "x64-RelWithDebInfo-Clang",
+      "displayName": "x64 RelWithDebInfo (Dynamic, Clang)",
+      "inherits": [ "clangcl", "dynamic", "relwithdebinfo" ]
+    },
+    {
+      "name": "x64-RelWithDebInfo-Clang-Static",
+      "displayName": "x64 RelWithDebInfo (Static, Clang)",
+      "inherits": [ "clangcl", "static", "relwithdebinfo" ]
     }
   ],
+
   "buildPresets": [
-    {
-      "name": "x64-Debug",
-      "configurePreset": "x64-Debug"
-    },
-    {
-      "name": "x64-Debug-Static",
-      "configurePreset": "x64-Debug-Static"
-    },
-    {
-      "name": "x64-Release",
-      "configurePreset": "x64-Release"
-    },
-    {
-      "name": "x64-Release-Static",
-      "configurePreset": "x64-Release-Static"
-    },
-    {
-      "name": "x64-RelWithDebInfo",
-      "configurePreset": "x64-RelWithDebInfo"
-    },
-    {
-      "name": "x64-RelWithDebInfo-Static",
-      "configurePreset": "x64-RelWithDebInfo-Static"
-    }
+    { "name": "x64-Debug", "configurePreset": "x64-Debug", "configuration": "Debug" },
+    { "name": "x64-Debug-Static", "configurePreset": "x64-Debug-Static", "configuration": "Debug" },
+    { "name": "x64-Release", "configurePreset": "x64-Release", "configuration": "Release" },
+    { "name": "x64-Release-Static", "configurePreset": "x64-Release-Static", "configuration": "Release" },
+    { "name": "x64-RelWithDebInfo", "configurePreset": "x64-RelWithDebInfo", "configuration": "RelWithDebInfo" },
+    { "name": "x64-RelWithDebInfo-Static", "configurePreset": "x64-RelWithDebInfo-Static", "configuration": "RelWithDebInfo" },
+
+    { "name": "x64-Debug-Clang", "configurePreset": "x64-Debug-Clang", "configuration": "Debug" },
+    { "name": "x64-Debug-Clang-Static", "configurePreset": "x64-Debug-Clang-Static", "configuration": "Debug" },
+    { "name": "x64-Release-Clang", "configurePreset": "x64-Release-Clang", "configuration": "Release" },
+    { "name": "x64-Release-Clang-Static", "configurePreset": "x64-Release-Clang-Static", "configuration": "Release" },
+    { "name": "x64-RelWithDebInfo-Clang", "configurePreset": "x64-RelWithDebInfo-Clang", "configuration": "RelWithDebInfo" },
+    { "name": "x64-RelWithDebInfo-Clang-Static", "configurePreset": "x64-RelWithDebInfo-Clang-Static", "configuration": "RelWithDebInfo" }
   ],
+
   "testPresets": [
-    {
-      "name": "x64-Debug",
-      "configurePreset": "x64-Debug",
-      "configuration": "Debug"
-    },
-    {
-      "name": "x64-Release",
-      "configurePreset": "x64-Release",
-      "configuration": "Release"
-    },
-    {
-      "name": "x64-RelWithDebInfo",
-      "configurePreset": "x64-RelWithDebInfo",
-      "configuration": "RelWithDebInfo"
-    }
+    { "name": "x64-Debug", "configurePreset": "x64-Debug", "configuration": "Debug" },
+    { "name": "x64-Release", "configurePreset": "x64-Release", "configuration": "Release" },
+    { "name": "x64-RelWithDebInfo", "configurePreset": "x64-RelWithDebInfo", "configuration": "RelWithDebInfo" }
   ]
 }

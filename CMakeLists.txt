@@ -2,13 +2,6 @@ cmake_minimum_required(VERSION 3.20)
 
 project(bejeweled-bot)
 
-if(MINGW OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND WIN32))
-    if(NOT DEFINED VCPKG_TARGET_TRIPLET)
-        set(VCPKG_TARGET_TRIPLET "x64-mingw-dynamic" CACHE STRING "" FORCE)
-        message(STATUS "MinGW detected, forcing vcpkg triplet to x64-mingw-dynamic")
-    endif()
-endif()
-
 include(ProcessorCount)
 ProcessorCount(num_jobs)
 
@@ -20,7 +13,6 @@ message("Number of available processors: ${num_jobs}")
 set(CMAKE_BUILD_PARALLEL_LEVEL ${num_jobs})
 
 set(CMAKE_CXX_STANDARD 17)
-
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Export compile commands for clangd
@@ -59,8 +51,20 @@ target_include_directories(bejeweled-bot PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-# Performance optimizations
-if(MSVC)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_SIMULATE_ID MATCHES "MSVC")
+    target_compile_options(bejeweled-bot PRIVATE
+        /MP${num_jobs}
+        /arch:AVX2
+        $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /DNDEBUG>
+        $<$<CONFIG:RelWithDebInfo>:/O2 /Ob0 /fp:fast /DNDEBUG /Zi /Oy->
+        $<$<CONFIG:Debug>:/ZI /Od>
+    )
+    target_link_options(bejeweled-bot PRIVATE
+        $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>
+        $<$<CONFIG:RelWithDebInfo>:/DEBUG /OPT:REF /OPT:ICF>
+        $<$<CONFIG:Debug>:/DEBUG>
+    )
+elseif(MSVC)
     target_compile_options(bejeweled-bot PRIVATE
         /MP${num_jobs}
         $<$<CONFIG:Release>:/O2 /Ob2 /fp:fast /GL /arch:AVX2 /DNDEBUG>
@@ -71,14 +75,5 @@ if(MSVC)
         $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>
         $<$<CONFIG:RelWithDebInfo>:/DEBUG /OPT:REF /OPT:ICF>
         $<$<CONFIG:Debug>:/DEBUG>
-    )
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(bejeweled-bot PRIVATE
-        $<$<CONFIG:Release>:-O3 -march=native -ffast-math -flto -funroll-loops -g>
-        $<$<CONFIG:RelWithDebInfo>:-O2 -march=native -g>
-        $<$<CONFIG:Debug>:-O0 -g>
-    )
-    target_link_options(bejeweled-bot PRIVATE
-        $<$<CONFIG:Release>:-flto>
     )
 endif()
