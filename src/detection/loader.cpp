@@ -71,9 +71,10 @@ static int GemTypeToIndex(GemType type) {
 }
 
 // Helper: Compute bitmask for SIMD optimization from LAB mask
+// Works for both standard gems and hypercubes since they have same dimensions
 static BitmaskFrame ComputeBitmaskFromLabMask(const cv::Mat& labMask) {
     BitmaskFrame bitmask;
-    const int totalPixels = FRAME_WIDTH * FRAME_HEIGHT;
+    const int totalPixels = labMask.cols * labMask.rows;
     const int masksPerFrame = totalPixels / PIXELS_PER_MASK;
     bitmask.reserve(masksPerFrame);
 
@@ -83,61 +84,24 @@ static BitmaskFrame ComputeBitmaskFromLabMask(const cv::Mat& labMask) {
     const uchar bgB = LAB_BG_B;
 
     // Process in 8x8 blocks (64 pixels per mask entry)
-    for (int y = 0; y < FRAME_HEIGHT; y += 8) {
-        for (int x = 0; x < FRAME_WIDTH; x += 8) {
+    for (int y = 0; y < labMask.rows; y += 8) {
+        for (int x = 0; x < labMask.cols; x += 8) {
             uint64_t mask = 0;
 
             // Process 8x8 block
             for (int dy = 0; dy < 8; dy++) {
                 int rowIdx = y + dy;
-                if (rowIdx >= FRAME_HEIGHT) break;
+                if (rowIdx >= labMask.rows) break;
 
                 const cv::Vec3b* row = labMask.ptr<cv::Vec3b>(rowIdx);
 
                 for (int dx = 0; dx < 8; dx++) {
                     int colIdx = x + dx;
-                    if (colIdx >= FRAME_WIDTH) break;
+                    if (colIdx >= labMask.cols) break;
 
                     // Check if pixel is NOT background
                     if (row[colIdx][0] != bgL || row[colIdx][1] != bgA || row[colIdx][2] != bgB) {
                         // Set corresponding bit in mask
-                        int bitPos = dy * 8 + dx;
-                        mask |= (1ULL << bitPos);
-                    }
-                }
-            }
-
-            bitmask.push_back(mask);
-        }
-    }
-
-    return bitmask;
-}
-
-// Helper: Compute bitmask for hypercube frames (different dimensions)
-static BitmaskFrame ComputeHypercubeBitmaskFromLabMask(const cv::Mat& labMask) {
-    BitmaskFrame bitmask;
-    bitmask.reserve((HYPERCUBE_FRAME_WIDTH * HYPERCUBE_FRAME_HEIGHT) / PIXELS_PER_MASK);
-
-    const uchar bgL = LAB_BG_L;
-    const uchar bgA = LAB_BG_A;
-    const uchar bgB = LAB_BG_B;
-
-    for (int y = 0; y < HYPERCUBE_FRAME_HEIGHT; y += 8) {
-        for (int x = 0; x < HYPERCUBE_FRAME_WIDTH; x += 8) {
-            uint64_t mask = 0;
-
-            for (int dy = 0; dy < 8; dy++) {
-                int rowIdx = y + dy;
-                if (rowIdx >= HYPERCUBE_FRAME_HEIGHT) break;
-
-                const cv::Vec3b* row = labMask.ptr<cv::Vec3b>(rowIdx);
-
-                for (int dx = 0; dx < 8; dx++) {
-                    int colIdx = x + dx;
-                    if (colIdx >= HYPERCUBE_FRAME_WIDTH) break;
-
-                    if (row[colIdx][0] != bgL || row[colIdx][1] != bgA || row[colIdx][2] != bgB) {
                         int bitPos = dy * 8 + dx;
                         mask |= (1ULL << bitPos);
                     }
@@ -343,7 +307,7 @@ bool LoadHypercube(const std::string& assetsPath) {
             s_hypercubeCropBounds[frameIndex] = cropBounds;
 
             // Compute bitmask for SIMD optimization
-            s_hypercubeBitmasks[frameIndex] = ComputeHypercubeBitmaskFromLabMask(s_hypercubeLabMasks[frameIndex]);
+            s_hypercubeBitmasks[frameIndex] = ComputeBitmaskFromLabMask(s_hypercubeLabMasks[frameIndex]);
 
             frameIndex++;
         }
