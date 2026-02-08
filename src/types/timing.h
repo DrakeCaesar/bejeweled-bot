@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include "config.h"
 
 // ============================================================================
 // Timing Structure - Performance tracking with rolling averages
 // ============================================================================
 
 struct TimingInfo {
-    // Rolling average over 100 frames
-    static const int HISTORY_SIZE = 10;
+    static const int HISTORY_SIZE = Config::STATISICS_HISTORY_SIZE;
     double captureHistory[HISTORY_SIZE] = {0};
     double detectHistory[HISTORY_SIZE] = {0};
     double drawHistory[HISTORY_SIZE] = {0};

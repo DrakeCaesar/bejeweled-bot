@@ -24,6 +24,7 @@ namespace Config {
     const bool SHOW_BOT_MATCH_LINES = true; // Draw swap lines that create a match
     const cv::Scalar BOT_MATCH_LINE_COLOR = cv::Scalar(0, 255, 255);
     const int BOT_MATCH_LINE_THICKNESS = 2;
+    const int STATISICS_HISTORY_SIZE = 1000; // Number of frames to keep in rolling average for statistics
 
 // Capture interval (ms)
     const int CAPTURE_INTERVAL_MS = 10; // Capture every 10 ms
@@ -40,7 +41,7 @@ namespace Config {
 // Gem classification settings
 // Note: SEARCH threshold controls early exit during matching phases (can be adjusted via UI)
 // Note: FINAL threshold is hard-coded minimum before returning UNKNOWN type
-    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 85;  // Default search threshold (0-100) - shown in UI
+    const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT = 100;  // Default search threshold (0-100) - shown in UI
     const int GEM_MATCH_FINAL_THRESHOLD_PERCENT = 50;   // Hard minimum threshold (0-100) - classification threshold
 
 // Internal thresholds for squared-distance comparison (pre-sqrt)
