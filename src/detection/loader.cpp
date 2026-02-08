@@ -332,9 +332,7 @@ bool LoadAllMasks(const std::string& assetsPath, int resolution) {
         int totalRefImages = NUM_GEM_TYPES * FRAMES_PER_GEM + HYPERCUBE_FRAMES;
         std::cout << "Loaded " << totalRefImages << " gem reference images from " << resAssetsPath << std::endl;
 
-#if defined(_MSC_VER) && defined(ENABLE_AVX2)
         std::cout << "Precomputed " << totalRefImages << " bitmasks for SIMD optimization" << std::endl;
-#endif
     }
 
     return success;
@@ -403,12 +401,6 @@ int GetFrameCount(GemType type) {
         return HYPERCUBE_FRAMES;
     }
     return FRAMES_PER_GEM;
-}
-
-const CropBounds& GetCropBounds(GemType type, int frameIndex) {
-    static const CropBounds emptyBounds = {0, 0, 0, 0};
-    // Crop bounds are no longer used - all processing uses bitmasks now
-    return emptyBounds;
 }
 
 bool AreStaticColorsLoaded() { return s_staticColorsLoaded; }

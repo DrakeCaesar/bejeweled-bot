@@ -127,7 +127,6 @@ Defined in `src/detection/gem_types.{h,cpp}`:
 - `CAPTURE_INTERVAL_MS`: Control capture frequency (default: 10ms)
 - `BOOST_THREAD_PRIORITY`: Reduce FPS drop when window loses focus
 - `GEM_MATCH_SEARCH_THRESHOLD_PERCENT`: Early exit threshold for gem matching
-- `ENABLE_AVX2`: Enable AVX2 SIMD instructions (MSVC only)
 - `ENABLE_LTO`: Enable Link Time Optimization (Release builds)
 
 ## Important Notes

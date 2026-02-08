@@ -4,7 +4,7 @@
 #include <cmath>
 #include <opencv2/opencv.hpp>
 
-#if defined(_MSC_VER) && defined(ENABLE_AVX2)
+#ifdef _MSC_VER
 #include <immintrin.h>
 #endif
 
@@ -81,29 +81,9 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
     return gemRegion.empty() ? cv::Mat() : gemRegion.clone();
 }
 
-// Keep original implementation accessible for comparison
-// __declspec(noinline)
-static int CalculateColorSimilarity(const cv::Mat&img1Lab,
-                                              const cv::Mat&img2Lab) {
-    uint64_t totalDistanceSq = 0;
-    int pixelCount = 0;
-
-    IterateAllPixels(img1Lab, img2Lab,
-        [&](int x, int y, int dL, int da, int db) {
-            totalDistanceSq += dL * dL + da * da + db * db;
-            pixelCount++;
-        });
-
-    if (pixelCount == 0) return 0;
-    if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
-    return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
-}
-
-#if defined(_MSC_VER) && defined(ENABLE_AVX2)
-#pragma message("Compiling with SIMD optimization enabled for gem matching")
-// Proper SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
+// SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
 // Processes full 128x128 images in 8x8 chunks for maximum efficiency
-static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
+static int CalculateColorSimilarity(const cv::Mat& capturedLab,
                                         const cv::Mat& referenceLab,
                                         const std::vector<uint64_t>& bitmask) {
     // Initialize scalar accumulators (SIMD was inefficient here - broadcasting single values)
@@ -160,7 +140,6 @@ static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
     if (totalDistanceSq >= 10000ULL * pixelCount) return 0;
     return static_cast<int>(10000ULL - (totalDistanceSq * 10000ULL) / (10000ULL * pixelCount));
 }
-#endif
 
 cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
     int stage = ShapeParams::debugStage.load();
@@ -196,21 +175,6 @@ static float ConvertScoreToPercentage(int score) {
     return finalScore / 10000.0f;
 }
 
-// Calculate color similarity score (0-10000) between two LAB images
-// __declspec(noinline) preserves call site for debugging/profiling
-static int CalculateColorSimilarity(const cv::Mat&img1Lab,
-                                  const cv::Mat&img2Lab,
-                                  GemType type,
-                                  int frame) {
-    if (img1Lab.empty() || img2Lab.empty()) return 0;
-
-    // Compare LAB images - Reference already has mask applied (background = (0,128,128))
-    // Returns similarity score on integer scale 0-10000 (representing 0.00% to 100.00%)
-
-    return CalculateColorSimilarity(img1Lab, img2Lab);
-}
-
-// __declspec(noinline)
 static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab,
                                        const cv::Mat&img2Lab,
                                        const cv::Mat&alphaMask, const cv::Mat&img2Bgr,
@@ -281,18 +245,8 @@ static int CheckMatchScore(
     const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
     int score = 0;
     if (!refImageLab.empty()) {
-        // Use SIMD path if available and enabled
-#if defined(_MSC_VER) && defined(ENABLE_AVX2)
-        if (cv::checkHardwareSupport(CV_CPU_AVX2)) {
-            const auto& bitmask = MaskLoader::GetBitmask(type, frame);
-            // std::cout << "[SIMD] Using AVX2 path for " << GemTypeToString(type) << " frame " << frame << std::endl;
-            score = CalculateColorSimilaritySIMD(processedImageLab, refImageLab, bitmask);
-        } else
-#endif
-        {
-            // std::cout << "[SCALAR] Using scalar path for " << GemTypeToString(type) << " frame " << frame << std::endl;
-            score = CalculateColorSimilarity(processedImageLab, refImageLab, type, frame);
-        }
+        const auto& bitmask = MaskLoader::GetBitmask(type, frame);
+        score = CalculateColorSimilarity(processedImageLab, refImageLab, bitmask);
     }
 
     // Cache result

@@ -11,11 +11,6 @@
 // ============================================================================
 
 namespace MaskLoader {
-
-// Minimal CropBounds struct for API compatibility (bounds are no longer used)
-struct CropBounds {
-    int minRow, maxRow, minCol, maxCol;
-};
     constexpr int MASK_COLS = 5;
     constexpr int MASK_ROWS = 4;
     constexpr int FRAMES_PER_GEM = 21;  // 1 static + 20 animated
@@ -139,16 +134,6 @@ struct CropBounds {
  * Get the number of frames for a given gem type.
  */
     int GetFrameCount(GemType type);
-
-/**
- * Get the crop bounds for a specific mask (non-black region).
- * Used to skip padding pixels during color similarity comparison.
- *
- * @param type The gem type
- * @param frameIndex Frame index
- * @return CropBounds containing minRow, maxRow, minCol, maxCol of non-black region
- */
-    const CropBounds& GetCropBounds(GemType type, int frameIndex);
 
 /**
  * Check if static color masks have been loaded.
