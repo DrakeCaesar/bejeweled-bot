@@ -27,14 +27,6 @@ using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
-// Crop bounds for non-black region optimization
-struct CropBounds {
-    int minRow, maxRow, minCol, maxCol;
-};
-
-using CropBoundsStorage = std::array<std::array<CropBounds, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
-using HypercubeCropBoundsStorage = std::array<CropBounds, HYPERCUBE_FRAMES>;
-
 // Resolution-dependent kernel sizes (set by application)
 // Can be adjusted per resolution if needed
 inline cv::Size kStandardGemKernelSize = cv::Size(3, 3);
@@ -79,9 +71,6 @@ cv::Mat ApplyHalfTexelOffset(const cv::Mat& image, int interpolation);
 // Build a ring mask from an alpha mask (scaled-up minus original)
 cv::Mat BuildRingMask(const cv::Mat& alphaMask);
 
-// Calculate crop bounds for non-black region in LAB image
-CropBounds CalculateCropBounds(const cv::Mat& labImage);
-
 // Process a single frame with the given parameters
 void ProcessSingleFrame(
     const cv::Mat& colorRoi,
@@ -90,8 +79,7 @@ void ProcessSingleFrame(
     cv::Mat& outColor,
     cv::Mat& outMask,
     cv::Mat& outRingMask,
-    cv::Mat& outLab,
-    CropBounds& outCropBounds
+    cv::Mat& outLab
 );
 
 } // namespace FrameProcessing

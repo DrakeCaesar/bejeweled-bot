@@ -54,61 +54,6 @@ cv::Mat BuildRingMask(const cv::Mat& alphaMask) {
     return ring;
 }
 
-CropBounds CalculateCropBounds(const cv::Mat& labImage) {
-    CropBounds bounds = {0, labImage.rows - 1, 0, labImage.cols - 1};
-
-    if (labImage.empty()) {
-        return bounds;
-    }
-
-    int minRow = labImage.rows;
-    int maxRow = -1;
-
-    for (int y = 0; y < labImage.rows; y++) {
-        const cv::Vec3b* row = labImage.ptr<cv::Vec3b>(y);
-        bool hasNonBlack = false;
-
-        for (int x = 0; x < labImage.cols; x++) {
-            if (!(row[x][0] == 0 && row[x][1] == 128 && row[x][2] == 128)) {
-                hasNonBlack = true;
-                break;
-            }
-        }
-
-        if (hasNonBlack) {
-            if (y < minRow) minRow = y;
-            if (y > maxRow) maxRow = y;
-        }
-    }
-
-    int minCol = labImage.cols;
-    int maxCol = -1;
-
-    for (int x = 0; x < labImage.cols; x++) {
-        bool hasNonBlack = false;
-
-        for (int y = 0; y < labImage.rows; y++) {
-            const cv::Vec3b* row = labImage.ptr<cv::Vec3b>(y);
-            if (!(row[x][0] == 0 && row[x][1] == 128 && row[x][2] == 128)) {
-                hasNonBlack = true;
-                break;
-            }
-        }
-
-        if (hasNonBlack) {
-            if (x < minCol) minCol = x;
-            if (x > maxCol) maxCol = x;
-        }
-    }
-
-    bounds.minRow = (minRow == labImage.rows) ? 0 : minRow;
-    bounds.maxRow = (maxRow == -1) ? labImage.rows - 1 : maxRow;
-    bounds.minCol = (minCol == labImage.cols) ? 0 : minCol;
-    bounds.maxCol = (maxCol == -1) ? labImage.cols - 1 : maxCol;
-
-    return bounds;
-}
-
 void ProcessSingleFrame(
     const cv::Mat& colorRoi,
     const cv::Mat& maskRoi,
@@ -116,8 +61,7 @@ void ProcessSingleFrame(
     cv::Mat& outColor,
     cv::Mat& outMask,
     cv::Mat& outRingMask,
-    cv::Mat& outLab,
-    CropBounds& outCropBounds)
+    cv::Mat& outLab)
 {
     cv::Mat colorFrame = colorRoi.clone();
     cv::Mat maskFrame = maskRoi.clone();
@@ -154,8 +98,6 @@ void ProcessSingleFrame(
 
     cv::Mat labFrame;
     cv::cvtColor(colorFrame, labFrame, cv::COLOR_BGR2Lab);
-
-    outCropBounds = CalculateCropBounds(labFrame);
 
     outColor = colorFrame;
     outMask = maskFrame;

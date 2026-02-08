@@ -16,10 +16,6 @@ static FrameProcessing::HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
 static bool s_loaded = false;
 static cv::Mat s_emptyMask;
 
-// Crop bounds for non-black regions
-static FrameProcessing::CropBoundsStorage s_cropBounds;
-static FrameProcessing::HypercubeCropBoundsStorage s_hypercubeCropBounds;
-
 // Bitmask storage for SIMD optimization
 static BitmaskStorage s_bitmasks;
 static HypercubeBitmaskStorage s_hypercubeBitmasks;
@@ -168,13 +164,9 @@ bool LoadMasksForGem(const std::string& assetsPath, GemType type) {
             cv::Mat maskRoi = maskSheet(roi);
 
             // Process the frame using standard gem parameters
-            FrameProcessing::CropBounds cropBounds;
             FrameProcessing::ProcessSingleFrame(colorRoi, maskRoi, FrameProcessing::GetStandardGemParams(),
                                   s_masks[gemIndex][frameIndex], s_alphaMasks[gemIndex][frameIndex],
-                                  s_ringMasks[gemIndex][frameIndex], s_labMasks[gemIndex][frameIndex],
-                                  cropBounds);
-
-            s_cropBounds[gemIndex][frameIndex] = cropBounds;
+                                  s_ringMasks[gemIndex][frameIndex], s_labMasks[gemIndex][frameIndex]);
 
             // Compute bitmask for SIMD optimization
             s_bitmasks[gemIndex][frameIndex] = ComputeBitmaskFromLabMask(s_labMasks[gemIndex][frameIndex]);
@@ -234,13 +226,9 @@ bool LoadStaticColorMasks(const std::string& assetsPath) {
         cv::Mat colorRoi = spriteSheet(roi);
         cv::Mat maskRoi = maskSheet(roi);
 
-        FrameProcessing::CropBounds cropBounds;
         FrameProcessing::ProcessSingleFrame(colorRoi, maskRoi, FrameProcessing::GetStaticColorParams(),
                                s_masks[gemIndex][0], s_alphaMasks[gemIndex][0],
-                               s_ringMasks[gemIndex][0], s_labMasks[gemIndex][0],
-                               cropBounds);
-
-        s_cropBounds[gemIndex][0] = cropBounds;
+                               s_ringMasks[gemIndex][0], s_labMasks[gemIndex][0]);
 
         // Compute bitmask for SIMD optimization
         s_bitmasks[gemIndex][0] = ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
@@ -293,7 +281,6 @@ bool LoadHypercube(const std::string& assetsPath) {
 
     for (int row = 0; row < HYPERCUBE_ROWS; row++) {
         for (int col = 0; col < HYPERCUBE_COLS; col++) {
-            FrameProcessing::CropBounds cropBounds;
             HypercubeProcessing::ProcessHypercubeFrame(
                 colorSheet, maskSheet, glowSheet, row, col, frameIndex,
                 FrameProcessing::GetHypercubeParams(),
@@ -301,10 +288,7 @@ bool LoadHypercube(const std::string& assetsPath) {
                 HYPERCUBE_FRAME_WIDTH, HYPERCUBE_FRAME_HEIGHT,
                 glowCellWidth, glowCellHeight,
                 s_hypercubeMasks[frameIndex], s_hypercubeAlphaMasks[frameIndex],
-                s_hypercubeLabMasks[frameIndex],
-                cropBounds);
-
-            s_hypercubeCropBounds[frameIndex] = cropBounds;
+                s_hypercubeLabMasks[frameIndex]);
 
             // Compute bitmask for SIMD optimization
             s_hypercubeBitmasks[frameIndex] = ComputeBitmaskFromLabMask(s_hypercubeLabMasks[frameIndex]);
@@ -423,18 +407,7 @@ int GetFrameCount(GemType type) {
 
 const CropBounds& GetCropBounds(GemType type, int frameIndex) {
     static const CropBounds emptyBounds = {0, 0, 0, 0};
-
-    if (type == GemType::HYPERCUBE) {
-        if (frameIndex >= 0 && frameIndex < HYPERCUBE_FRAMES) {
-            return s_hypercubeCropBounds[frameIndex];
-        }
-    } else {
-        int gemIndex = static_cast<int>(type) - 1;
-        if (gemIndex >= 0 && gemIndex < NUM_GEM_TYPES &&
-            frameIndex >= 0 && frameIndex < FRAMES_PER_GEM) {
-            return s_cropBounds[gemIndex][frameIndex];
-        }
-    }
+    // Crop bounds are no longer used - all processing uses bitmasks now
     return emptyBounds;
 }
 

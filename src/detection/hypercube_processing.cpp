@@ -64,8 +64,7 @@ void ProcessHypercubeFrame(
     int glowCellHeight,
     cv::Mat& outColor,
     cv::Mat& outMask,
-    cv::Mat& outLab,
-    FrameProcessing::CropBounds& outCropBounds)
+    cv::Mat& outLab)
 {
     cv::Rect colorRoi(col * sourceCellWidth,
                      row * sourceCellHeight,
@@ -111,7 +110,6 @@ void ProcessHypercubeFrame(
     }
 
     cv::cvtColor(processedColor, outLab, cv::COLOR_BGR2Lab);
-    outCropBounds = FrameProcessing::CalculateCropBounds(outLab);
 
     outColor = processedColor;
     outMask = processedMask;

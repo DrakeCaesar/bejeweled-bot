@@ -11,6 +11,11 @@
 // ============================================================================
 
 namespace MaskLoader {
+
+// Minimal CropBounds struct for API compatibility (bounds are no longer used)
+struct CropBounds {
+    int minRow, maxRow, minCol, maxCol;
+};
     constexpr int MASK_COLS = 5;
     constexpr int MASK_ROWS = 4;
     constexpr int FRAMES_PER_GEM = 21;  // 1 static + 20 animated
@@ -53,11 +58,7 @@ namespace MaskLoader {
     using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
-// Crop bounds for non-black regions in reference images (optimization to skip padding)
-    using CropBounds = FrameProcessing::CropBounds;
-    using CropBoundsStorage =
-    std::array<std::array<CropBounds, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
-    using HypercubeCropBoundsStorage = std::array<CropBounds, HYPERCUBE_FRAMES>;
+// Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel, 0=background)
 
 // Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel, 0=background)
     constexpr int PIXELS_PER_MASK = 64;

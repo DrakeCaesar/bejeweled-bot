@@ -50,27 +50,20 @@ namespace {
     static std::array<std::array<GemMatchCache, 8>, 8> s_lastMatches;
 }
 
-// Helper: Iterate over non-background pixels in crop-bounded region
+// Helper: Iterate over all pixels (no longer crop-bounded - using bitmasks for optimization)
 template<typename Callback>
-static void IterateNonBlackPixels(const cv::Mat& img1Lab, const cv::Mat& img2Lab,
-                                   const MaskLoader::CropBounds& bounds, Callback cb) {
-    // Extract bounds once (avoids repeated struct field access)
-    const int rowStart = bounds.minRow;
-    const int rowEnd = bounds.maxRow;
-    const int colStart = bounds.minCol;
-    const int colEnd = bounds.maxCol;
-
+static void IterateAllPixels(const cv::Mat& img1Lab, const cv::Mat& img2Lab, Callback cb) {
     // Background color constants
     const uchar bgL = 0;
     const uchar bgA = 128;
     const uchar bgB = 128;
 
-    // Process one row at a time for better cache locality
-    for (int y = rowStart; y <= rowEnd; y++) {
+    // Process all pixels
+    for (int y = 0; y < img1Lab.rows; y++) {
         const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
         const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
 
-        for (int x = colStart; x <= colEnd; x++) {
+        for (int x = 0; x < img1Lab.cols; x++) {
             if (row2[x][0] == bgL && row2[x][1] == bgA && row2[x][2] == bgB) continue;
 
             int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
@@ -91,12 +84,11 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
 // Keep original implementation accessible for comparison
 // __declspec(noinline)
 static int CalculateColorSimilarity(const cv::Mat&img1Lab,
-                                              const cv::Mat&img2Lab,
-                                              const MaskLoader::CropBounds& bounds) {
+                                              const cv::Mat&img2Lab) {
     uint64_t totalDistanceSq = 0;
     int pixelCount = 0;
 
-    IterateNonBlackPixels(img1Lab, img2Lab, bounds,
+    IterateAllPixels(img1Lab, img2Lab,
         [&](int x, int y, int dL, int da, int db) {
             totalDistanceSq += dL * dL + da * da + db * db;
             pixelCount++;
@@ -113,14 +105,7 @@ static int CalculateColorSimilarity(const cv::Mat&img1Lab,
 // Processes full 128x128 images in 8x8 chunks for maximum efficiency
 static int CalculateColorSimilaritySIMD(const cv::Mat& capturedLab,
                                         const cv::Mat& referenceLab,
-                                        const std::vector<uint64_t>& bitmask,
-                                        const MaskLoader::CropBounds& bounds) {
-    // Early exit if bounds are empty (happens when frame is all background)
-    if (bounds.minRow == 0 && bounds.maxRow == 0 &&
-        bounds.minCol == 0 && bounds.maxCol == 0) {
-        return 0;
-    }
-
+                                        const std::vector<uint64_t>& bitmask) {
     // Initialize scalar accumulators (SIMD was inefficient here - broadcasting single values)
     uint64_t totalDistanceSq = 0;
     int pixelCount = 0;
@@ -222,9 +207,7 @@ static int CalculateColorSimilarity(const cv::Mat&img1Lab,
     // Compare LAB images - Reference already has mask applied (background = (0,128,128))
     // Returns similarity score on integer scale 0-10000 (representing 0.00% to 100.00%)
 
-    const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
-
-    return CalculateColorSimilarity(img1Lab, img2Lab, bounds);
+    return CalculateColorSimilarity(img1Lab, img2Lab);
 }
 
 // __declspec(noinline)
@@ -254,9 +237,7 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
     // Generate diff map
     g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
 
-    const MaskLoader::CropBounds& bounds = MaskLoader::GetCropBounds(type, frame);
-
-    IterateNonBlackPixels(img1Lab, img2Lab, bounds,
+    IterateAllPixels(img1Lab, img2Lab,
         [&](int x, int y, int dL, int da, int db) {
             cv::Vec3b* diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
             float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
@@ -304,9 +285,8 @@ static int CheckMatchScore(
 #if defined(_MSC_VER) && defined(ENABLE_AVX2)
         if (cv::checkHardwareSupport(CV_CPU_AVX2)) {
             const auto& bitmask = MaskLoader::GetBitmask(type, frame);
-            const auto& bounds = MaskLoader::GetCropBounds(type, frame);
             // std::cout << "[SIMD] Using AVX2 path for " << GemTypeToString(type) << " frame " << frame << std::endl;
-            score = CalculateColorSimilaritySIMD(processedImageLab, refImageLab, bitmask, bounds);
+            score = CalculateColorSimilaritySIMD(processedImageLab, refImageLab, bitmask);
         } else
 #endif
         {

@@ -36,8 +36,7 @@ void ProcessHypercubeFrame(
     int glowCellHeight,
     cv::Mat& outColor,
     cv::Mat& outMask,
-    cv::Mat& outLab,
-    FrameProcessing::CropBounds& outCropBounds
+    cv::Mat& outLab
 );
 
 } // namespace HypercubeProcessing
