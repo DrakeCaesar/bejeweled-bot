@@ -29,6 +29,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Prevent Windows headers from defining min/max macros
 add_compile_definitions(NOMINMAX)
 
+# Use static runtime library when building with static vcpkg triplets
+if(VCPKG_TARGET_TRIPLET MATCHES "static" AND MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    message(STATUS "Using static runtime library (/MT) for static vcpkg triplet")
+endif()
+
 find_package(OpenCV CONFIG REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
