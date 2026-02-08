@@ -75,6 +75,41 @@ static void IterateAllPixels(const cv::Mat& img1Lab, const cv::Mat& img2Lab, Cal
     }
 }
 
+// Helper: Convert interleaved BGR to planar LAB
+// Stores image dimensions in the matrix for easy access
+static cv::Mat ConvertToPlanarLab(const cv::Mat& bgrImage) {
+    if (bgrImage.empty()) {
+        return cv::Mat();
+    }
+
+    // Convert BGR to LAB
+    cv::Mat labImage;
+    cv::cvtColor(bgrImage, labImage, cv::COLOR_BGR2Lab);
+
+    // Convert to planar format: 3 rows x (width*height) cols
+    // Row 0: L channel, Row 1: A channel, Row 2: B channel
+    cv::Mat planarLab(3, labImage.rows * labImage.cols, CV_8UC1);
+
+    // Store image dimensions in the matrix for later access
+    planarLab.cols = labImage.cols * labImage.rows;  // Total pixels per channel
+    planarLab.rows = 3;  // L, A, B channels
+
+    // Store original dimensions in the reserved fields if available, otherwise we'll pass them separately
+    // For now, we'll use a different approach - store dimensions in the first few elements
+    // Actually, let's just pass the dimensions as parameters to CalculateColorSimilarity
+
+    // Extract each channel separately
+    std::vector<cv::Mat> channels(3);
+    cv::split(labImage, channels);
+
+    // Copy each channel to its plane
+    channels[0].reshape(0, 1).copyTo(planarLab.row(0));  // L plane
+    channels[1].reshape(0, 1).copyTo(planarLab.row(1));  // A plane
+    channels[2].reshape(0, 1).copyTo(planarLab.row(2));  // B plane
+
+    return planarLab;
+}
+
 cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
     // No-op wrapper maintained for API compatibility
     // Returns a clone of the region (or empty if input is empty)
@@ -82,25 +117,13 @@ cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
 }
 
 // SIMD-optimized version of CalculateColorSimilarity using AVX2 intrinsics
-// Processes 8 pixels simultaneously to eliminate per-pixel branching
-static int CalculateColorSimilarity(const cv::Mat& capturedLab,
-                                        const cv::Mat& referenceLab,
-                                        const std::vector<uint64_t>& bitmask) {
+// Processes 8 pixels simultaneously using planar LAB format for optimal memory access
+static int CalculateColorSimilarity(const cv::Mat& capturedPlanarLab,
+                                        const cv::Mat& referencePlanarLab,
+                                        const std::vector<uint64_t>& bitmask,
+                                        int imageWidth, int imageHeight) {
     __m256i totalDistSq = _mm256_setzero_si256();
-    int pixelCount = 0;
-
-    // Generate mask lookup table on first call - converts 8-bit mask to 8 integer masks
-    // Each entry: if bit i is set, value is -1 (all 1s), else 0
-    alignas(32) static int32_t maskTable[256][8];
-    static bool maskTableInitialized = false;
-    if (!maskTableInitialized) {
-        for (int mask = 0; mask < 256; mask++) {
-            for (int i = 0; i < 8; i++) {
-                maskTable[mask][i] = (mask & (1 << i)) ? 0xFFFFFFFF : 0;
-            }
-        }
-        maskTableInitialized = true;
-    }
+    __m256i pixelCountVec = _mm256_setzero_si256();  // Vectorized pixel counter
 
     // Process the image in 8x8 blocks (aligned with the mask for cache efficiency)
     // 128x128 image = 16 rows of blocks × 16 columns of blocks = 256 blocks total
@@ -129,58 +152,86 @@ static int CalculateColorSimilarity(const cv::Mat& capturedLab,
                 if (rowMask == 0) continue;  // Skip empty rows
 
                 int y = startY + dy;
-                const uchar* capturedBase = capturedLab.ptr<uchar>(y);
-                const uchar* referenceBase = referenceLab.ptr<uchar>(y);
+                int rowOffset = y * imageWidth;
 
-                // Process all 8 pixels in this row using SIMD for each channel
-                // Pixel at (x,y) has byte offset = x * 3 + channel
-                alignas(32) int capturedVals[8];
-                alignas(32) int referenceVals[8];
+                // Load 8 pixels from each channel directly using planar layout
+                // L channel: row 0 of planar image
+                // A channel: row 1 of planar image
+                // B channel: row 2 of planar image
+                const uchar* capturedL = capturedPlanarLab.ptr<uchar>(0) + rowOffset + startX;
+                const uchar* capturedA = capturedPlanarLab.ptr<uchar>(1) + rowOffset + startX;
+                const uchar* capturedB = capturedPlanarLab.ptr<uchar>(2) + rowOffset + startX;
 
-                // Process L, A, B channels
-                for (int channel = 0; channel < 3; channel++) {
-                    // Load 8 pixels for this channel
-                    // Calculate byte offsets: (startX + i) * 3 + channel
-                    int channelOffset = channel;
-                    for (int i = 0; i < 8; i++) {
-                        int x = startX + i;
-                        int offset = x * 3 + channelOffset;
-                        capturedVals[i] = capturedBase[offset];
-                        referenceVals[i] = referenceBase[offset];
-                    }
+                const uchar* referenceL = referencePlanarLab.ptr<uchar>(0) + rowOffset + startX;
+                const uchar* referenceA = referencePlanarLab.ptr<uchar>(1) + rowOffset + startX;
+                const uchar* referenceB = referencePlanarLab.ptr<uchar>(2) + rowOffset + startX;
 
-                    // Load into 256-bit vector registers (8 x 32-bit integers)
-                    __m256i captured = _mm256_load_si256((__m256i*)capturedVals);
-                    __m256i reference = _mm256_load_si256((__m256i*)referenceVals);
+                // Load 8 pixels directly into AVX registers (no temporary arrays!)
+                __m128i capturedL_64 = _mm_loadl_epi64((__m128i*)capturedL);
+                __m128i capturedA_64 = _mm_loadl_epi64((__m128i*)capturedA);
+                __m128i capturedB_64 = _mm_loadl_epi64((__m128i*)capturedB);
 
-                    // Compute differences (captured - reference)
-                    __m256i diff = _mm256_sub_epi32(captured, reference);
+                __m128i referenceL_64 = _mm_loadl_epi64((__m128i*)referenceL);
+                __m128i referenceA_64 = _mm_loadl_epi64((__m128i*)referenceA);
+                __m128i referenceB_64 = _mm_loadl_epi64((__m128i*)referenceB);
 
-                    // Square the differences (d²)
-                    __m256i diffSq = _mm256_mullo_epi32(diff, diff);
+                // Extend to 32-bit integers for calculations
+                __m256i capturedL_32 = _mm256_cvtepu8_epi32(capturedL_64);
+                __m256i capturedA_32 = _mm256_cvtepu8_epi32(capturedA_64);
+                __m256i capturedB_32 = _mm256_cvtepu8_epi32(capturedB_64);
 
-                    // Apply mask: zero out background pixels
-                    // Load mask vector from lookup table and AND with diffSq
-                    __m256i maskVec = _mm256_load_si256((__m256i*)maskTable[rowMask]);
-                    __m256i maskedDiffSq = _mm256_and_si256(diffSq, maskVec);
+                __m256i referenceL_32 = _mm256_cvtepu8_epi32(referenceL_64);
+                __m256i referenceA_32 = _mm256_cvtepu8_epi32(referenceA_64);
+                __m256i referenceB_32 = _mm256_cvtepu8_epi32(referenceB_64);
 
-                    // Accumulate to total
-                    totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
+                // Compute differences (captured - reference) for each channel
+                __m256i diffL = _mm256_sub_epi32(capturedL_32, referenceL_32);
+                __m256i diffA = _mm256_sub_epi32(capturedA_32, referenceA_32);
+                __m256i diffB = _mm256_sub_epi32(capturedB_32, referenceB_32);
+
+                // Square the differences (d²) for each channel
+                __m256i diffSqL = _mm256_mullo_epi32(diffL, diffL);
+                __m256i diffSqA = _mm256_mullo_epi32(diffA, diffA);
+                __m256i diffSqB = _mm256_mullo_epi32(diffB, diffB);
+
+                // Sum across channels: dL² + dA² + dB²
+                __m256i diffSqSum = _mm256_add_epi32(diffSqL, _mm256_add_epi32(diffSqA, diffSqB));
+
+                // Create mask vector from rowMask (one int32 per pixel, -1 if active, 0 if background)
+                alignas(32) int32_t maskVals[8];
+                for (int i = 0; i < 8; i++) {
+                    maskVals[i] = (rowMask & (1 << i)) ? 0xFFFFFFFF : 0;
                 }
+                __m256i maskVec = _mm256_load_si256((__m256i*)maskVals);
 
-                // Count active pixels using builtin popcount
-                pixelCount += _popcnt32(rowMask);
+                // Apply mask: zero out background pixels
+                __m256i maskedDiffSq = _mm256_and_si256(diffSqSum, maskVec);
+
+                // Accumulate to total
+                totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
+
+                // Count active pixels using SIMD
+                __m256i rowMaskVec = _mm256_load_si256((__m256i*)maskVals);
+                pixelCountVec = _mm256_sub_epi32(pixelCountVec, rowMaskVec);  // Subtract -1 = add 1
             }
         }
     }
 
-    // Reduce 8 32-bit values to single sum
-    alignas(32) int temp[8];
-    _mm256_store_si256((__m256i*)temp, totalDistSq);
+    // Optimized horizontal reduction using tree-based approach
+    // Reduce 8 lanes to 4, then 4 to 2, then 2 to 1
+    __m256i sum4 = _mm256_hadd_epi32(totalDistSq, totalDistSq);
+    __m256i sum2 = _mm256_hadd_epi32(sum4, sum4);
+    __m256i sum1 = _mm256_shuffle_epi32(sum2, _MM_SHUFFLE(2, 0, 2, 0));
 
-    uint64_t totalDistanceSq = 0;
+    alignas(32) int temp[8];
+    _mm256_store_si256((__m256i*)temp, sum1);
+    uint64_t totalDistanceSq = static_cast<uint64_t>(temp[0]) + static_cast<uint64_t>(temp[4]);
+
+    // Reduce pixel count vector
+    _mm256_store_si256((__m256i*)temp, pixelCountVec);
+    int pixelCount = 0;
     for (int i = 0; i < 8; i++) {
-        totalDistanceSq += temp[i];
+        pixelCount += temp[i];
     }
 
     if (pixelCount == 0) return 0;
@@ -275,7 +326,9 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
 static int CheckMatchScore(
     GemType type,
     int frame,
-    const cv::Mat& processedImageLab,
+    const cv::Mat& processedImagePlanarLab,
+    int imageWidth,
+    int imageHeight,
     int* scoreCache,
     bool* checkedFlags,
     int maxCacheSize,
@@ -288,12 +341,12 @@ static int CheckMatchScore(
         return scoreCache[idx];
     }
 
-    // Compute score
-    const cv::Mat& refImageLab = MaskLoader::GetLabMask(type, frame);
+    // Compute score using planar format for optimal SIMD performance
+    const cv::Mat& refImagePlanarLab = MaskLoader::GetPlanarLabMask(type, frame);
     int score = 0;
-    if (!refImageLab.empty()) {
+    if (!refImagePlanarLab.empty()) {
         const auto& bitmask = MaskLoader::GetBitmask(type, frame);
-        score = CalculateColorSimilarity(processedImageLab, refImageLab, bitmask);
+        score = CalculateColorSimilarity(processedImagePlanarLab, refImagePlanarLab, bitmask, imageWidth, imageHeight);
     }
 
     // Cache result
@@ -338,7 +391,9 @@ static GemType FinalizeMatch(
 static bool TryMatch(
     GemType type,
     int frame,
-    const cv::Mat& processedImageLab,
+    const cv::Mat& processedImagePlanarLab,
+    int imageWidth,
+    int imageHeight,
     int* scoreCache,
     bool* checkedFlags,
     int maxCacheSize,
@@ -348,7 +403,7 @@ static bool TryMatch(
     int& bestScore,
     int& bestFrame)
 {
-    int score = CheckMatchScore(type, frame, processedImageLab,
+    int score = CheckMatchScore(type, frame, processedImagePlanarLab, imageWidth, imageHeight,
                                    scoreCache, checkedFlags,
                                    maxCacheSize, maxFramesPerType);
     if (score > bestScore) {
@@ -368,6 +423,19 @@ if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
     if (outBestFrame) *outBestFrame = -1;
     return GemType::UNKNOWN;
 }
+
+// Convert to planar LAB format for optimal SIMD performance
+// This is the key optimization: eliminates x*3+channel calculations and improves cache locality
+const cv::Mat processedImagePlanarLab = ConvertToPlanarLab(processedImage);
+if (processedImagePlanarLab.empty()) {
+    if (outBestMatch) *outBestMatch = 0.0f;
+    if (outBestFrame) *outBestFrame = -1;
+    return GemType::UNKNOWN;
+}
+
+// Store image dimensions for SIMD access
+int imageWidth = processedImage.cols;
+int imageHeight = processedImage.rows;
 
 // All gem types including hypercube for unified iteration
 static const GemType allGemTypes[] = {
@@ -400,7 +468,7 @@ std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
 // Phase 0: Temporal coherence - check cached match and next animation frame
 if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     // Check the exact cached position first
-    if (TryMatch(lastType, lastFrame, processedImageLab,
+    if (TryMatch(lastType, lastFrame, processedImagePlanarLab, imageWidth, imageHeight,
                  scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
                  threshold, bestType, bestScore, bestFrame)) {
         return FinalizeMatch(lastType, lastFrame, bestScore, cache,
@@ -412,7 +480,7 @@ if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     if (lastFrame > 0) {
         int frameCount = MaskLoader::GetFrameCount(lastType);
         int nextFrame = (lastFrame + 1) % frameCount;
-        if (nextFrame != 0 && TryMatch(lastType, nextFrame, processedImageLab,
+        if (nextFrame != 0 && TryMatch(lastType, nextFrame, processedImagePlanarLab, imageWidth, imageHeight,
                                        scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
                                        threshold, bestType, bestScore, bestFrame)) {
             return FinalizeMatch(lastType, nextFrame, bestScore, cache,
@@ -430,7 +498,7 @@ struct FirstFrameResult {
 FirstFrameResult firstFrameScores[8];
 
 for (int i = 0; i < numAllGemTypes; i++) {
-    int score = CheckMatchScore(allGemTypes[i], 0, processedImageLab,
+    int score = CheckMatchScore(allGemTypes[i], 0, processedImagePlanarLab, imageWidth, imageHeight,
                                    scoreCache, checkedFlags,
                                    MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE);
     firstFrameScores[i] = {allGemTypes[i], score};
@@ -465,7 +533,7 @@ for (int i = 0; i < numAllGemTypes; i++) {
     int frameCount = MaskLoader::GetFrameCount(type);
 
     for (int frame = 1; frame < frameCount; frame++) {
-        if (TryMatch(type, frame, processedImageLab,
+        if (TryMatch(type, frame, processedImagePlanarLab, imageWidth, imageHeight,
                      scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
                      threshold, bestType, bestScore, bestFrame)) {
             return FinalizeMatch(type, frame, bestScore, cache,

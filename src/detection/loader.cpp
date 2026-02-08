@@ -7,11 +7,13 @@
 namespace MaskLoader {
 // Static storage for masks
 static FrameProcessing::MaskStorage s_masks;
-static FrameProcessing::LabMaskStorage s_labMasks;
+static FrameProcessing::LabMaskStorage s_labMasks;          // Legacy interleaved format
+static PlanarLabMaskStorage s_planarLabMasks;  // Planar format: LLL...AAA...BBB...
 static FrameProcessing::AlphaMaskStorage s_alphaMasks;
 static FrameProcessing::RingMaskStorage s_ringMasks;
 static FrameProcessing::HypercubeMaskStorage s_hypercubeMasks;
-static FrameProcessing::HypercubeLabMaskStorage s_hypercubeLabMasks;
+static FrameProcessing::HypercubeLabMaskStorage s_hypercubeLabMasks;      // Legacy format
+static HypercubePlanarLabMaskStorage s_hypercubePlanarLabMasks;  // Planar format
 static FrameProcessing::HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
 static bool s_loaded = false;
 static cv::Mat s_emptyMask;
@@ -64,6 +66,31 @@ static int GemTypeToIndex(GemType type) {
         case GemType::WHITE:   return 6;
         default: return -1;
     }
+}
+
+// Helper: Convert interleaved LAB image to planar format (LLL...AAA...BBB...)
+static cv::Mat ConvertToPlanarLab(const cv::Mat& interleavedLab) {
+    if (interleavedLab.empty() || interleavedLab.type() != CV_8UC3) {
+        return cv::Mat();
+    }
+
+    // Create planar format: 3x128x128 single-channel image
+    // Layout: [L channel (128x128), A channel (128x128), B channel (128x128)]
+    cv::Mat planarLab(3, interleavedLab.rows * interleavedLab.cols, CV_8UC1);
+
+    // Extract each channel separately
+    std::vector<cv::Mat> channels(3);
+    cv::split(interleavedLab, channels);
+
+    // Copy each channel to its plane
+    // L plane at row 0
+    channels[0].reshape(0, 1).copyTo(planarLab.row(0));
+    // A plane at row 1
+    channels[1].reshape(0, 1).copyTo(planarLab.row(1));
+    // B plane at row 2
+    channels[2].reshape(0, 1).copyTo(planarLab.row(2));
+
+    return planarLab;
 }
 
 // Helper: Compute bitmask for SIMD optimization from LAB mask
@@ -168,6 +195,9 @@ bool LoadMasksForGem(const std::string& assetsPath, GemType type) {
                                   s_masks[gemIndex][frameIndex], s_alphaMasks[gemIndex][frameIndex],
                                   s_ringMasks[gemIndex][frameIndex], s_labMasks[gemIndex][frameIndex]);
 
+            // Convert to planar format for SIMD optimization
+            s_planarLabMasks[gemIndex][frameIndex] = ConvertToPlanarLab(s_labMasks[gemIndex][frameIndex]);
+
             // Compute bitmask for SIMD optimization
             s_bitmasks[gemIndex][frameIndex] = ComputeBitmaskFromLabMask(s_labMasks[gemIndex][frameIndex]);
 
@@ -230,6 +260,9 @@ bool LoadStaticColorMasks(const std::string& assetsPath) {
                                s_masks[gemIndex][0], s_alphaMasks[gemIndex][0],
                                s_ringMasks[gemIndex][0], s_labMasks[gemIndex][0]);
 
+        // Convert to planar format for SIMD optimization
+        s_planarLabMasks[gemIndex][0] = ConvertToPlanarLab(s_labMasks[gemIndex][0]);
+
         // Compute bitmask for SIMD optimization
         s_bitmasks[gemIndex][0] = ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
     }
@@ -289,6 +322,9 @@ bool LoadHypercube(const std::string& assetsPath) {
                 glowCellWidth, glowCellHeight,
                 s_hypercubeMasks[frameIndex], s_hypercubeAlphaMasks[frameIndex],
                 s_hypercubeLabMasks[frameIndex]);
+
+            // Convert to planar format for SIMD optimization
+            s_hypercubePlanarLabMasks[frameIndex] = ConvertToPlanarLab(s_hypercubeLabMasks[frameIndex]);
 
             // Compute bitmask for SIMD optimization
             s_hypercubeBitmasks[frameIndex] = ComputeBitmaskFromLabMask(s_hypercubeLabMasks[frameIndex]);
@@ -394,6 +430,21 @@ const cv::Mat& GetLabMask(GemType type, int frameIndex) {
         return s_emptyMask;
     }
     return s_labMasks[gemIndex][frameIndex];
+}
+
+const cv::Mat& GetPlanarLabMask(GemType type, int frameIndex) {
+    if (type == GemType::HYPERCUBE) {
+        if (frameIndex < 0 || frameIndex >= HYPERCUBE_FRAMES) {
+            return s_emptyMask;
+        }
+        return s_hypercubePlanarLabMasks[frameIndex];
+    }
+
+    int gemIndex = GemTypeToIndex(type);
+    if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
+        return s_emptyMask;
+    }
+    return s_planarLabMasks[gemIndex][frameIndex];
 }
 
 int GetFrameCount(GemType type) {

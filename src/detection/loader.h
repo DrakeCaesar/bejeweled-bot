@@ -35,6 +35,12 @@ namespace MaskLoader {
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
 // Storage for Lab color space reference images (pre-converted for performance)
+// Layout: Planar format with separate channels LLL...AAA...BBB... (128x128 per channel)
+    using PlanarLabMaskStorage =
+    std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+
+// Storage for interleaved Lab color space reference images (legacy format)
+// To be removed after planar format is fully implemented
     using LabMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
@@ -50,6 +56,7 @@ namespace MaskLoader {
     using HypercubeMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+    using HypercubePlanarLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
     using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 // Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel, 0=background)
@@ -128,6 +135,16 @@ namespace MaskLoader {
  * @return The Lab color space image, or empty Mat if not found
  */
     const cv::Mat& GetLabMask(GemType type, int frameIndex);
+
+/**
+ * Get a specific planar Lab color space reference image for a gem type and frame.
+ * Planar format: LLL...AAA...BBB... (128x128 per channel) for optimal SIMD access.
+ *
+ * @param type The gem type (RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE, HYPERCUBE)
+ * @param frameIndex Frame index 0-20 (or 0-59 for HYPERCUBE)
+ * @return The planar Lab color space image (3x128x128), or empty Mat if not found
+ */
+    const cv::Mat& GetPlanarLabMask(GemType type, int frameIndex);
 
 /**
  * Get the number of frames for a given gem type.
