@@ -138,17 +138,22 @@ int CalculateColorSimilarity(const cv::Mat &capturedPlanarLab,
               _mm256_add_epi32(diffSqSum, _mm256_mullo_epi32(diffB, diffB));
         }
 
-        // Mask vector from LUT (one int32 per pixel, -1 if active, 0 if bg)
-        __m256i maskVec = s_maskLut[rowMask];
+        if (rowMask == 0xFF) {
+          totalDistSq = _mm256_add_epi32(totalDistSq, diffSqSum);
+          pixelCount += 8;
+        } else {
+          // Mask vector from LUT (one int32 per pixel, -1 if active, 0 if bg)
+          __m256i maskVec = s_maskLut[rowMask];
 
-        // Apply mask: zero out background pixels
-        __m256i maskedDiffSq = _mm256_and_si256(diffSqSum, maskVec);
+          // Apply mask: zero out background pixels
+          __m256i maskedDiffSq = _mm256_and_si256(diffSqSum, maskVec);
 
-        // Accumulate to total
-        totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
+          // Accumulate to total
+          totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
 
-        // Count active pixels using LUT popcount
-        pixelCount += s_maskPopcnt[rowMask];
+          // Count active pixels using LUT popcount
+          pixelCount += s_maskPopcnt[rowMask];
+        }
       }
     }
   }
