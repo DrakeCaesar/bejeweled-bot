@@ -297,31 +297,30 @@ bool Application::FindAndSetupGameWindow() {
   return true;
 }
 
+struct MonitorEnumData {
+  HMONITOR targetMonitor;
+  int currentIndex;
+  int foundIndex;
+};
+static BOOL CALLBACK MonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM data) {
+  auto *pData = reinterpret_cast<MonitorEnumData *>(data);
+  if (hMon == pData->targetMonitor) {
+    pData->foundIndex = pData->currentIndex;
+    return FALSE;
+  }
+  pData->currentIndex++;
+  return TRUE;
+}
+
 bool Application::InitializeCapture() {
   // Detect which monitor the game window is on
   HMONITOR hMonitor = MonitorFromWindow(gameWindow_, MONITOR_DEFAULTTOPRIMARY);
   int monitorIndex = 0;
 
-  struct MonitorEnumData {
-    HMONITOR targetMonitor;
-    int currentIndex;
-    int foundIndex;
-  };
-
   MonitorEnumData enumData = {hMonitor, 0, -1};
 
-  EnumDisplayMonitors(
-      NULL, NULL,
-      [](HMONITOR hMon, HDC hdc, LPRECT rect, LPARAM data) -> BOOL {
-        MonitorEnumData *pData = (MonitorEnumData *)data;
-        if (hMon == pData->targetMonitor) {
-          pData->foundIndex = pData->currentIndex;
-          return FALSE;
-        }
-        pData->currentIndex++;
-        return TRUE;
-      },
-      (LPARAM)&enumData);
+  EnumDisplayMonitors(NULL, NULL, MonitorEnumProc,
+                      reinterpret_cast<LPARAM>(&enumData));
 
   if (enumData.foundIndex >= 0) {
     monitorIndex = enumData.foundIndex;
