@@ -4,6 +4,7 @@
 #include "assets/loader.h"
 #include "capture/capture_thread.h"
 #include "config.h"
+#include "detection/color_similarity.h"
 #include "detection/gem_detector.h"
 #include "detection/process_thread.h"
 #include "rendering/control_panel.h"
@@ -99,6 +100,8 @@ bool Application::Initialize() {
   std::cout << "Bejeweled 3 Bot - Window Capture Module" << std::endl;
   std::cout << "=========================================" << std::endl;
   std::cout << std::endl;
+
+  InitializeColorSimilarityLut();
 
   if (!FindAndSetupGameWindow()) {
     return false;

@@ -4,12 +4,44 @@
 #include <immintrin.h>
 #endif
 
+#include <cstdint>
+
+namespace {
+alignas(32) __m256i s_maskLut[256];
+uint8_t s_maskPopcnt[256];
+bool s_maskLutInitialized = false;
+
+void InitMaskLut() {
+  for (int mask = 0; mask < 256; ++mask) {
+    alignas(32) int32_t vals[8];
+    uint8_t count = 0;
+    for (int i = 0; i < 8; ++i) {
+      if (mask & (1 << i)) {
+        vals[i] = -1;
+        ++count;
+      } else {
+        vals[i] = 0;
+      }
+    }
+    s_maskLut[mask] = _mm256_load_si256((__m256i *)vals);
+    s_maskPopcnt[mask] = count;
+  }
+}
+} // namespace
+
+void InitializeColorSimilarityLut() {
+  if (!s_maskLutInitialized) {
+    InitMaskLut();
+    s_maskLutInitialized = true;
+  }
+}
+
 int CalculateColorSimilarity(const cv::Mat &capturedPlanarLab,
                              const cv::Mat &referencePlanarLab,
                              const std::vector<uint64_t> &bitmask,
                              int imageWidth, int imageHeight) {
   __m256i totalDistSq = _mm256_setzero_si256();
-  __m256i pixelCountVec = _mm256_setzero_si256(); // Vectorized pixel counter
+  int pixelCount = 0;
 
   // OPTIMIZATION: Hoist planar base pointers outside all loops to eliminate
   // repeated ptr() calls (6 per active row => 12,000+ calls eliminated!)
@@ -106,14 +138,8 @@ int CalculateColorSimilarity(const cv::Mat &capturedPlanarLab,
               _mm256_add_epi32(diffSqSum, _mm256_mullo_epi32(diffB, diffB));
         }
 
-        // Create mask vector from rowMask (one int32 per pixel, -1 if active, 0
-        // if background) OPTIMIZATION: Create once and reuse for both masking
-        // and counting
-        alignas(32) int32_t maskVals[8];
-        for (int i = 0; i < 8; i++) {
-          maskVals[i] = (rowMask & (1 << i)) ? 0xFFFFFFFF : 0;
-        }
-        __m256i maskVec = _mm256_load_si256((__m256i *)maskVals);
+        // Mask vector from LUT (one int32 per pixel, -1 if active, 0 if bg)
+        __m256i maskVec = s_maskLut[rowMask];
 
         // Apply mask: zero out background pixels
         __m256i maskedDiffSq = _mm256_and_si256(diffSqSum, maskVec);
@@ -121,10 +147,8 @@ int CalculateColorSimilarity(const cv::Mat &capturedPlanarLab,
         // Accumulate to total
         totalDistSq = _mm256_add_epi32(totalDistSq, maskedDiffSq);
 
-        // Count active pixels using SIMD (reuse maskVec - subtract -1 = add 1)
-        // OPTIMIZATION: Eliminated redundant _mm256_load_si256 by reusing
-        // maskVec
-        pixelCountVec = _mm256_sub_epi32(pixelCountVec, maskVec);
+        // Count active pixels using LUT popcount
+        pixelCount += s_maskPopcnt[rowMask];
       }
     }
   }
@@ -139,14 +163,6 @@ int CalculateColorSimilarity(const cv::Mat &capturedPlanarLab,
   _mm256_store_si256((__m256i *)temp, sum1);
   uint64_t totalDistanceSq =
       static_cast<uint64_t>(temp[0]) + static_cast<uint64_t>(temp[4]);
-
-  // Reduce pixel count vector using SIMD (eliminate scalar loop)
-  // OPTIMIZATION: Use same horizontal reduction pattern as totalDistanceSq
-  __m256i count4 = _mm256_hadd_epi32(pixelCountVec, pixelCountVec);
-  __m256i count2 = _mm256_hadd_epi32(count4, count4);
-  __m256i count1 = _mm256_shuffle_epi32(count2, _MM_SHUFFLE(2, 0, 2, 0));
-  _mm256_store_si256((__m256i *)temp, count1);
-  int pixelCount = temp[0] + temp[4]; // Sum both 128-bit lanes
 
   if (pixelCount == 0)
     return 0;
