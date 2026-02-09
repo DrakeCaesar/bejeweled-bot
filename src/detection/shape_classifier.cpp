@@ -58,7 +58,7 @@ struct PlanarMatPool {
   int tileHeight = 0;
 
   void Initialize(int width, int height) {
-    if (initialized && tileWidth == width && tileHeight == height)
+    if (initialized)
       return;
     int pixelsPerTile = width * height;
     for (int i = 0; i < 64; i++) {
@@ -71,9 +71,8 @@ struct PlanarMatPool {
 };
 static thread_local PlanarMatPool g_planarMatPool;
 
-// Thread-local temporary mats for LAB conversion pipeline
+// Thread-local temporary mat for LAB conversion pipeline
 static thread_local cv::Mat g_tempLabImage;
-static thread_local std::vector<cv::Mat> g_tempChannels(3);
 } // namespace
 
 // Helper: Iterate over all pixels (no longer crop-bounded - using bitmasks for
@@ -110,13 +109,16 @@ static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut) {
   // Convert BGR to LAB using pre-allocated temp mat
   cv::cvtColor(bgrImage, g_tempLabImage, cv::COLOR_BGR2Lab);
 
-  // Extract each channel separately into pre-allocated channels vector
-  cv::split(g_tempLabImage, g_tempChannels);
+  // Map planar output rows to 2D views and split directly into them
+  const int rows = g_tempLabImage.rows;
+  const int cols = g_tempLabImage.cols;
+  cv::Mat lPlane(rows, cols, CV_8UC1, planarLabOut.ptr<uchar>(0));
+  cv::Mat aPlane(rows, cols, CV_8UC1, planarLabOut.ptr<uchar>(1));
+  cv::Mat bPlane(rows, cols, CV_8UC1, planarLabOut.ptr<uchar>(2));
 
-  // Copy each channel to its plane in the pre-allocated output mat
-  g_tempChannels[0].reshape(0, 1).copyTo(planarLabOut.row(0)); // L plane
-  g_tempChannels[1].reshape(0, 1).copyTo(planarLabOut.row(1)); // A plane
-  g_tempChannels[2].reshape(0, 1).copyTo(planarLabOut.row(2)); // B plane
+  cv::Mat dstPlanes[] = {lPlane, aPlane, bPlane};
+  const int fromTo[] = {0, 0, 1, 1, 2, 2};
+  cv::mixChannels(&g_tempLabImage, 1, dstPlanes, 3, fromTo, 3);
 }
 
 cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
@@ -318,15 +320,6 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
   // Store image dimensions for SIMD access
   int imageWidth = processedImage.cols;
   int imageHeight = processedImage.rows;
-
-  // Verify the planar mat pool was properly initialized
-  if (!g_planarMatPool.initialized) {
-    if (outBestMatch)
-      *outBestMatch = 0.0f;
-    if (outBestFrame)
-      *outBestFrame = -1;
-    return GemType::UNKNOWN;
-  }
 
   // All gem types including hypercube for unified iteration
   static const GemType allGemTypes[] = {
