@@ -52,7 +52,7 @@ static std::array<std::array<GemMatchCache, 8>, 8> s_lastMatches;
 
 // Planar mat pool for pre-allocated planar LAB mats (one per 8x8 grid position)
 struct PlanarMatPool {
-  cv::Mat mats[64];  // One per 8x8 grid position
+  cv::Mat mats[64]; // One per 8x8 grid position
   bool initialized = false;
   int tileWidth = 0;
   int tileHeight = 0;
@@ -107,18 +107,6 @@ static void IterateAllPixels(const cv::Mat &img1Lab, const cv::Mat &img2Lab,
 // Helper: Convert interleaved BGR to planar LAB
 // Stores image dimensions in the matrix for easy access
 static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut) {
-  if (bgrImage.empty() || planarLabOut.empty()) {
-    return;
-  }
-
-  // Ensure temporary mats are properly sized
-  if (g_tempLabImage.empty() || g_tempLabImage.size() != bgrImage.size()) {
-    g_tempLabImage.create(bgrImage.size(), CV_8UC3);
-  }
-  if (g_tempChannels.size() != 3) {
-    g_tempChannels.resize(3);
-  }
-
   // Convert BGR to LAB using pre-allocated temp mat
   cv::cvtColor(bgrImage, g_tempLabImage, cv::COLOR_BGR2Lab);
 
