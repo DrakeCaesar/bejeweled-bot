@@ -9,8 +9,8 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "${sourceDir}/build/",
-      "installDir": "${sourceDir}/install/",
+      "binaryDir": "${sourceDir}/build/${presetName}/",
+      "installDir": "${sourceDir}/install/${presetName}/",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }

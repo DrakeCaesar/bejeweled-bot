@@ -49,6 +49,31 @@ struct GemMatchCache {
   int frame = -1;
 };
 static std::array<std::array<GemMatchCache, 8>, 8> s_lastMatches;
+
+// Planar mat pool for pre-allocated planar LAB mats (one per 8x8 grid position)
+struct PlanarMatPool {
+  cv::Mat mats[64];  // One per 8x8 grid position
+  bool initialized = false;
+  int tileWidth = 0;
+  int tileHeight = 0;
+
+  void Initialize(int width, int height) {
+    if (initialized && tileWidth == width && tileHeight == height)
+      return;
+    int pixelsPerTile = width * height;
+    for (int i = 0; i < 64; i++) {
+      mats[i] = cv::Mat(3, pixelsPerTile, CV_8UC1);
+    }
+    tileWidth = width;
+    tileHeight = height;
+    initialized = true;
+  }
+};
+static thread_local PlanarMatPool g_planarMatPool;
+
+// Thread-local temporary mats for LAB conversion pipeline
+static thread_local cv::Mat g_tempLabImage;
+static thread_local std::vector<cv::Mat> g_tempChannels(3);
 } // namespace
 
 // Helper: Iterate over all pixels (no longer crop-bounded - using bitmasks for
@@ -81,38 +106,29 @@ static void IterateAllPixels(const cv::Mat &img1Lab, const cv::Mat &img2Lab,
 
 // Helper: Convert interleaved BGR to planar LAB
 // Stores image dimensions in the matrix for easy access
-static cv::Mat ConvertToPlanarLab(const cv::Mat &bgrImage) {
-  if (bgrImage.empty()) {
-    return cv::Mat();
+static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut) {
+  if (bgrImage.empty() || planarLabOut.empty()) {
+    return;
   }
 
-  // Convert BGR to LAB
-  cv::Mat labImage;
-  cv::cvtColor(bgrImage, labImage, cv::COLOR_BGR2Lab);
+  // Ensure temporary mats are properly sized
+  if (g_tempLabImage.empty() || g_tempLabImage.size() != bgrImage.size()) {
+    g_tempLabImage.create(bgrImage.size(), CV_8UC3);
+  }
+  if (g_tempChannels.size() != 3) {
+    g_tempChannels.resize(3);
+  }
 
-  // Convert to planar format: 3 rows x (width*height) cols
-  // Row 0: L channel, Row 1: A channel, Row 2: B channel
-  cv::Mat planarLab(3, labImage.rows * labImage.cols, CV_8UC1);
+  // Convert BGR to LAB using pre-allocated temp mat
+  cv::cvtColor(bgrImage, g_tempLabImage, cv::COLOR_BGR2Lab);
 
-  // Store image dimensions in the matrix for later access
-  planarLab.cols = labImage.cols * labImage.rows; // Total pixels per channel
-  planarLab.rows = 3;                             // L, A, B channels
+  // Extract each channel separately into pre-allocated channels vector
+  cv::split(g_tempLabImage, g_tempChannels);
 
-  // Store original dimensions in the reserved fields if available, otherwise
-  // we'll pass them separately For now, we'll use a different approach - store
-  // dimensions in the first few elements Actually, let's just pass the
-  // dimensions as parameters to CalculateColorSimilarity
-
-  // Extract each channel separately
-  std::vector<cv::Mat> channels(3);
-  cv::split(labImage, channels);
-
-  // Copy each channel to its plane
-  channels[0].reshape(0, 1).copyTo(planarLab.row(0)); // L plane
-  channels[1].reshape(0, 1).copyTo(planarLab.row(1)); // A plane
-  channels[2].reshape(0, 1).copyTo(planarLab.row(2)); // B plane
-
-  return planarLab;
+  // Copy each channel to its plane in the pre-allocated output mat
+  g_tempChannels[0].reshape(0, 1).copyTo(planarLabOut.row(0)); // L plane
+  g_tempChannels[1].reshape(0, 1).copyTo(planarLabOut.row(1)); // A plane
+  g_tempChannels[2].reshape(0, 1).copyTo(planarLabOut.row(2)); // B plane
 }
 
 cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
@@ -294,10 +310,15 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
     return GemType::UNKNOWN;
   }
 
+  // Initialize planar mat pool on first use for this thread
+  if (!g_planarMatPool.initialized) {
+    g_planarMatPool.Initialize(processedImage.cols, processedImage.rows);
+  }
+
   // Convert to planar LAB format for optimal SIMD performance
-  // This is the key optimization: eliminates x*3+channel calculations and
-  // improves cache locality
-  const cv::Mat processedImagePlanarLab = ConvertToPlanarLab(processedImage);
+  // Reuse pre-allocated mat from pool based on tile position
+  cv::Mat &processedImagePlanarLab = g_planarMatPool.mats[gemRow * 8 + gemCol];
+  ConvertToPlanarLab(processedImage, processedImagePlanarLab);
   if (processedImagePlanarLab.empty()) {
     if (outBestMatch)
       *outBestMatch = 0.0f;
@@ -309,6 +330,15 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
   // Store image dimensions for SIMD access
   int imageWidth = processedImage.cols;
   int imageHeight = processedImage.rows;
+
+  // Verify the planar mat pool was properly initialized
+  if (!g_planarMatPool.initialized) {
+    if (outBestMatch)
+      *outBestMatch = 0.0f;
+    if (outBestFrame)
+      *outBestFrame = -1;
+    return GemType::UNKNOWN;
+  }
 
   // All gem types including hypercube for unified iteration
   static const GemType allGemTypes[] = {
