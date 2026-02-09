@@ -24,7 +24,7 @@ const bool SHOW_BOT_MATCH_LINES = true; // Draw swap lines that create a match
 const cv::Scalar BOT_MATCH_LINE_COLOR = cv::Scalar(0, 255, 255);
 const int BOT_MATCH_LINE_THICKNESS = 2;
 const int STATISICS_HISTORY_SIZE =
-    1000; // Number of frames to keep in rolling average for statistics
+    100; // Number of frames to keep in rolling average for statistics
 
 // Capture interval (ms)
 const int CAPTURE_INTERVAL_MS = 10; // Capture every 10 ms
