@@ -12,7 +12,7 @@
 
 class StaticThreadPool {
 public:
-  static constexpr int NUM_THREADS = 8;
+  static constexpr int NUM_THREADS = 12;
 
   static StaticThreadPool &Instance() {
     static StaticThreadPool instance;
