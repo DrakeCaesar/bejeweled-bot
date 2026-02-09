@@ -79,10 +79,6 @@ void StopRecording() {
     std::cout << "Recording stopped. Processing " << g_rawCaptureBuffer.size()
         << " captured frames..." << std::endl;
 
-    // Find animation boundaries after full capture using corner pixel brightness
-    std::cout << "Finding animation boundaries..." << std::endl;
-    const int diffWidth = Config::FRAME_DIFF_REGION_WIDTH;
-    const int diffHeight = Config::FRAME_DIFF_REGION_HEIGHT;
     const int blackThreshold = 20;
 
     size_t animationStart = g_rawCaptureBuffer.size();

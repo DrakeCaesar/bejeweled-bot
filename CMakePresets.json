@@ -9,8 +9,8 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "installDir": "${sourceDir}/out/install/${presetName}",
+      "binaryDir": "${sourceDir}/build/",
+      "installDir": "${sourceDir}/install/",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
@@ -29,6 +29,26 @@
       "generator": "Visual Studio 18 2026",
       "architecture": "x64",
       "toolset": "ClangCL"
+    },
+    {
+      "name": "ninja-msvc-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
+    },
+    {
+      "name": "ninja-clangcl-base",
+      "hidden": true,
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
     },
     {
       "name": "dynamic-base",
@@ -98,6 +118,36 @@
       "inherits": ["msvc-base", "dynamic-base", "relwithdebinfo-base"]
     },
     {
+      "name": "dynamic-ninja-clang-debug",
+      "displayName": "Dynamic - Ninja - ClangCL - Debug",
+      "inherits": ["ninja-clangcl-base", "dynamic-base", "debug-base"]
+    },
+    {
+      "name": "dynamic-ninja-clang-release",
+      "displayName": "Dynamic - Ninja - ClangCL - Release",
+      "inherits": ["ninja-clangcl-base", "dynamic-base", "release-base"]
+    },
+    {
+      "name": "dynamic-ninja-clang-relwithdebinfo",
+      "displayName": "Dynamic - Ninja - ClangCL - RelWithDebInfo",
+      "inherits": ["ninja-clangcl-base", "dynamic-base", "relwithdebinfo-base"]
+    },
+    {
+      "name": "dynamic-ninja-msvc-debug",
+      "displayName": "Dynamic - Ninja - MSVC - Debug",
+      "inherits": ["ninja-msvc-base", "dynamic-base", "debug-base"]
+    },
+    {
+      "name": "dynamic-ninja-msvc-release",
+      "displayName": "Dynamic - Ninja - MSVC - Release",
+      "inherits": ["ninja-msvc-base", "dynamic-base", "release-base"]
+    },
+    {
+      "name": "dynamic-ninja-msvc-relwithdebinfo",
+      "displayName": "Dynamic - Ninja - MSVC - RelWithDebInfo",
+      "inherits": ["ninja-msvc-base", "dynamic-base", "relwithdebinfo-base"]
+    },
+    {
       "name": "static-clang-debug",
       "displayName": "Static - Clang - Debug",
       "inherits": ["clangcl-base", "static-base", "debug-base"]
@@ -126,6 +176,36 @@
       "name": "static-msvc-relwithdebinfo",
       "displayName": "Static - MSVC - RelWithDebInfo",
       "inherits": ["msvc-base", "static-base", "relwithdebinfo-base"]
+    },
+    {
+      "name": "static-ninja-clang-debug",
+      "displayName": "Static - Ninja - ClangCL - Debug",
+      "inherits": ["ninja-clangcl-base", "static-base", "debug-base"]
+    },
+    {
+      "name": "static-ninja-clang-release",
+      "displayName": "Static - Ninja - ClangCL - Release",
+      "inherits": ["ninja-clangcl-base", "static-base", "release-base"]
+    },
+    {
+      "name": "static-ninja-clang-relwithdebinfo",
+      "displayName": "Static - Ninja - ClangCL - RelWithDebInfo",
+      "inherits": ["ninja-clangcl-base", "static-base", "relwithdebinfo-base"]
+    },
+    {
+      "name": "static-ninja-msvc-debug",
+      "displayName": "Static - Ninja - MSVC - Debug",
+      "inherits": ["ninja-msvc-base", "static-base", "debug-base"]
+    },
+    {
+      "name": "static-ninja-msvc-release",
+      "displayName": "Static - Ninja - MSVC - Release",
+      "inherits": ["ninja-msvc-base", "static-base", "release-base"]
+    },
+    {
+      "name": "static-ninja-msvc-relwithdebinfo",
+      "displayName": "Static - Ninja - MSVC - RelWithDebInfo",
+      "inherits": ["ninja-msvc-base", "static-base", "relwithdebinfo-base"]
     }
   ],
   "buildPresets": [
@@ -187,6 +267,66 @@
     {
       "name": "static-msvc-relwithdebinfo",
       "configurePreset": "static-msvc-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "dynamic-ninja-clang-debug",
+      "configurePreset": "dynamic-ninja-clang-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "dynamic-ninja-clang-release",
+      "configurePreset": "dynamic-ninja-clang-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "dynamic-ninja-clang-relwithdebinfo",
+      "configurePreset": "dynamic-ninja-clang-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "dynamic-ninja-msvc-debug",
+      "configurePreset": "dynamic-ninja-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "dynamic-ninja-msvc-release",
+      "configurePreset": "dynamic-ninja-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "dynamic-ninja-msvc-relwithdebinfo",
+      "configurePreset": "dynamic-ninja-msvc-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "static-ninja-clang-debug",
+      "configurePreset": "static-ninja-clang-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "static-ninja-clang-release",
+      "configurePreset": "static-ninja-clang-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "static-ninja-clang-relwithdebinfo",
+      "configurePreset": "static-ninja-clang-relwithdebinfo",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "static-ninja-msvc-debug",
+      "configurePreset": "static-ninja-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "static-ninja-msvc-release",
+      "configurePreset": "static-ninja-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "static-ninja-msvc-relwithdebinfo",
+      "configurePreset": "static-ninja-msvc-relwithdebinfo",
       "configuration": "RelWithDebInfo"
     }
   ],
