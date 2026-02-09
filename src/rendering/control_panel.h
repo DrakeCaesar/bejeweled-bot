@@ -9,7 +9,7 @@
 /**
  * Draw dark-mode control panel (custom sliders).
  */
-void DrawControlPanel(cv::Mat&image);
+void DrawControlPanel(cv::Mat &image);
 
 /**
  * Handle mouse events for the control panel sliders.

@@ -38,6 +38,7 @@ add_executable(bejeweled-bot ${SOURCES})
 
 target_link_libraries(bejeweled-bot PRIVATE ${OpenCV_LIBS})
 set_target_properties(bejeweled-bot PROPERTIES
+
     # Set PDB file name to match executable
     COMPILE_PDB_NAME "bejeweled-bot"
     COMPILE_PDB_NAME_DEBUG "bejeweled-bot"

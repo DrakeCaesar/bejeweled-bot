@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../capture/window_capture.h"
-#include "../config.h"
+#include "capture/window_capture.h"
+#include "config.h"
 #include <condition_variable>
 #include <mutex>
 #include <opencv2/opencv.hpp>
@@ -11,10 +11,10 @@
 // ============================================================================
 
 enum class BufferState {
-    FREE, // Available for capture
-    CAPTURED, // Raw data captured, ready for processing
-    PROCESSED, // Overlays added, ready for display
-    DISPLAYING // Currently being shown on screen
+  FREE,      // Available for capture
+  CAPTURED,  // Raw data captured, ready for processing
+  PROCESSED, // Overlays added, ready for display
+  DISPLAYING // Currently being shown on screen
 };
 
 // ============================================================================
@@ -22,27 +22,25 @@ enum class BufferState {
 // ============================================================================
 
 struct SharedFrameData {
-    // Single buffer array - each buffer flows through all pipeline stages
-    cv::Mat frameBuffer[3];
-    BufferState bufferState[3] = {
-        BufferState::FREE, BufferState::FREE,
-        BufferState::FREE
-    };
+  // Single buffer array - each buffer flows through all pipeline stages
+  cv::Mat frameBuffer[3];
+  BufferState bufferState[3] = {BufferState::FREE, BufferState::FREE,
+                                BufferState::FREE};
 
-    std::mutex mutex;
-    std::condition_variable cv;
+  std::mutex mutex;
+  std::condition_variable cv;
 
-    bool shouldExit = false;
+  bool shouldExit = false;
 
-    // Desktop Duplication context
-    DuplicationContext* dupContext = nullptr;
+  // Desktop Duplication context
+  DuplicationContext *dupContext = nullptr;
 
-    // Find first buffer in given state, returns -1 if none found
-    int findBuffer(BufferState state) const {
-        for (int i = 0; i < 3; i++) {
-            if (bufferState[i] == state)
-                return i;
-        }
-        return -1;
+  // Find first buffer in given state, returns -1 if none found
+  int findBuffer(BufferState state) const {
+    for (int i = 0; i < 3; i++) {
+      if (bufferState[i] == state)
+        return i;
     }
+    return -1;
+  }
 };

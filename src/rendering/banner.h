@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../config.h"
+#include "config.h"
 #include <opencv2/opencv.hpp>
 
 // ============================================================================
@@ -22,7 +22,7 @@
  * @param drawWidth Width for draw padding
  * @param displayWidth Width for display padding
  */
-void DrawBanner(cv::Mat&image, float fps, double captureMs = 0,
+void DrawBanner(cv::Mat &image, float fps, double captureMs = 0,
                 double detectMs = 0, double drawMs = 0, double displayMs = 0,
                 int fpsWidth = 5, int captureWidth = 4, int detectWidth = 4,
                 int drawWidth = 4, int displayWidth = 4);

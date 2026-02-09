@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../types/frame_data.h"
-#include "../types/timing.h"
+#include "types/frame_data.h"
+#include "types/timing.h"
 #include <chrono>
 
 // ============================================================================
@@ -19,6 +19,6 @@
  * @param lastFpsUpdateTime Reference to last FPS update timestamp
  */
 void ProcessThreadFunc(
-    SharedFrameData&frameData, TimingInfo&timingInfo, float&currentFps,
-    int&frameCount,
-    std::chrono::high_resolution_clock::time_point&lastFpsUpdateTime);
+    SharedFrameData &frameData, TimingInfo &timingInfo, float &currentFps,
+    int &frameCount,
+    std::chrono::high_resolution_clock::time_point &lastFpsUpdateTime);

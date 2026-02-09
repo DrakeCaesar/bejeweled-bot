@@ -8,40 +8,40 @@
 // ============================================================================
 
 enum class GemType {
-    EMPTY,
-    RED,
-    ORANGE,
-    YELLOW,
-    GREEN,
-    BLUE,
-    PURPLE,
-    WHITE,
-    HYPERCUBE,
-    UNKNOWN
+  EMPTY,
+  RED,
+  ORANGE,
+  YELLOW,
+  GREEN,
+  BLUE,
+  PURPLE,
+  WHITE,
+  HYPERCUBE,
+  UNKNOWN
 };
 
 enum class GemState {
-    NORMAL,
-    FLAME, // For future: flame gem detection
-    LIGHTNING, // For future: lightning gem detection
-    STAR // For future: star gem detection
+  NORMAL,
+  FLAME,     // For future: flame gem detection
+  LIGHTNING, // For future: lightning gem detection
+  STAR       // For future: star gem detection
 };
 
 struct Gem {
-    GemType type;
-    GemType closestType; // Closest hue match (for debug when no confident match)
-    GemState state;
-    bool matchedThreshold;
-    cv::Point gridPos; // Grid position (0-7, 0-7)
-    cv::Rect roi; // Region of interest for color classification (smaller)
-    cv::Rect shapeRoi; // Region of interest for classification (larger)
-    cv::Scalar avgColor; // Average color for debugging
-    float bestMatch; // Best match ratio [0..1] for debug
-    int bestMatchFrame; // Best matching frame index (0-19)
-    cv::Mat
-    shapeMask; // Binary mask for classification (white gem on black)
-    int ringValue; // HSV V channel from ring around gem (debug)
-    cv::Vec3i ringHSV; // HSV values from ring around gem (H, S, V) for flame/lightning detection
+  GemType type;
+  GemType closestType; // Closest hue match (for debug when no confident match)
+  GemState state;
+  bool matchedThreshold;
+  cv::Point gridPos;   // Grid position (0-7, 0-7)
+  cv::Rect roi;        // Region of interest for color classification (smaller)
+  cv::Rect shapeRoi;   // Region of interest for classification (larger)
+  cv::Scalar avgColor; // Average color for debugging
+  float bestMatch;     // Best match ratio [0..1] for debug
+  int bestMatchFrame;  // Best matching frame index (0-19)
+  cv::Mat shapeMask;   // Binary mask for classification (white gem on black)
+  int ringValue;       // HSV V channel from ring around gem (debug)
+  cv::Vec3i ringHSV;   // HSV values from ring around gem (H, S, V) for
+                       // flame/lightning detection
 };
 
 // ============================================================================

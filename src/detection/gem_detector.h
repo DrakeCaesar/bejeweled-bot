@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../config.h"
+#include "config.h"
 #include "gem_types.h"
 #include <opencv2/opencv.hpp>
-#include <vector>
 #include <string>
+#include <vector>
 
 // ============================================================================
 // Gem Detection - Grid-based gem detection
@@ -15,17 +15,18 @@
  * Returns a reference to a static grid that is reused across calls.
  *
  * @param gameBoard The game board image (resolution-dependent size)
- * @param needDebugMap Whether debug visualization is needed (to avoid atomic loads)
+ * @param needDebugMap Whether debug visualization is needed (to avoid atomic
+ * loads)
  * @return Reference to internal 2D vector representing the 8x8 grid of detected
  * gems
  */
-std::vector<std::vector<Gem>>&
-DetectGems(const cv::Mat&gameBoard, bool needDebugMap = false);
+std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
+                                          bool needDebugMap = false);
 
 /**
  * Print the gem grid to console for debugging
  */
-void PrintGemGrid(const std::vector<std::vector<Gem>>&grid);
+void PrintGemGrid(const std::vector<std::vector<Gem>> &grid);
 
 // ============================================================================
 // Frame Recording - Capture raw gem images for asset creation
@@ -41,7 +42,7 @@ void PrintGemGrid(const std::vector<std::vector<Gem>>&grid);
  * @param outputDir Directory to save frames (will be created if needed)
  */
 void StartRecording(int col, int row, int maxFrames,
-                    const std::string&outputDir = "recorded_frames");
+                    const std::string &outputDir = "recorded_frames");
 
 /**
  * Stop recording frames.
@@ -66,7 +67,7 @@ int GetTotalFramesChecked();
 /**
  * Update recording logic with a new frame.
  * Should be called once per capture cycle when recording is enabled.
- * 
+ *
  * @param gameBoard The full game board image
  */
-void UpdateRecording(const cv::Mat&gameBoard);
+void UpdateRecording(const cv::Mat &gameBoard);

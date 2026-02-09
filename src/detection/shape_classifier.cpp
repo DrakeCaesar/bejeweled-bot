@@ -1,6 +1,6 @@
 #include "shape_classifier.h"
+#include "assets/loader.h"
 #include "color_similarity.h"
-#include "loader.h"
 #include "config.h"
 #include <cmath>
 #include <opencv2/opencv.hpp>
@@ -11,22 +11,26 @@
 
 namespace ShapeParams {
 // Trackbar backing variables (OpenCV requires int pointers)
-    static int debugStageTrack = debugStage.load();
-    static int matchThresholdTrack = matchThreshold.load();
+static int debugStageTrack = debugStage.load();
+static int matchThresholdTrack = matchThreshold.load();
 
-    static void OnDebugStageChange(int value, void*) { debugStage.store(value); }
+static void OnDebugStageChange(int value, void *) { debugStage.store(value); }
 
-    static void OnMatchThresholdChange(int value, void*) {
-        int v = value;
-        if (v < 1) v = 1;
-        if (v > 100) v = 100;
-        matchThreshold.store(v);
-    }
+static void OnMatchThresholdChange(int value, void *) {
+  int v = value;
+  if (v < 1)
+    v = 1;
+  if (v > 100)
+    v = 100;
+  matchThreshold.store(v);
+}
 
-    void CreateTrackbars(const std::string&windowName) {
-        cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5, OnDebugStageChange);
-        cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100, OnMatchThresholdChange);
-    }
+void CreateTrackbars(const std::string &windowName) {
+  cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5,
+                     OnDebugStageChange);
+  cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100,
+                     OnMatchThresholdChange);
+}
 } // namespace ShapeParams
 
 // ============================================================================
@@ -35,99 +39,106 @@ namespace ShapeParams {
 
 // Thread-local storage for debug visualizations
 namespace {
-    thread_local cv::Mat g_debugBestInput;
-    thread_local cv::Mat g_debugBestRef;
-    thread_local cv::Mat g_debugBestDiffMap;
+thread_local cv::Mat g_debugBestInput;
+thread_local cv::Mat g_debugBestRef;
+thread_local cv::Mat g_debugBestDiffMap;
 
-    // Per-position temporal coherence cache (8x8 grid)
-    struct GemMatchCache {
-        GemType type = GemType::UNKNOWN;
-        int frame = -1;
-    };
-    static std::array<std::array<GemMatchCache, 8>, 8> s_lastMatches;
-}
+// Per-position temporal coherence cache (8x8 grid)
+struct GemMatchCache {
+  GemType type = GemType::UNKNOWN;
+  int frame = -1;
+};
+static std::array<std::array<GemMatchCache, 8>, 8> s_lastMatches;
+} // namespace
 
-// Helper: Iterate over all pixels (no longer crop-bounded - using bitmasks for optimization)
-template<typename Callback>
-static void IterateAllPixels(const cv::Mat& img1Lab, const cv::Mat& img2Lab, Callback cb) {
-    // Background color constants
-    const uchar bgL = 0;
-    const uchar bgA = 128;
-    const uchar bgB = 128;
+// Helper: Iterate over all pixels (no longer crop-bounded - using bitmasks for
+// optimization)
+template <typename Callback>
+static void IterateAllPixels(const cv::Mat &img1Lab, const cv::Mat &img2Lab,
+                             Callback cb) {
+  // Background color constants
+  const uchar bgL = 0;
+  const uchar bgA = 128;
+  const uchar bgB = 128;
 
-    // Process all pixels
-    for (int y = 0; y < img1Lab.rows; y++) {
-        const cv::Vec3b* row1 = img1Lab.ptr<cv::Vec3b>(y);
-        const cv::Vec3b* row2 = img2Lab.ptr<cv::Vec3b>(y);
+  // Process all pixels
+  for (int y = 0; y < img1Lab.rows; y++) {
+    const cv::Vec3b *row1 = img1Lab.ptr<cv::Vec3b>(y);
+    const cv::Vec3b *row2 = img2Lab.ptr<cv::Vec3b>(y);
 
-        for (int x = 0; x < img1Lab.cols; x++) {
-            if (row2[x][0] == bgL && row2[x][1] == bgA && row2[x][2] == bgB) continue;
+    for (int x = 0; x < img1Lab.cols; x++) {
+      if (row2[x][0] == bgL && row2[x][1] == bgA && row2[x][2] == bgB)
+        continue;
 
-            int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
-            int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
-            int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
+      int dL = static_cast<int>(row1[x][0]) - static_cast<int>(row2[x][0]);
+      int da = static_cast<int>(row1[x][1]) - static_cast<int>(row2[x][1]);
+      int db = static_cast<int>(row1[x][2]) - static_cast<int>(row2[x][2]);
 
-            cb(x, y, dL, da, db);
-        }
+      cb(x, y, dL, da, db);
     }
+  }
 }
 
 // Helper: Convert interleaved BGR to planar LAB
 // Stores image dimensions in the matrix for easy access
-static cv::Mat ConvertToPlanarLab(const cv::Mat& bgrImage) {
-    if (bgrImage.empty()) {
-        return cv::Mat();
-    }
+static cv::Mat ConvertToPlanarLab(const cv::Mat &bgrImage) {
+  if (bgrImage.empty()) {
+    return cv::Mat();
+  }
 
-    // Convert BGR to LAB
-    cv::Mat labImage;
-    cv::cvtColor(bgrImage, labImage, cv::COLOR_BGR2Lab);
+  // Convert BGR to LAB
+  cv::Mat labImage;
+  cv::cvtColor(bgrImage, labImage, cv::COLOR_BGR2Lab);
 
-    // Convert to planar format: 3 rows x (width*height) cols
-    // Row 0: L channel, Row 1: A channel, Row 2: B channel
-    cv::Mat planarLab(3, labImage.rows * labImage.cols, CV_8UC1);
+  // Convert to planar format: 3 rows x (width*height) cols
+  // Row 0: L channel, Row 1: A channel, Row 2: B channel
+  cv::Mat planarLab(3, labImage.rows * labImage.cols, CV_8UC1);
 
-    // Store image dimensions in the matrix for later access
-    planarLab.cols = labImage.cols * labImage.rows;  // Total pixels per channel
-    planarLab.rows = 3;  // L, A, B channels
+  // Store image dimensions in the matrix for later access
+  planarLab.cols = labImage.cols * labImage.rows; // Total pixels per channel
+  planarLab.rows = 3;                             // L, A, B channels
 
-    // Store original dimensions in the reserved fields if available, otherwise we'll pass them separately
-    // For now, we'll use a different approach - store dimensions in the first few elements
-    // Actually, let's just pass the dimensions as parameters to CalculateColorSimilarity
+  // Store original dimensions in the reserved fields if available, otherwise
+  // we'll pass them separately For now, we'll use a different approach - store
+  // dimensions in the first few elements Actually, let's just pass the
+  // dimensions as parameters to CalculateColorSimilarity
 
-    // Extract each channel separately
-    std::vector<cv::Mat> channels(3);
-    cv::split(labImage, channels);
+  // Extract each channel separately
+  std::vector<cv::Mat> channels(3);
+  cv::split(labImage, channels);
 
-    // Copy each channel to its plane
-    channels[0].reshape(0, 1).copyTo(planarLab.row(0));  // L plane
-    channels[1].reshape(0, 1).copyTo(planarLab.row(1));  // A plane
-    channels[2].reshape(0, 1).copyTo(planarLab.row(2));  // B plane
+  // Copy each channel to its plane
+  channels[0].reshape(0, 1).copyTo(planarLab.row(0)); // L plane
+  channels[1].reshape(0, 1).copyTo(planarLab.row(1)); // A plane
+  channels[2].reshape(0, 1).copyTo(planarLab.row(2)); // B plane
 
-    return planarLab;
+  return planarLab;
 }
 
-cv::Mat ProcessGemForShapeMatching(const cv::Mat&gemRegion) {
-    // No-op wrapper maintained for API compatibility
-    // Returns a clone of the region (or empty if input is empty)
-    return gemRegion.empty() ? cv::Mat() : gemRegion.clone();
+cv::Mat ProcessGemForShapeMatching(const cv::Mat &gemRegion) {
+  // No-op wrapper maintained for API compatibility
+  // Returns a clone of the region (or empty if input is empty)
+  return gemRegion.empty() ? cv::Mat() : gemRegion.clone();
 }
 
+cv::Mat GetDebugVisualization(const cv::Mat &gemRegion) {
+  int stage = ShapeParams::debugStage.load();
 
-cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
-    int stage = ShapeParams::debugStage.load();
-
-    if (stage == 0) return cv::Mat();  // Show nothing for maximum throughput
-    if (stage == 1) return gemRegion.clone();
-    if (stage == 2 && !g_debugBestRef.empty()) return g_debugBestRef.clone();
-    if (stage == 3 && !g_debugBestDiffMap.empty()) return g_debugBestDiffMap.clone();
-    if (stage == 4 && !g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
-        cv::Mat overlay;
-        cv::addWeighted(g_debugBestInput, 0.5, g_debugBestDiffMap, 0.5, 0, overlay);
-        return overlay;
-    }
-
+  if (stage == 0)
+    return cv::Mat(); // Show nothing for maximum throughput
+  if (stage == 1)
     return gemRegion.clone();
+  if (stage == 2 && !g_debugBestRef.empty())
+    return g_debugBestRef.clone();
+  if (stage == 3 && !g_debugBestDiffMap.empty())
+    return g_debugBestDiffMap.clone();
+  if (stage == 4 && !g_debugBestInput.empty() && !g_debugBestDiffMap.empty()) {
+    cv::Mat overlay;
+    cv::addWeighted(g_debugBestInput, 0.5, g_debugBestDiffMap, 0.5, 0, overlay);
+    return overlay;
+  }
+
+  return gemRegion.clone();
 }
 
 // ============================================================================
@@ -137,60 +148,61 @@ cv::Mat GetDebugVisualization(const cv::Mat&gemRegion) {
 // Helper: Convert integer similarity score (0-10000) to percentage (0.0-1.0)
 // Applies sqrt conversion for better distance-to-similarity mapping
 static float ConvertScoreToPercentage(int score) {
-    // Apply sqrt for accurate distance-to-similarity conversion
-    // score = 10000 - avgDistSq, so avgDistSq = 10000 - score
-    // final_score = 10000 - sqrt(avgDistSq) * 100
-    float avgDistSq = 10000.0f - static_cast<float>(score);
-    avgDistSq = std::max(avgDistSq, 0.0f);
-    float sqrtDist = std::sqrt(avgDistSq);
-    float finalScore = 10000.0f - sqrtDist * 100.0f;
-    finalScore = std::max(finalScore, 0.0f);
-    return finalScore / 10000.0f;
+  // Apply sqrt for accurate distance-to-similarity conversion
+  // score = 10000 - avgDistSq, so avgDistSq = 10000 - score
+  // final_score = 10000 - sqrt(avgDistSq) * 100
+  float avgDistSq = 10000.0f - static_cast<float>(score);
+  avgDistSq = std::max(avgDistSq, 0.0f);
+  float sqrtDist = std::sqrt(avgDistSq);
+  float finalScore = 10000.0f - sqrtDist * 100.0f;
+  finalScore = std::max(finalScore, 0.0f);
+  return finalScore / 10000.0f;
 }
 
-static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab,
-                                       const cv::Mat&img2Lab,
-                                       const cv::Mat&alphaMask, const cv::Mat&img2Bgr,
-                                       GemType type, int frame) {
-    if (img1.empty() || img2Lab.empty() || img1Lab.empty()) return;
+static void
+GenerateDebugVisualization(const cv::Mat &img1, const cv::Mat &img1Lab,
+                           const cv::Mat &img2Lab, const cv::Mat &alphaMask,
+                           const cv::Mat &img2Bgr, GemType type, int frame) {
+  if (img1.empty() || img2Lab.empty() || img1Lab.empty())
+    return;
 
-    // Apply mask to BGR for debug visualization
-    cv::Mat i1 = img1.clone();
-    if (!alphaMask.empty()) {
-        for (int y = 0; y < i1.rows; y++) {
-            cv::Vec3b* row1 = i1.ptr<cv::Vec3b>(y);
-            const uchar* maskRow = alphaMask.ptr<uchar>(y);
-            for (int x = 0; x < i1.cols; x++) {
-                if (maskRow[x] == 0) {
-                    row1[x] = cv::Vec3b(0, 0, 0);
-                }
-            }
+  // Apply mask to BGR for debug visualization
+  cv::Mat i1 = img1.clone();
+  if (!alphaMask.empty()) {
+    for (int y = 0; y < i1.rows; y++) {
+      cv::Vec3b *row1 = i1.ptr<cv::Vec3b>(y);
+      const uchar *maskRow = alphaMask.ptr<uchar>(y);
+      for (int x = 0; x < i1.cols; x++) {
+        if (maskRow[x] == 0) {
+          row1[x] = cv::Vec3b(0, 0, 0);
         }
+      }
     }
+  }
 
-    g_debugBestInput = i1;
-    g_debugBestRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
+  g_debugBestInput = i1;
+  g_debugBestRef = img2Bgr.empty() ? cv::Mat() : img2Bgr.clone();
 
-    // Generate diff map
-    g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
+  // Generate diff map
+  g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
 
-    IterateAllPixels(img1Lab, img2Lab,
-        [&](int x, int y, int dL, int da, int db) {
-            cv::Vec3b* diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
-            float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
+  IterateAllPixels(img1Lab, img2Lab, [&](int x, int y, int dL, int da, int db) {
+    cv::Vec3b *diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
+    float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
 
-            if (dist < 10.0f) {
-                diffRow[x] = cv::Vec3b(0, 0, 0);
-            } else {
-                float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
-                uchar intensity = static_cast<uchar>(normalized * 255.0f);
-                if (normalized < 0.5f) {
-                    diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
-                } else {
-                    diffRow[x] = cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
-                }
-            }
-        });
+    if (dist < 10.0f) {
+      diffRow[x] = cv::Vec3b(0, 0, 0);
+    } else {
+      float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
+      uchar intensity = static_cast<uchar>(normalized * 255.0f);
+      if (normalized < 0.5f) {
+        diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
+      } else {
+        diffRow[x] =
+            cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
+      }
+    }
+  });
 }
 
 // ============================================================================
@@ -198,248 +210,247 @@ static void GenerateDebugVisualization(const cv::Mat&img1, const cv::Mat&img1Lab
 // ============================================================================
 
 // Check a specific type/frame with caching to avoid redundant comparisons
-static int CheckMatchScore(
-    GemType type,
-    int frame,
-    const cv::Mat& processedImagePlanarLab,
-    int imageWidth,
-    int imageHeight,
-    int* scoreCache,
-    bool* checkedFlags,
-    int maxCacheSize,
-    int maxFramesPerType)
-{
-    int idx = static_cast<int>(type) * maxFramesPerType + frame;
+static int CheckMatchScore(GemType type, int frame,
+                           const cv::Mat &processedImagePlanarLab,
+                           int imageWidth, int imageHeight, int *scoreCache,
+                           bool *checkedFlags, int maxCacheSize,
+                           int maxFramesPerType) {
+  int idx = static_cast<int>(type) * maxFramesPerType + frame;
 
-    // Return cached score if already checked
-    if (idx >= 0 && idx < maxCacheSize && checkedFlags[idx]) {
-        return scoreCache[idx];
-    }
+  // Return cached score if already checked
+  if (idx >= 0 && idx < maxCacheSize && checkedFlags[idx]) {
+    return scoreCache[idx];
+  }
 
-    // Compute score using planar format for optimal SIMD performance
-    const cv::Mat& refImagePlanarLab = MaskLoader::GetPlanarLabMask(type, frame);
-    int score = 0;
-    if (!refImagePlanarLab.empty()) {
-        const auto& bitmask = MaskLoader::GetBitmask(type, frame);
-        score = CalculateColorSimilarity(processedImagePlanarLab, refImagePlanarLab, bitmask, imageWidth, imageHeight);
-    }
+  // Compute score using planar format for optimal SIMD performance
+  const cv::Mat &refImagePlanarLab = MaskLoader::GetPlanarLabMask(type, frame);
+  int score = 0;
+  if (!refImagePlanarLab.empty()) {
+    const auto &bitmask = MaskLoader::GetBitmask(type, frame);
+    score = CalculateColorSimilarity(processedImagePlanarLab, refImagePlanarLab,
+                                     bitmask, imageWidth, imageHeight);
+  }
 
-    // Cache result
-    if (idx >= 0 && idx < maxCacheSize) {
-        scoreCache[idx] = score;
-        checkedFlags[idx] = true;
-    }
+  // Cache result
+  if (idx >= 0 && idx < maxCacheSize) {
+    scoreCache[idx] = score;
+    checkedFlags[idx] = true;
+  }
 
-    return score;
+  return score;
 }
 
 // Finalize a match by updating cache and output parameters
-static GemType FinalizeMatch(
-    GemType type,
-    int frame,
-    int score,
-    GemMatchCache& cache,
-    float* outBestMatch,
-    int* outBestFrame,
-    bool needDebugMap,
-    const cv::Mat& processedImage,
-    const cv::Mat& processedImageLab)
-{
-    cache.type = type;
-    cache.frame = frame;
+static GemType FinalizeMatch(GemType type, int frame, int score,
+                             GemMatchCache &cache, float *outBestMatch,
+                             int *outBestFrame, bool needDebugMap,
+                             const cv::Mat &processedImage,
+                             const cv::Mat &processedImageLab) {
+  cache.type = type;
+  cache.frame = frame;
 
-    // Convert score to percentage (0.0-1.0)
-    if (outBestMatch) {
-        *outBestMatch = ConvertScoreToPercentage(score);
-    }
-    if (outBestFrame) *outBestFrame = frame;
-    if (needDebugMap) {
-        const cv::Mat& refImageBgr = MaskLoader::GetMask(type, frame);
-        GenerateDebugVisualization(processedImage, processedImageLab,
-            MaskLoader::GetLabMask(type, frame),
-            MaskLoader::GetAlphaMask(type, frame), refImageBgr, type, frame);
-    }
-    return type;
+  // Convert score to percentage (0.0-1.0)
+  if (outBestMatch) {
+    *outBestMatch = ConvertScoreToPercentage(score);
+  }
+  if (outBestFrame)
+    *outBestFrame = frame;
+  if (needDebugMap) {
+    const cv::Mat &refImageBgr = MaskLoader::GetMask(type, frame);
+    GenerateDebugVisualization(
+        processedImage, processedImageLab, MaskLoader::GetLabMask(type, frame),
+        MaskLoader::GetAlphaMask(type, frame), refImageBgr, type, frame);
+  }
+  return type;
 }
 
-// Try matching a specific type/frame, updating best score and returning if threshold met
-static bool TryMatch(
-    GemType type,
-    int frame,
-    const cv::Mat& processedImagePlanarLab,
-    int imageWidth,
-    int imageHeight,
-    int* scoreCache,
-    bool* checkedFlags,
-    int maxCacheSize,
-    int maxFramesPerType,
-    int threshold,
-    GemType& bestType,
-    int& bestScore,
-    int& bestFrame)
-{
-    int score = CheckMatchScore(type, frame, processedImagePlanarLab, imageWidth, imageHeight,
-                                   scoreCache, checkedFlags,
-                                   maxCacheSize, maxFramesPerType);
-    if (score > bestScore) {
-        bestScore = score;
-        bestType = type;
-        bestFrame = frame;
-    }
-    return score >= threshold;
+// Try matching a specific type/frame, updating best score and returning if
+// threshold met
+static bool TryMatch(GemType type, int frame,
+                     const cv::Mat &processedImagePlanarLab, int imageWidth,
+                     int imageHeight, int *scoreCache, bool *checkedFlags,
+                     int maxCacheSize, int maxFramesPerType, int threshold,
+                     GemType &bestType, int &bestScore, int &bestFrame) {
+  int score = CheckMatchScore(type, frame, processedImagePlanarLab, imageWidth,
+                              imageHeight, scoreCache, checkedFlags,
+                              maxCacheSize, maxFramesPerType);
+  if (score > bestScore) {
+    bestScore = score;
+    bestType = type;
+    bestFrame = frame;
+  }
+  return score >= threshold;
 }
 
-GemType ClassifyGemByShape(const cv::Mat&processedImage, const cv::Mat&processedImageLab,
-                       int gemRow, int gemCol,
-                       float* outBestMatch,
-                       int* outBestFrame, bool needDebugMap) {
-if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
-    if (outBestMatch) *outBestMatch = 0.0f;
-    if (outBestFrame) *outBestFrame = -1;
+GemType ClassifyGemByShape(const cv::Mat &processedImage,
+                           const cv::Mat &processedImageLab, int gemRow,
+                           int gemCol, float *outBestMatch, int *outBestFrame,
+                           bool needDebugMap) {
+  if (processedImage.empty() || !MaskLoader::AreMasksLoaded()) {
+    if (outBestMatch)
+      *outBestMatch = 0.0f;
+    if (outBestFrame)
+      *outBestFrame = -1;
     return GemType::UNKNOWN;
-}
+  }
 
-// Convert to planar LAB format for optimal SIMD performance
-// This is the key optimization: eliminates x*3+channel calculations and improves cache locality
-const cv::Mat processedImagePlanarLab = ConvertToPlanarLab(processedImage);
-if (processedImagePlanarLab.empty()) {
-    if (outBestMatch) *outBestMatch = 0.0f;
-    if (outBestFrame) *outBestFrame = -1;
+  // Convert to planar LAB format for optimal SIMD performance
+  // This is the key optimization: eliminates x*3+channel calculations and
+  // improves cache locality
+  const cv::Mat processedImagePlanarLab = ConvertToPlanarLab(processedImage);
+  if (processedImagePlanarLab.empty()) {
+    if (outBestMatch)
+      *outBestMatch = 0.0f;
+    if (outBestFrame)
+      *outBestFrame = -1;
     return GemType::UNKNOWN;
-}
+  }
 
-// Store image dimensions for SIMD access
-int imageWidth = processedImage.cols;
-int imageHeight = processedImage.rows;
+  // Store image dimensions for SIMD access
+  int imageWidth = processedImage.cols;
+  int imageHeight = processedImage.rows;
 
-// All gem types including hypercube for unified iteration
-static const GemType allGemTypes[] = {
-    GemType::RED, GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
-    GemType::BLUE, GemType::PURPLE, GemType::WHITE, GemType::HYPERCUBE
-};
-static const int numAllGemTypes = 8;
+  // All gem types including hypercube for unified iteration
+  static const GemType allGemTypes[] = {
+      GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
+      GemType::BLUE, GemType::PURPLE, GemType::WHITE,  GemType::HYPERCUBE};
+  static const int numAllGemTypes = 8;
 
-// Convert user's desired final percentage to internal threshold for comparison
-// Derived from: internalThreshold = finalPercentage * (200 - finalPercentage)
-int finalThresholdPercent = ShapeParams::matchThreshold.load();  // User's desired final percentage (0-100)
-int threshold = finalThresholdPercent * (200 - finalThresholdPercent);
-GemType bestType = GemType::UNKNOWN;
-int bestScore = 0;
-int bestFrame = -1;
+  // Convert user's desired final percentage to internal threshold for
+  // comparison Derived from: internalThreshold = finalPercentage * (200 -
+  // finalPercentage)
+  int finalThresholdPercent =
+      ShapeParams::matchThreshold
+          .load(); // User's desired final percentage (0-100)
+  int threshold = finalThresholdPercent * (200 - finalThresholdPercent);
+  GemType bestType = GemType::UNKNOWN;
+  int bestScore = 0;
+  int bestFrame = -1;
 
-// Get last match for this specific gem position
-auto& cache = s_lastMatches[gemRow][gemCol];
-GemType lastType = cache.type;
-int lastFrame = cache.frame;
+  // Get last match for this specific gem position
+  auto &cache = s_lastMatches[gemRow][gemCol];
+  GemType lastType = cache.type;
+  int lastFrame = cache.frame;
 
-// Track checked frames to avoid redundant comparisons (max 8 types * ~30 frames = 240 entries)
-// Use array indexed by (type * MAX_FRAMES + frame) for fast lookup
-constexpr int MAX_FRAMES_PER_TYPE = 32;  // Conservative upper bound
-constexpr int MAX_CACHE_SIZE = 8 * MAX_FRAMES_PER_TYPE;
-thread_local int scoreCache[MAX_CACHE_SIZE];
-thread_local bool checkedFlags[MAX_CACHE_SIZE];
-std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
+  // Track checked frames to avoid redundant comparisons (max 8 types * ~30
+  // frames = 240 entries) Use array indexed by (type * MAX_FRAMES + frame) for
+  // fast lookup
+  constexpr int MAX_FRAMES_PER_TYPE = 32; // Conservative upper bound
+  constexpr int MAX_CACHE_SIZE = 8 * MAX_FRAMES_PER_TYPE;
+  thread_local int scoreCache[MAX_CACHE_SIZE];
+  thread_local bool checkedFlags[MAX_CACHE_SIZE];
+  std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
 
-// Phase 0: Temporal coherence - check cached match and next animation frame
-if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
+  // Phase 0: Temporal coherence - check cached match and next animation frame
+  if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
     // Check the exact cached position first
-    if (TryMatch(lastType, lastFrame, processedImagePlanarLab, imageWidth, imageHeight,
-                 scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
-                 threshold, bestType, bestScore, bestFrame)) {
-        return FinalizeMatch(lastType, lastFrame, bestScore, cache,
-                            outBestMatch, outBestFrame, needDebugMap,
-                            processedImage, processedImageLab);
+    if (TryMatch(lastType, lastFrame, processedImagePlanarLab, imageWidth,
+                 imageHeight, scoreCache, checkedFlags, MAX_CACHE_SIZE,
+                 MAX_FRAMES_PER_TYPE, threshold, bestType, bestScore,
+                 bestFrame)) {
+      return FinalizeMatch(lastType, lastFrame, bestScore, cache, outBestMatch,
+                           outBestFrame, needDebugMap, processedImage,
+                           processedImageLab);
     }
 
     // If we were in an animation, check the next frame
     if (lastFrame > 0) {
-        int frameCount = MaskLoader::GetFrameCount(lastType);
-        int nextFrame = (lastFrame + 1) % frameCount;
-        if (nextFrame != 0 && TryMatch(lastType, nextFrame, processedImagePlanarLab, imageWidth, imageHeight,
-                                       scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
-                                       threshold, bestType, bestScore, bestFrame)) {
-            return FinalizeMatch(lastType, nextFrame, bestScore, cache,
-                                outBestMatch, outBestFrame, needDebugMap,
-                                processedImage, processedImageLab);
-        }
+      int frameCount = MaskLoader::GetFrameCount(lastType);
+      int nextFrame = (lastFrame + 1) % frameCount;
+      if (nextFrame != 0 &&
+          TryMatch(lastType, nextFrame, processedImagePlanarLab, imageWidth,
+                   imageHeight, scoreCache, checkedFlags, MAX_CACHE_SIZE,
+                   MAX_FRAMES_PER_TYPE, threshold, bestType, bestScore,
+                   bestFrame)) {
+        return FinalizeMatch(lastType, nextFrame, bestScore, cache,
+                             outBestMatch, outBestFrame, needDebugMap,
+                             processedImage, processedImageLab);
+      }
     }
-}
+  }
 
-// Phase 1: Check frame 0 of all gem types (cache prevents redundant computation)
-struct FirstFrameResult {
+  // Phase 1: Check frame 0 of all gem types (cache prevents redundant
+  // computation)
+  struct FirstFrameResult {
     GemType type;
     int score;
-};
-FirstFrameResult firstFrameScores[8];
+  };
+  FirstFrameResult firstFrameScores[8];
 
-for (int i = 0; i < numAllGemTypes; i++) {
-    int score = CheckMatchScore(allGemTypes[i], 0, processedImagePlanarLab, imageWidth, imageHeight,
-                                   scoreCache, checkedFlags,
-                                   MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE);
+  for (int i = 0; i < numAllGemTypes; i++) {
+    int score = CheckMatchScore(
+        allGemTypes[i], 0, processedImagePlanarLab, imageWidth, imageHeight,
+        scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE);
     firstFrameScores[i] = {allGemTypes[i], score};
 
     if (score > bestScore) {
-        bestScore = score;
-        bestType = allGemTypes[i];
-        bestFrame = 0;
+      bestScore = score;
+      bestType = allGemTypes[i];
+      bestFrame = 0;
     }
 
     if (score >= threshold) {
-        return FinalizeMatch(allGemTypes[i], 0, score, cache,
-                            outBestMatch, outBestFrame, needDebugMap,
-                            processedImage, processedImageLab);
+      return FinalizeMatch(allGemTypes[i], 0, score, cache, outBestMatch,
+                           outBestFrame, needDebugMap, processedImage,
+                           processedImageLab);
     }
-}
+  }
 
-// Sort by first-frame score to prioritize likely matches in Phase 2
-for (int i = 1; i < numAllGemTypes; i++) {
+  // Sort by first-frame score to prioritize likely matches in Phase 2
+  for (int i = 1; i < numAllGemTypes; i++) {
     FirstFrameResult key = firstFrameScores[i];
     int j = i - 1;
     while (j >= 0 && firstFrameScores[j].score < key.score) {
-        firstFrameScores[j + 1] = firstFrameScores[j];
-        j--;
+      firstFrameScores[j + 1] = firstFrameScores[j];
+      j--;
     }
     firstFrameScores[j + 1] = key;
-}
+  }
 
-// Phase 2: Check remaining frames, prioritizing types with better first-frame scores
-for (int i = 0; i < numAllGemTypes; i++) {
+  // Phase 2: Check remaining frames, prioritizing types with better first-frame
+  // scores
+  for (int i = 0; i < numAllGemTypes; i++) {
     GemType type = firstFrameScores[i].type;
     int frameCount = MaskLoader::GetFrameCount(type);
 
     for (int frame = 1; frame < frameCount; frame++) {
-        if (TryMatch(type, frame, processedImagePlanarLab, imageWidth, imageHeight,
-                     scoreCache, checkedFlags, MAX_CACHE_SIZE, MAX_FRAMES_PER_TYPE,
-                     threshold, bestType, bestScore, bestFrame)) {
-            return FinalizeMatch(type, frame, bestScore, cache,
-                                outBestMatch, outBestFrame, needDebugMap,
-                                processedImage, processedImageLab);
-        }
+      if (TryMatch(type, frame, processedImagePlanarLab, imageWidth,
+                   imageHeight, scoreCache, checkedFlags, MAX_CACHE_SIZE,
+                   MAX_FRAMES_PER_TYPE, threshold, bestType, bestScore,
+                   bestFrame)) {
+        return FinalizeMatch(type, frame, bestScore, cache, outBestMatch,
+                             outBestFrame, needDebugMap, processedImage,
+                             processedImageLab);
+      }
     }
-}
+  }
 
-// Update cache with best match (reached when no match >= threshold was found)
-cache.type = bestType;
-cache.frame = bestFrame;
+  // Update cache with best match (reached when no match >= threshold was found)
+  cache.type = bestType;
+  cache.frame = bestFrame;
 
-// Convert score to percentage (0.0-1.0)
-if (outBestMatch) {
+  // Convert score to percentage (0.0-1.0)
+  if (outBestMatch) {
     *outBestMatch = ConvertScoreToPercentage(bestScore);
-}
-if (outBestFrame) *outBestFrame = bestFrame;
+  }
+  if (outBestFrame)
+    *outBestFrame = bestFrame;
 
-// Generate debug visualization for best match if needed
-if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
-    const cv::Mat&refImageLab = MaskLoader::GetLabMask(bestType, bestFrame);
-    const cv::Mat&refImageBgr = MaskLoader::GetMask(bestType, bestFrame);
-    const cv::Mat&alphaMask = MaskLoader::GetAlphaMask(bestType, bestFrame);
+  // Generate debug visualization for best match if needed
+  if (needDebugMap && bestType != GemType::UNKNOWN && bestFrame >= 0) {
+    const cv::Mat &refImageLab = MaskLoader::GetLabMask(bestType, bestFrame);
+    const cv::Mat &refImageBgr = MaskLoader::GetMask(bestType, bestFrame);
+    const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(bestType, bestFrame);
     if (!refImageLab.empty()) {
-        GenerateDebugVisualization(processedImage, processedImageLab, refImageLab, alphaMask, refImageBgr, bestType, bestFrame);
+      GenerateDebugVisualization(processedImage, processedImageLab, refImageLab,
+                                 alphaMask, refImageBgr, bestType, bestFrame);
     }
-}
+  }
 
-// Integer comparison: bestScore is 0-10000, using internal threshold that accounts for sqrt scaling
-if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL) return GemType::UNKNOWN;
+  // Integer comparison: bestScore is 0-10000, using internal threshold that
+  // accounts for sqrt scaling
+  if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL)
+    return GemType::UNKNOWN;
 
-return bestType;
+  return bestType;
 }

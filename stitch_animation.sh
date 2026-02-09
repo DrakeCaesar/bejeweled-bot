@@ -35,7 +35,7 @@ calculate_grid() {
     local count=$1
     if [ $count -eq 60 ]; then
         echo "10 6"
-    elif [ $count -eq 20 ]; then
+        elif [ $count -eq 20 ]; then
         echo "5 4"
     else
         # Smart grid: try to keep aspect ratio close to 1
@@ -66,7 +66,7 @@ for ((j = 0; j < TARGET_FRAMES; j++)); do
     FRAME_NUM=$(printf "%04d" $i)
     COLOR_FILE="$RECORDED_DIR/frame_${FRAME_NUM}.png"
     MASK_FILE="$RECORDED_DIR/mask_${FRAME_NUM}.png"
-    
+
     if [ -f "$COLOR_FILE" ] && [ -f "$MASK_FILE" ]; then
         FRAME_LIST="$FRAME_LIST $COLOR_FILE"
         MASK_LIST="$MASK_LIST $MASK_FILE"
