@@ -1,8 +1,8 @@
 #include "banner.h"
+#include "config.h"
 #include <iomanip>
 #include <opencv2/freetype.hpp>
 #include <sstream>
-#include <vector>
 
 // ============================================================================
 // FreeType Font Support

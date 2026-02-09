@@ -1,7 +1,6 @@
 #pragma once
 
 #include "capture/window_capture.h"
-#include "config.h"
 #include <condition_variable>
 #include <mutex>
 #include <opencv2/opencv.hpp>

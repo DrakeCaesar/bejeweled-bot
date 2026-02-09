@@ -1,10 +1,8 @@
 #pragma once
 
-#include "capture/window_capture.h"
 #include "types/frame_data.h"
 #include "types/timing.h"
 #include <opencv2/opencv.hpp>
-#include <string>
 #include <thread>
 #include <windows.h>
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "config.h"
 #include "detection/gem_types.h"
 #include <opencv2/opencv.hpp>
 #include <vector>
