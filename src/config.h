@@ -38,6 +38,10 @@ const bool USE_DESKTOP_DUPLICATION =
 const bool BOOST_THREAD_PRIORITY =
     true; // Reduce FPS drop when window loses focus
 
+// Asset extraction
+const bool WRITE_EXTRACTED_ASSETS_TO_DISK =
+    false; // Keep in memory always; optionally write to disk
+
 // Gem classification settings
 // Note: SEARCH threshold controls early exit during matching phases (can be
 // adjusted via UI) Note: FINAL threshold is hard-coded minimum before returning

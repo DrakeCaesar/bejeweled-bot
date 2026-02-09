@@ -1,7 +1,9 @@
 #include "game_asset_extractor.h"
 #include <Psapi.h>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 #include <vector>
 
 namespace AssetExtractor {
@@ -150,6 +152,33 @@ bool ExtractFileFromArchive(const std::vector<uint8_t> &decryptedData,
   return true;
 }
 
+bool ExtractFileToMemory(const std::vector<uint8_t> &decryptedData,
+                         const FileEntry &entry,
+                         std::vector<uint8_t> &outData) {
+  if (entry.offset + entry.size > decryptedData.size()) {
+    return false;
+  }
+
+  outData.resize(entry.size);
+  std::memcpy(outData.data(), decryptedData.data() + entry.offset, entry.size);
+  return true;
+}
+
+bool WriteBufferToFile(const std::vector<uint8_t> &data,
+                       const std::string &outputPath) {
+  std::filesystem::path outPath(outputPath);
+  std::filesystem::create_directories(outPath.parent_path());
+
+  std::ofstream outFile(outputPath, std::ios::binary);
+  if (!outFile.is_open()) {
+    return false;
+  }
+
+  outFile.write(reinterpret_cast<const char *>(data.data()), data.size());
+  outFile.close();
+  return true;
+}
+
 } // anonymous namespace
 
 std::string GetGameExecutableDirectory(HWND gameWindow) {
@@ -227,6 +256,63 @@ int ExtractFiles(
   }
 
   return extractedCount;
+}
+
+int ExtractFilesToMemory(
+    const std::string &gameDirectory, const std::vector<ExtractRequest> &files,
+    std::unordered_map<std::string, std::vector<uint8_t>> &outData) {
+  std::string archivePath = gameDirectory + "\\main.pak.bac";
+
+  if (!std::filesystem::exists(archivePath)) {
+    return 0;
+  }
+
+  std::vector<FileEntry> entries;
+  std::vector<uint8_t> decryptedData;
+  if (!Parse7x7MArchive(archivePath, entries, decryptedData)) {
+    return 0;
+  }
+
+  std::unordered_map<std::string, const FileEntry *> entryMap;
+  entryMap.reserve(entries.size());
+  for (const auto &entry : entries) {
+    entryMap[entry.name] = &entry;
+  }
+
+  int extractedCount = 0;
+  for (const auto &file : files) {
+    auto it = entryMap.find(file.archivePath);
+    if (it == entryMap.end()) {
+      continue;
+    }
+
+    std::vector<uint8_t> buffer;
+    if (ExtractFileToMemory(decryptedData, *it->second, buffer)) {
+      outData[file.key] = std::move(buffer);
+      extractedCount++;
+    }
+  }
+
+  return extractedCount;
+}
+
+int WriteExtractedFiles(
+    const std::vector<ExtractRequest> &files,
+    const std::unordered_map<std::string, std::vector<uint8_t>> &data) {
+  int writtenCount = 0;
+
+  for (const auto &file : files) {
+    auto it = data.find(file.key);
+    if (it == data.end()) {
+      continue;
+    }
+
+    if (WriteBufferToFile(it->second, file.outputPath)) {
+      writtenCount++;
+    }
+  }
+
+  return writtenCount;
 }
 
 } // namespace AssetExtractor

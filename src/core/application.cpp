@@ -9,6 +9,7 @@
 #include "rendering/control_panel.h"
 #include "rendering/overlay.h"
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -163,6 +164,7 @@ bool Application::Initialize() {
   if (!gameDirectory.empty()) {
     std::string resFolder = "images\\" + std::to_string(height) + "\\";
     std::string outputResFolder = "assets\\" + std::to_string(height) + "\\";
+    std::string memoryPrefix = std::to_string(height) + "/";
 
     // List of all assets to extract
     std::vector<std::string> assetFiles = {"gemoutlines_.gif",
@@ -196,19 +198,38 @@ bool Application::Initialize() {
                                            "sm_shards_outline_.gif",
                                            "sm_shards_.gif"};
 
-    // Extract all assets in a single pass
-    std::vector<std::pair<std::string, std::string>> filesToExtract;
+    // Extract all assets in a single pass into memory
+    std::vector<AssetExtractor::ExtractRequest> filesToExtract;
+    filesToExtract.reserve(assetFiles.size());
     for (const auto &file : assetFiles) {
       std::string archivePath = resFolder + file;
       std::string outputPath = outputResFolder + file;
-      filesToExtract.emplace_back(archivePath, outputPath);
+      std::string key = memoryPrefix + file;
+      for (char &ch : key) {
+        if (ch == '\\') {
+          ch = '/';
+        }
+      }
+      filesToExtract.push_back({archivePath, outputPath, key});
     }
 
-    int extractedCount =
-        AssetExtractor::ExtractFiles(gameDirectory, filesToExtract);
-    std::cout << "Successfully extracted " << extractedCount << " of "
-              << assetFiles.size() << " asset files to " << outputResFolder
-              << std::endl;
+    std::unordered_map<std::string, std::vector<uint8_t>> extractedAssets;
+    int extractedCount = AssetExtractor::ExtractFilesToMemory(
+        gameDirectory, filesToExtract, extractedAssets);
+
+    if (Config::WRITE_EXTRACTED_ASSETS_TO_DISK && extractedCount > 0) {
+      int writtenCount =
+          AssetExtractor::WriteExtractedFiles(filesToExtract, extractedAssets);
+      std::cout << "Wrote " << writtenCount << " of " << assetFiles.size()
+                << " asset files to " << outputResFolder << std::endl;
+    }
+
+    if (extractedCount > 0) {
+      MaskLoader::SetInMemoryAssets(height, std::move(extractedAssets));
+    }
+
+    std::cout << "Extracted " << extractedCount << " of " << assetFiles.size()
+              << " asset files into memory" << std::endl;
   }
 
   if (!InitializeCapture()) {

@@ -4,6 +4,7 @@
 #include "hypercube_processing.h"
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <unordered_map>
 
 namespace MaskLoader {
 // Static storage for masks
@@ -20,6 +21,9 @@ static HypercubePlanarLabMaskStorage s_hypercubePlanarLabMasks; // Planar format
 static FrameProcessing::HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
 static bool s_loaded = false;
 static cv::Mat s_emptyMask;
+
+static int s_inMemoryResolution = 0;
+static std::unordered_map<std::string, std::vector<uint8_t>> s_inMemoryAssets;
 
 // Static color reference images
 static FrameProcessing::MaskStorage s_staticColorMasks;
@@ -93,6 +97,45 @@ static int GemTypeToIndex(GemType type) {
   }
 }
 
+static std::string NormalizeAssetKey(const std::string &path) {
+  std::string key = path;
+  for (char &ch : key) {
+    if (ch == '\\') {
+      ch = '/';
+    }
+  }
+  return key;
+}
+
+static cv::Mat TryLoadFromMemory(const std::string &relativePath, int flags) {
+  if (s_inMemoryResolution <= 0 || s_inMemoryAssets.empty()) {
+    return cv::Mat();
+  }
+
+  std::string key = std::to_string(s_inMemoryResolution) + "/" +
+                    NormalizeAssetKey(relativePath);
+  auto it = s_inMemoryAssets.find(key);
+  if (it == s_inMemoryAssets.end()) {
+    return cv::Mat();
+  }
+
+  const auto &data = it->second;
+  cv::Mat buffer(1, static_cast<int>(data.size()), CV_8UC1,
+                 const_cast<uint8_t *>(data.data()));
+  return cv::imdecode(buffer, flags);
+}
+
+static cv::Mat LoadAssetImage(const std::string &basePath,
+                              const std::string &relativePath, int flags) {
+  cv::Mat decoded = TryLoadFromMemory(relativePath, flags);
+  if (!decoded.empty()) {
+    return decoded;
+  }
+
+  std::string diskPath = basePath + "/" + relativePath;
+  return cv::imread(diskPath, flags);
+}
+
 // Helper: Convert interleaved LAB image to planar format (LLL...AAA...BBB...)
 static cv::Mat ConvertToPlanarLab(const cv::Mat &interleavedLab) {
   if (interleavedLab.empty() || interleavedLab.type() != CV_8UC3) {
@@ -118,28 +161,15 @@ static cv::Mat ConvertToPlanarLab(const cv::Mat &interleavedLab) {
   return planarLab;
 }
 
-
 bool LoadGem(const std::string &assetsPath) {
-  bool success = true;
-
   static const GemType gemOrder[] = {
       GemType::RED,    GemType::WHITE,  GemType::GREEN, GemType::YELLOW,
       GemType::PURPLE, GemType::ORANGE, GemType::BLUE};
 
-  std::string staticPath = assetsPath + "/gems_shadowed.jp2";
-  cv::Mat spriteSheet = cv::imread(staticPath, cv::IMREAD_COLOR);
-  if (spriteSheet.empty()) {
-    std::cerr << "Failed to load static color image: " << staticPath
-              << std::endl;
-    return false;
-  }
-
-  std::string maskPath = assetsPath + "/gems_shadowed_.gif";
-  cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
-  if (maskSheet.empty()) {
-    std::cerr << "Failed to load static mask image: " << maskPath << std::endl;
-    return false;
-  }
+  cv::Mat spriteSheet =
+      LoadAssetImage(assetsPath, "gems_shadowed.jp2", cv::IMREAD_COLOR);
+  cv::Mat maskSheet =
+      LoadAssetImage(assetsPath, "gems_shadowed_.gif", cv::IMREAD_UNCHANGED);
 
   if (maskSheet.channels() == 4) {
     cv::Mat channels[4];
@@ -155,10 +185,6 @@ bool LoadGem(const std::string &assetsPath) {
   for (int i = 0; i < NUM_GEM_TYPES; i++) {
     GemType type = gemOrder[i];
     int gemIndex = GemTypeToIndex(type);
-    if (gemIndex < 0) {
-      success = false;
-      continue;
-    }
 
     cv::Rect roi(i * frameWidth, 0, frameWidth, frameHeight);
     cv::Mat colorRoi = spriteSheet(roi);
@@ -177,8 +203,8 @@ bool LoadGem(const std::string &assetsPath) {
         ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
   }
 
-  s_staticColorsLoaded = success;
-  return success;
+  s_staticColorsLoaded = true;
+  return true;
 }
 
 bool LoadGemAnimation(const std::string &assetsPath, GemType type) {
@@ -187,28 +213,19 @@ bool LoadGemAnimation(const std::string &assetsPath, GemType type) {
 
   const char *colorFilename = GemTypeToImageFilename(type);
   const char *maskFilename = GemTypeToMaskFilename(type);
-  if (!colorFilename || !maskFilename)
-    return false;
 
   int gemIndex = GemTypeToIndex(type);
-  if (gemIndex < 0)
-    return false;
 
   // Load the color sprite sheet
-  std::string colorPath = assetsPath + "/Gems/" + colorFilename;
-  cv::Mat spriteSheet = cv::imread(colorPath, cv::IMREAD_COLOR);
-  if (spriteSheet.empty()) {
-    std::cerr << "Failed to load reference image: " << colorPath << std::endl;
-    return false;
-  }
+  std::string colorRelative = std::string("Gems/") + colorFilename;
+  cv::Mat spriteSheet =
+      LoadAssetImage(assetsPath, colorRelative, cv::IMREAD_COLOR);
 
   // Load the alpha mask sprite sheet
-  std::string maskPath = assetsPath + "/Gems/" + maskFilename;
-  cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
-  if (maskSheet.empty()) {
-    std::cerr << "Failed to load alpha mask: " << maskPath << std::endl;
-    maskSheet = cv::Mat::ones(spriteSheet.size(), CV_8UC1) * 255;
-  } else {
+  std::string maskRelative = std::string("Gems/") + maskFilename;
+  cv::Mat maskSheet =
+      LoadAssetImage(assetsPath, maskRelative, cv::IMREAD_UNCHANGED);
+  if (!maskSheet.empty()) {
     // Convert to grayscale if needed
     if (maskSheet.channels() == 4) {
       cv::Mat channels[4];
@@ -257,24 +274,12 @@ bool LoadGemAnimation(const std::string &assetsPath, GemType type) {
 }
 
 bool LoadHypercube(const std::string &assetsPath) {
-  const std::string hypercubePath = assetsPath + "/hypercube/";
+  cv::Mat colorSheet =
+      LoadAssetImage(assetsPath, "hypercube/frame.jp2", cv::IMREAD_COLOR);
 
-  // Load color sprite sheet
-  std::string colorPath = hypercubePath + "frame.jp2";
-  cv::Mat colorSheet = cv::imread(colorPath, cv::IMREAD_COLOR);
-  if (colorSheet.empty()) {
-    std::cerr << "Failed to load hypercube color image: " << colorPath
-              << std::endl;
-    return false;
-  }
-
-  // Load alpha mask
-  std::string maskPath = hypercubePath + "frame_.gif";
-  cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
-  if (maskSheet.empty()) {
-    std::cerr << "Failed to load hypercube mask: " << maskPath << std::endl;
-    maskSheet = cv::Mat::ones(colorSheet.rows, colorSheet.cols, CV_8UC1) * 255;
-  } else {
+  cv::Mat maskSheet =
+      LoadAssetImage(assetsPath, "hypercube/frame_.gif", cv::IMREAD_UNCHANGED);
+  if (!maskSheet.empty()) {
     if (maskSheet.channels() == 4) {
       cv::Mat channels[4];
       cv::split(maskSheet, channels);
@@ -284,13 +289,8 @@ bool LoadHypercube(const std::string &assetsPath) {
     }
   }
 
-  // Load glow overlay
-  std::string glowPath = hypercubePath + "colorglow.jp2";
-  cv::Mat glowSheet = cv::imread(glowPath, cv::IMREAD_COLOR);
-  if (glowSheet.empty()) {
-    std::cerr << "Warning: Failed to load hypercube glow image: " << glowPath
-              << std::endl;
-  }
+  cv::Mat glowSheet =
+      LoadAssetImage(assetsPath, "hypercube/colorglow.jp2", cv::IMREAD_COLOR);
 
   // Extract each frame from the grid
   int frameIndex = 0;
@@ -327,41 +327,41 @@ bool LoadHypercube(const std::string &assetsPath) {
 }
 
 bool LoadAllImages(const std::string &assetsPath, int resolution) {
-  bool success = true;
-
   // Build resolution-specific path
-  std::string resAssetsPath = assetsPath + "\\" + std::to_string(resolution);
+  std::string resAssetsPath = assetsPath + "/" + std::to_string(resolution);
 
   static const GemType gemTypes[] = {
       GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
       GemType::BLUE, GemType::PURPLE, GemType::WHITE};
 
-  if (!LoadGem(resAssetsPath)) {
-    success = false;
-  }
-
+  LoadGem(resAssetsPath);
   for (GemType type : gemTypes) {
-    if (!LoadGemAnimation(resAssetsPath, type)) {
-      success = false;
-    }
+    LoadGemAnimation(resAssetsPath, type);
   }
+  LoadHypercube(resAssetsPath);
 
-  if (!LoadHypercube(resAssetsPath)) {
-    success = false;
-  }
+  s_loaded = true;
 
-  s_loaded = success;
+  int totalRefImages = NUM_GEM_TYPES * FRAMES_PER_GEM + HYPERCUBE_FRAMES;
+  std::cout << "Loaded " << totalRefImages << " gem reference images from "
+            << resAssetsPath << std::endl;
 
-  if (success) {
-    int totalRefImages = NUM_GEM_TYPES * FRAMES_PER_GEM + HYPERCUBE_FRAMES;
-    std::cout << "Loaded " << totalRefImages << " gem reference images from "
-              << resAssetsPath << std::endl;
+  std::cout << "Precomputed " << totalRefImages
+            << " bitmasks for SIMD optimization" << std::endl;
 
-    std::cout << "Precomputed " << totalRefImages
-              << " bitmasks for SIMD optimization" << std::endl;
-  }
+  return true;
+}
 
-  return success;
+void SetInMemoryAssets(
+    int resolution,
+    std::unordered_map<std::string, std::vector<uint8_t>> assets) {
+  s_inMemoryResolution = resolution;
+  s_inMemoryAssets = std::move(assets);
+}
+
+void ClearInMemoryAssets() {
+  s_inMemoryResolution = 0;
+  s_inMemoryAssets.clear();
 }
 
 const MaskStorage &GetMasks() { return s_masks; }

@@ -5,6 +5,8 @@
 #include <array>
 #include <opencv2/opencv.hpp>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 // ============================================================================
 // Reference Image Loading - Load color reference images for gem matching
@@ -16,8 +18,8 @@ constexpr int MASK_COLS = 5;
 constexpr int MASK_ROWS = 4;
 
 // Hypercube has different dimensions (game assets)
-constexpr int HYPERCUBE_COLS = 10;   // Grid columns in source sprite sheet
-constexpr int HYPERCUBE_ROWS = 6;    // Grid rows in source sprite sheet
+constexpr int HYPERCUBE_COLS = 10; // Grid columns in source sprite sheet
+constexpr int HYPERCUBE_ROWS = 6;  // Grid rows in source sprite sheet
 
 // Output frame dimensions (resolution dependent - equals cell size)
 // For 1200p: 128x128, for 768p: 82x82, for 600p: 64x64
@@ -58,7 +60,6 @@ using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubePlanarLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
-
 /**
  * Load all gem reference images from the assets folder.
  * Images are stored as BGR color images.
@@ -68,6 +69,14 @@ using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
  * @return True if all reference images loaded successfully
  */
 bool LoadAllImages(const std::string &assetsPath, int resolution);
+
+// Provide extracted assets in memory (keyed by "<resolution>/<path>")
+void SetInMemoryAssets(
+    int resolution,
+    std::unordered_map<std::string, std::vector<uint8_t>> assets);
+
+// Clear any in-memory assets and fall back to disk loading
+void ClearInMemoryAssets();
 
 /**
  * Get the loaded masks storage.
