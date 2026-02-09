@@ -1,4 +1,5 @@
 #include "loader.h"
+#include "bitmasks.h"
 #include "frame_processing.h"
 #include "hypercube_processing.h"
 #include <iostream>
@@ -19,10 +20,6 @@ static HypercubePlanarLabMaskStorage s_hypercubePlanarLabMasks; // Planar format
 static FrameProcessing::HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
 static bool s_loaded = false;
 static cv::Mat s_emptyMask;
-
-// Bitmask storage for SIMD optimization
-static BitmaskStorage s_bitmasks;
-static HypercubeBitmaskStorage s_hypercubeBitmasks;
 
 // Static color reference images
 static FrameProcessing::MaskStorage s_staticColorMasks;
@@ -121,53 +118,6 @@ static cv::Mat ConvertToPlanarLab(const cv::Mat &interleavedLab) {
   return planarLab;
 }
 
-// Helper: Compute bitmask for SIMD optimization from LAB mask
-// Works for both standard gems and hypercubes since they have same dimensions
-static BitmaskFrame ComputeBitmaskFromLabMask(const cv::Mat &labMask) {
-  BitmaskFrame bitmask;
-  const int totalPixels = labMask.cols * labMask.rows;
-  const int masksPerFrame = totalPixels / PIXELS_PER_MASK;
-  bitmask.reserve(masksPerFrame);
-
-  // Extract LAB background color constants
-  const uchar bgL = LAB_BG_L;
-  const uchar bgA = LAB_BG_A;
-  const uchar bgB = LAB_BG_B;
-
-  // Process in 8x8 blocks (64 pixels per mask entry)
-  for (int y = 0; y < labMask.rows; y += 8) {
-    for (int x = 0; x < labMask.cols; x += 8) {
-      uint64_t mask = 0;
-
-      // Process 8x8 block
-      for (int dy = 0; dy < 8; dy++) {
-        int rowIdx = y + dy;
-        if (rowIdx >= labMask.rows)
-          break;
-
-        const cv::Vec3b *row = labMask.ptr<cv::Vec3b>(rowIdx);
-
-        for (int dx = 0; dx < 8; dx++) {
-          int colIdx = x + dx;
-          if (colIdx >= labMask.cols)
-            break;
-
-          // Check if pixel is NOT background
-          if (row[colIdx][0] != bgL || row[colIdx][1] != bgA ||
-              row[colIdx][2] != bgB) {
-            // Set corresponding bit in mask
-            int bitPos = dy * 8 + dx;
-            mask |= (1ULL << bitPos);
-          }
-        }
-      }
-
-      bitmask.push_back(mask);
-    }
-  }
-
-  return bitmask;
-}
 
 bool LoadGem(const std::string &assetsPath) {
   bool success = true;
@@ -223,7 +173,7 @@ bool LoadGem(const std::string &assetsPath) {
     s_planarLabMasks[gemIndex][0] = ConvertToPlanarLab(s_labMasks[gemIndex][0]);
 
     // Compute bitmask for SIMD optimization
-    s_bitmasks[gemIndex][0] =
+    GetBitmaskStorage()[gemIndex][0] =
         ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
   }
 
@@ -294,7 +244,7 @@ bool LoadGemAnimation(const std::string &assetsPath, GemType type) {
           ConvertToPlanarLab(s_labMasks[gemIndex][frameIndex]);
 
       // Compute bitmask for SIMD optimization
-      s_bitmasks[gemIndex][frameIndex] =
+      GetBitmaskStorage()[gemIndex][frameIndex] =
           ComputeBitmaskFromLabMask(s_labMasks[gemIndex][frameIndex]);
 
       frameIndex++;
@@ -363,7 +313,7 @@ bool LoadHypercube(const std::string &assetsPath) {
           ConvertToPlanarLab(s_hypercubeLabMasks[frameIndex]);
 
       // Compute bitmask for SIMD optimization
-      s_hypercubeBitmasks[frameIndex] =
+      GetHypercubeBitmaskStorage()[frameIndex] =
           ComputeBitmaskFromLabMask(s_hypercubeLabMasks[frameIndex]);
 
       frameIndex++;
@@ -494,21 +444,4 @@ int GetFrameCount(GemType type) {
   return FRAMES_PER_GEM;
 }
 
-const BitmaskFrame &GetBitmask(GemType type, int frameIndex) {
-  static BitmaskFrame emptyBitmask(256, 0ULL); // 256 masks for 128x128 frame
-
-  if (type == GemType::HYPERCUBE) {
-    if (frameIndex >= 0 && frameIndex < HYPERCUBE_FRAMES) {
-      return s_hypercubeBitmasks[frameIndex];
-    }
-  } else {
-    int gemIndex = GemTypeToIndex(type);
-    if (gemIndex >= 0 && gemIndex < NUM_GEM_TYPES && frameIndex >= 0 &&
-        frameIndex < FRAMES_PER_GEM) {
-      return s_bitmasks[gemIndex][frameIndex];
-    }
-  }
-
-  return emptyBitmask;
-}
 } // namespace MaskLoader

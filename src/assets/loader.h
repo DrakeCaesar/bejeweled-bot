@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bitmasks.h"
 #include "detection/gem_types.h"
 #include <array>
 #include <opencv2/opencv.hpp>
@@ -10,14 +11,13 @@
 // ============================================================================
 
 namespace MaskLoader {
+
 constexpr int MASK_COLS = 5;
 constexpr int MASK_ROWS = 4;
-constexpr int FRAMES_PER_GEM = 21; // 1 static + 20 animated
 
 // Hypercube has different dimensions (game assets)
 constexpr int HYPERCUBE_COLS = 10;   // Grid columns in source sprite sheet
 constexpr int HYPERCUBE_ROWS = 6;    // Grid rows in source sprite sheet
-constexpr int HYPERCUBE_FRAMES = 60; // Total frames (10x6)
 
 // Output frame dimensions (resolution dependent - equals cell size)
 // For 1200p: 128x128, for 768p: 82x82, for 600p: 64x64
@@ -25,10 +25,6 @@ inline int FRAME_WIDTH = 128;
 inline int FRAME_HEIGHT = 128;
 inline int HYPERCUBE_FRAME_WIDTH = 128;
 inline int HYPERCUBE_FRAME_HEIGHT = 128;
-
-// Number of gem types (excluding EMPTY, HYPERCUBE and UNKNOWN)
-constexpr int NUM_GEM_TYPES =
-    7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
 
 // Storage for all reference images: [gem_type][frame_index] -> color image
 // Indexed by (GemType - 1) since EMPTY=0 is not used
@@ -62,22 +58,6 @@ using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubePlanarLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
-// Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel,
-// 0=background)
-
-// Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel,
-// 0=background)
-constexpr int PIXELS_PER_MASK = 64;
-// Note: MASKS_PER_FRAME calculated at runtime based on actual frame dimensions
-using BitmaskFrame = std::vector<uint64_t>;
-using BitmaskStorage =
-    std::array<std::array<BitmaskFrame, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
-using HypercubeBitmaskStorage = std::array<BitmaskFrame, HYPERCUBE_FRAMES>;
-
-// Background color in LAB color space
-constexpr uchar LAB_BG_L = 0;
-constexpr uchar LAB_BG_A = 128;
-constexpr uchar LAB_BG_B = 128;
 
 /**
  * Load all gem reference images from the assets folder.
@@ -164,14 +144,4 @@ const cv::Mat &GetPlanarLabMask(GemType type, int frameIndex);
  * Get the number of frames for a given gem type.
  */
 int GetFrameCount(GemType type);
-
-/**
- * Get bitmask for SIMD gem matching optimization.
- * Each uint64_t represents 64 pixels (1=gem pixel, 0=background in LAB space).
- *
- * @param type The gem type
- * @param frameIndex Frame index
- * @return Reference to the bitmask vector
- */
-const BitmaskFrame &GetBitmask(GemType type, int frameIndex);
 } // namespace MaskLoader
