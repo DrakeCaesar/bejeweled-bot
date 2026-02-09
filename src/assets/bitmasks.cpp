@@ -10,7 +10,9 @@ static BitmaskFrame s_emptyBitmask(256, 0ULL); // 256 masks for 128x128 frame
 
 // Storage accessors
 BitmaskStorage &GetBitmaskStorage() { return s_bitmasks; }
-HypercubeBitmaskStorage &GetHypercubeBitmaskStorage() { return s_hypercubeBitmasks; }
+HypercubeBitmaskStorage &GetHypercubeBitmaskStorage() {
+  return s_hypercubeBitmasks;
+}
 
 // Get bitmask for SIMD gem matching optimization
 const BitmaskFrame &GetBitmask(GemType type, int frameIndex) {

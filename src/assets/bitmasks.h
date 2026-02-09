@@ -9,9 +9,10 @@
 namespace MaskLoader {
 
 // Constants - define here to avoid circular dependency with loader.h
-constexpr int FRAMES_PER_GEM = 21; // 1 static + 20 animated
+constexpr int FRAMES_PER_GEM = 21;   // 1 static + 20 animated
 constexpr int HYPERCUBE_FRAMES = 60; // Total frames (10x6)
-constexpr int NUM_GEM_TYPES = 7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
+constexpr int NUM_GEM_TYPES =
+    7; // RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE
 
 // Bitmask storage for SIMD optimization (64-bit masks, 1=gem pixel,
 // 0=background)
@@ -19,7 +20,8 @@ constexpr int PIXELS_PER_MASK = 64;
 
 // Type definitions
 using BitmaskFrame = std::vector<uint64_t>;
-using BitmaskStorage = std::array<std::array<BitmaskFrame, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+using BitmaskStorage =
+    std::array<std::array<BitmaskFrame, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 using HypercubeBitmaskStorage = std::array<BitmaskFrame, HYPERCUBE_FRAMES>;
 
 // Background color in LAB color space
