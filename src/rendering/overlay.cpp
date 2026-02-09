@@ -130,8 +130,8 @@ void DrawDebugOverlay(cv::Mat &image,
 // Overlay Drawing
 // ============================================================================
 
-void DrawShapeOverlay(cv::Mat &image,
-                      const std::vector<std::vector<Gem>> &grid) {
+void DrawShapeOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid,
+                      const BoardAnalysis *analysis) {
   // Draw grid lines with offset for banner
   for (int i = 0; i <= Config::GRID_SIZE; i++) {
     int pos = i * Config::CELL_SIZE;
@@ -385,7 +385,11 @@ void DrawShapeOverlay(cv::Mat &image,
 
   // Draw selected cell highlight on top
   if (Config::SHOW_BOT_MATCH_LINES && ShapeParams::debugStage.load() >= 1) {
-    DrawMatchableSwaps(image, grid);
+    if (analysis) {
+      DrawMatchableSwaps(image, *analysis);
+    } else {
+      DrawMatchableSwaps(image, grid);
+    }
   }
 
   if (debugSelected && g_selectedCol >= 0 && g_selectedRow >= 0) {

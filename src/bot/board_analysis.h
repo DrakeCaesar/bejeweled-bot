@@ -1,0 +1,93 @@
+#pragma once
+
+#include "detection/gem_types.h"
+#include <array>
+#include <opencv2/core/types.hpp>
+#include <vector>
+
+// ============================================================================
+// Board Representation for Analysis and Simulation
+// ============================================================================
+
+/// A swap between two adjacent cells, stored as (col, row) points
+struct MatchableSwap {
+  cv::Point a; // (col, row)
+  cv::Point b; // (col, row)
+};
+
+/// Lightweight cell for board simulation (no OpenCV matrices)
+struct BoardCell {
+  GemType type = GemType::EMPTY;
+  GemState state = GemState::NORMAL;
+};
+
+/// Copyable 8x8 board state for simulation and DFS exploration.
+/// Contains only the data needed for move evaluation — no image data.
+struct BoardState {
+  static constexpr int SIZE = 8;
+
+  std::array<std::array<BoardCell, SIZE>, SIZE> cells{};
+
+  /// Initialize from the full detection grid
+  void initFromGrid(const std::vector<std::vector<Gem>> &grid);
+
+  /// Get cell type, with optional swap applied virtually
+  GemType getType(int row, int col, const MatchableSwap *swap = nullptr) const;
+
+  /// Check if a specific position would form a match (3+) after a swap
+  bool wouldFormMatchAt(int row, int col, const MatchableSwap &swap) const;
+
+  /// Check if a swap creates any match
+  bool swapCreatesMatch(const MatchableSwap &swap) const;
+
+  /// Find all valid swaps that create at least one match
+  std::vector<MatchableSwap> findValidSwaps() const;
+
+  /// Apply a swap in-place (mutates the board)
+  void applySwap(const MatchableSwap &swap);
+
+  /// Find and clear all 3+ matches. Returns number of gems cleared.
+  /// Sets cleared cells to EMPTY.
+  int clearMatches();
+
+  /// Apply gravity: drop gems down to fill empty spaces.
+  /// Returns true if any gems moved.
+  bool applyGravity();
+
+  /// Full resolution: clear matches + gravity, repeat until stable.
+  /// Returns total gems cleared across all cascades.
+  /// Note: After resolution, empty cells at top represent unknown incoming
+  /// gems.
+  int resolveBoard();
+
+  /// Check if all cells have a known gem type (board is fully identified)
+  bool isFullyIdentified() const;
+};
+
+// ============================================================================
+// Move Evaluation
+// ============================================================================
+
+/// A swap with its evaluated score
+struct ScoredSwap {
+  MatchableSwap swap;
+  int immediateClears = 0;     // Gems cleared by the initial match
+  int cascadeClears = 0;       // Total gems cleared after all cascades
+  int matchLength = 0;         // Length of the longest match created
+  int totalScore = 0;          // Combined weighted score
+  bool createsSpecial = false; // Whether it creates a 4+ match (flame/star)
+};
+
+// ============================================================================
+// Board Analysis - Computed once per frame in the process thread
+// ============================================================================
+
+struct BoardAnalysis {
+  BoardState board;                    // Snapshot of current board state
+  std::vector<ScoredSwap> scoredSwaps; // All valid swaps with scores
+  int bestSwapIndex = -1;              // Index of highest-scored swap
+  bool boardValid = false;             // Board is fully identified
+
+  /// Run full analysis: snapshot board, find swaps, score them
+  void analyze(const std::vector<std::vector<Gem>> &grid);
+};

@@ -4,6 +4,8 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+struct BoardAnalysis;
+
 // ============================================================================
 // Debug Overlay - Grid and gem information display
 // ============================================================================
@@ -38,5 +40,5 @@ void ClearSelectedCell();
  * @param image The image to draw on (will be modified)
  * @param grid The detected gem grid with shapeMask populated
  */
-void DrawShapeOverlay(cv::Mat &image,
-                      const std::vector<std::vector<Gem>> &grid);
+void DrawShapeOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid,
+                      const BoardAnalysis *analysis = nullptr);

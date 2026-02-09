@@ -118,6 +118,18 @@ FindMatchableSwaps(const std::vector<std::vector<Gem>> &grid) {
   return swaps;
 }
 
+void DrawMatchableSwaps(cv::Mat &image, const BoardAnalysis &analysis) {
+  if (image.empty())
+    return;
+
+  for (const auto &scored : analysis.scoredSwaps) {
+    cv::Point a = CellCenter(scored.swap.a.y, scored.swap.a.x);
+    cv::Point b = CellCenter(scored.swap.b.y, scored.swap.b.x);
+    cv::line(image, a, b, Config::BOT_MATCH_LINE_COLOR,
+             Config::BOT_MATCH_LINE_THICKNESS, cv::LINE_AA);
+  }
+}
+
 void DrawMatchableSwaps(cv::Mat &image,
                         const std::vector<std::vector<Gem>> &grid) {
   if (image.empty())

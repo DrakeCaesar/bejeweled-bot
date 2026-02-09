@@ -1,16 +1,15 @@
 #pragma once
 
-#include "detection/gem_types.h"
+#include "board_analysis.h"
 #include <opencv2/opencv.hpp>
 #include <vector>
-
-struct MatchableSwap {
-  cv::Point a; // (col, row)
-  cv::Point b; // (col, row)
-};
 
 std::vector<MatchableSwap>
 FindMatchableSwaps(const std::vector<std::vector<Gem>> &grid);
 
+/// Draw match lines from pre-computed board analysis (preferred)
+void DrawMatchableSwaps(cv::Mat &image, const BoardAnalysis &analysis);
+
+/// Draw match lines by computing swaps on the fly (legacy)
 void DrawMatchableSwaps(cv::Mat &image,
                         const std::vector<std::vector<Gem>> &grid);

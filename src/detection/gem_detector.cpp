@@ -364,13 +364,17 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
   // Get pointer to static grid for lambda capture
   auto *gridPtr = &grid;
 
-  // Atomic counter for dynamic tile distribution
+  // Atomic counters for dynamic tile distribution and ring stat accumulation
   std::atomic<int> nextTile(0);
+  std::atomic<int> atomicRingVSum(0);
+  std::atomic<int> atomicNormalCount(0);
 
   struct GemDetectWork {
     const cv::Mat &gameBoard;
     std::vector<std::vector<Gem>> *gridPtr;
     std::atomic<int> &nextTile;
+    std::atomic<int> &ringVSum;
+    std::atomic<int> &normalCount;
     bool needDebugMap;
 
     void operator()(int threadIndex, int numThreads) {
@@ -454,30 +458,28 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
             }
           }
         }
+
+        // Accumulate ring stats atomically for avgRingV computation
+        if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
+            gem.type != GemType::HYPERCUBE && gem.ringValue >= 0) {
+          ringVSum.fetch_add(gem.ringValue, std::memory_order_relaxed);
+          normalCount.fetch_add(1, std::memory_order_relaxed);
+        }
       }
     }
   };
 
   // Use a persistent thread pool with dynamic work distribution
-  GemDetectWork work{gameBoard, gridPtr, nextTile, needDebugMap};
+  GemDetectWork work{gameBoard,      gridPtr,           nextTile,
+                     atomicRingVSum, atomicNormalCount, needDebugMap};
   StaticThreadPool::Instance().ParallelFor(work);
 
-  // Post-process: Calculate average ring V and detect flame/star gems
-  int normalGemCount = 0;
-  int totalRingV = 0;
-
-  for (int row = 0; row < Config::GRID_SIZE; row++) {
-    for (int col = 0; col < Config::GRID_SIZE; col++) {
-      Gem &gem = grid[row][col];
-      if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
-          gem.type != GemType::HYPERCUBE && gem.ringValue >= 0) {
-        totalRingV += gem.ringValue;
-        normalGemCount++;
-      }
-    }
-  }
-
-  int avgRingV = (normalGemCount > 0) ? (totalRingV / normalGemCount) : 0;
+  // Compute avgRingV from atomically-accumulated stats (no sequential scan)
+  int normalGemCount = atomicNormalCount.load(std::memory_order_relaxed);
+  int avgRingV =
+      (normalGemCount > 0)
+          ? (atomicRingVSum.load(std::memory_order_relaxed) / normalGemCount)
+          : 0;
 
   // Detect flame and star gems
   for (int row = 0; row < Config::GRID_SIZE; row++) {

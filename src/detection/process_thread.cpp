@@ -1,4 +1,5 @@
 #include "process_thread.h"
+#include "bot/board_analysis.h"
 #include "config.h"
 #include "gem_detector.h"
 #include "rendering/banner.h"
@@ -57,6 +58,10 @@ void ProcessThreadFunc(
             std::chrono::duration<double, std::milli>(detectEnd - detectStart)
                 .count();
 
+        // Board analysis: find and score matchable swaps
+        static BoardAnalysis boardAnalysis;
+        boardAnalysis.analyze(gemGrid);
+
         // Draw overlays directly onto the buffer (in-place, zero-copy!)
         auto drawStart = std::chrono::high_resolution_clock::now();
 
@@ -74,7 +79,7 @@ void ProcessThreadFunc(
                    timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
 
         if (Config::SHOW_DEBUG_OVERLAY) {
-          DrawShapeOverlay(buffer, gemGrid);
+          DrawShapeOverlay(buffer, gemGrid, &boardAnalysis);
         }
 
         // Draw custom control panel on top
