@@ -87,11 +87,11 @@ constexpr uchar LAB_BG_B = 128;
  * @param resolution Game resolution (600, 768, or 1200)
  * @return True if all reference images loaded successfully
  */
-bool LoadAllMasks(const std::string &assetsPath, int resolution);
+bool LoadAllImages(const std::string &assetsPath, int resolution);
 
 /**
  * Get the loaded masks storage.
- * Call LoadAllMasks first.
+ * Call LoadAllImages first.
  *
  * @return Reference to the mask storage array
  */

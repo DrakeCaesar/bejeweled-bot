@@ -29,7 +29,7 @@ static FrameProcessing::MaskStorage s_staticColorMasks;
 static bool s_staticColorsLoaded = false;
 
 // Map GemType to filename
-static const char *GemTypeToColorFilename(GemType type) {
+static const char *GemTypeToImageFilename(GemType type) {
   switch (type) {
   case GemType::RED:
     return "Red.jp2";
@@ -169,11 +169,73 @@ static BitmaskFrame ComputeBitmaskFromLabMask(const cv::Mat &labMask) {
   return bitmask;
 }
 
-bool LoadMasksForGem(const std::string &assetsPath, GemType type) {
+bool LoadGem(const std::string &assetsPath) {
+  bool success = true;
+
+  static const GemType gemOrder[] = {
+      GemType::RED,    GemType::WHITE,  GemType::GREEN, GemType::YELLOW,
+      GemType::PURPLE, GemType::ORANGE, GemType::BLUE};
+
+  std::string staticPath = assetsPath + "/gems_shadowed.jp2";
+  cv::Mat spriteSheet = cv::imread(staticPath, cv::IMREAD_COLOR);
+  if (spriteSheet.empty()) {
+    std::cerr << "Failed to load static color image: " << staticPath
+              << std::endl;
+    return false;
+  }
+
+  std::string maskPath = assetsPath + "/gems_shadowed_.gif";
+  cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
+  if (maskSheet.empty()) {
+    std::cerr << "Failed to load static mask image: " << maskPath << std::endl;
+    return false;
+  }
+
+  if (maskSheet.channels() == 4) {
+    cv::Mat channels[4];
+    cv::split(maskSheet, channels);
+    maskSheet = channels[0];
+  } else if (maskSheet.channels() == 3) {
+    cv::cvtColor(maskSheet, maskSheet, cv::COLOR_BGR2GRAY);
+  }
+
+  int frameWidth = spriteSheet.cols / NUM_GEM_TYPES;
+  int frameHeight = spriteSheet.rows;
+
+  for (int i = 0; i < NUM_GEM_TYPES; i++) {
+    GemType type = gemOrder[i];
+    int gemIndex = GemTypeToIndex(type);
+    if (gemIndex < 0) {
+      success = false;
+      continue;
+    }
+
+    cv::Rect roi(i * frameWidth, 0, frameWidth, frameHeight);
+    cv::Mat colorRoi = spriteSheet(roi);
+    cv::Mat maskRoi = maskSheet(roi);
+
+    FrameProcessing::ProcessSingleFrame(
+        colorRoi, maskRoi, FrameProcessing::GetStaticColorParams(),
+        s_masks[gemIndex][0], s_alphaMasks[gemIndex][0],
+        s_ringMasks[gemIndex][0], s_labMasks[gemIndex][0]);
+
+    // Convert to planar format for SIMD optimization
+    s_planarLabMasks[gemIndex][0] = ConvertToPlanarLab(s_labMasks[gemIndex][0]);
+
+    // Compute bitmask for SIMD optimization
+    s_bitmasks[gemIndex][0] =
+        ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
+  }
+
+  s_staticColorsLoaded = success;
+  return success;
+}
+
+bool LoadGemAnimation(const std::string &assetsPath, GemType type) {
   if (type == GemType::HYPERCUBE)
     return true;
 
-  const char *colorFilename = GemTypeToColorFilename(type);
+  const char *colorFilename = GemTypeToImageFilename(type);
   const char *maskFilename = GemTypeToMaskFilename(type);
   if (!colorFilename || !maskFilename)
     return false;
@@ -242,68 +304,6 @@ bool LoadMasksForGem(const std::string &assetsPath, GemType type) {
   std::cout << "Loaded " << (frameIndex - 1) << " animated frames for "
             << GemTypeToString(type) << " with alpha masks" << std::endl;
   return true;
-}
-
-bool LoadStaticColorMasks(const std::string &assetsPath) {
-  bool success = true;
-
-  static const GemType gemOrder[] = {
-      GemType::RED,    GemType::WHITE,  GemType::GREEN, GemType::YELLOW,
-      GemType::PURPLE, GemType::ORANGE, GemType::BLUE};
-
-  std::string staticPath = assetsPath + "/gems_shadowed.jp2";
-  cv::Mat spriteSheet = cv::imread(staticPath, cv::IMREAD_COLOR);
-  if (spriteSheet.empty()) {
-    std::cerr << "Failed to load static color image: " << staticPath
-              << std::endl;
-    return false;
-  }
-
-  std::string maskPath = assetsPath + "/gems_shadowed_.gif";
-  cv::Mat maskSheet = cv::imread(maskPath, cv::IMREAD_UNCHANGED);
-  if (maskSheet.empty()) {
-    std::cerr << "Failed to load static mask image: " << maskPath << std::endl;
-    return false;
-  }
-
-  if (maskSheet.channels() == 4) {
-    cv::Mat channels[4];
-    cv::split(maskSheet, channels);
-    maskSheet = channels[0];
-  } else if (maskSheet.channels() == 3) {
-    cv::cvtColor(maskSheet, maskSheet, cv::COLOR_BGR2GRAY);
-  }
-
-  int frameWidth = spriteSheet.cols / NUM_GEM_TYPES;
-  int frameHeight = spriteSheet.rows;
-
-  for (int i = 0; i < NUM_GEM_TYPES; i++) {
-    GemType type = gemOrder[i];
-    int gemIndex = GemTypeToIndex(type);
-    if (gemIndex < 0) {
-      success = false;
-      continue;
-    }
-
-    cv::Rect roi(i * frameWidth, 0, frameWidth, frameHeight);
-    cv::Mat colorRoi = spriteSheet(roi);
-    cv::Mat maskRoi = maskSheet(roi);
-
-    FrameProcessing::ProcessSingleFrame(
-        colorRoi, maskRoi, FrameProcessing::GetStaticColorParams(),
-        s_masks[gemIndex][0], s_alphaMasks[gemIndex][0],
-        s_ringMasks[gemIndex][0], s_labMasks[gemIndex][0]);
-
-    // Convert to planar format for SIMD optimization
-    s_planarLabMasks[gemIndex][0] = ConvertToPlanarLab(s_labMasks[gemIndex][0]);
-
-    // Compute bitmask for SIMD optimization
-    s_bitmasks[gemIndex][0] =
-        ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
-  }
-
-  s_staticColorsLoaded = success;
-  return success;
 }
 
 bool LoadHypercube(const std::string &assetsPath) {
@@ -376,7 +376,7 @@ bool LoadHypercube(const std::string &assetsPath) {
   return true;
 }
 
-bool LoadAllMasks(const std::string &assetsPath, int resolution) {
+bool LoadAllImages(const std::string &assetsPath, int resolution) {
   bool success = true;
 
   // Build resolution-specific path
@@ -386,14 +386,14 @@ bool LoadAllMasks(const std::string &assetsPath, int resolution) {
       GemType::RED,  GemType::ORANGE, GemType::YELLOW, GemType::GREEN,
       GemType::BLUE, GemType::PURPLE, GemType::WHITE};
 
-  for (GemType type : gemTypes) {
-    if (!LoadMasksForGem(resAssetsPath, type)) {
-      success = false;
-    }
+  if (!LoadGem(resAssetsPath)) {
+    success = false;
   }
 
-  if (!LoadStaticColorMasks(resAssetsPath)) {
-    success = false;
+  for (GemType type : gemTypes) {
+    if (!LoadGemAnimation(resAssetsPath, type)) {
+      success = false;
+    }
   }
 
   if (!LoadHypercube(resAssetsPath)) {

@@ -233,7 +233,7 @@ bool Application::Initialize() {
   // Only attempt to load if we successfully extracted assets
   bool masksLoaded = false;
   if (height > 0) {
-    masksLoaded = MaskLoader::LoadAllMasks("assets", height);
+    masksLoaded = MaskLoader::LoadAllImages("assets", height);
   }
 
   if (!masksLoaded) {
