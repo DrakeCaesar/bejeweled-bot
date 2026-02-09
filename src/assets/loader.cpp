@@ -494,8 +494,6 @@ int GetFrameCount(GemType type) {
   return FRAMES_PER_GEM;
 }
 
-bool AreStaticColorsLoaded() { return s_staticColorsLoaded; }
-
 const BitmaskFrame &GetBitmask(GemType type, int frameIndex) {
   static BitmaskFrame emptyBitmask(256, 0ULL); // 256 masks for 128x128 frame
 

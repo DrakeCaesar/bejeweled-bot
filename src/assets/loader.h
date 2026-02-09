@@ -166,11 +166,6 @@ const cv::Mat &GetPlanarLabMask(GemType type, int frameIndex);
 int GetFrameCount(GemType type);
 
 /**
- * Check if static color masks have been loaded.
- */
-bool AreStaticColorsLoaded();
-
-/**
  * Get bitmask for SIMD gem matching optimization.
  * Each uint64_t represents 64 pixels (1=gem pixel, 0=background in LAB space).
  *
