@@ -253,9 +253,7 @@ bool Application::Initialize() {
   // Print controls
   std::cout << "Controls:" << std::endl;
   std::cout << "  'q' - Quit" << std::endl;
-  std::cout << "  'c' - Toggle classification mode (Color/Shape)" << std::endl;
   std::cout << "  'i' - Print window info" << std::endl;
-  std::cout << "  'd' - Dump current gem grid to console" << std::endl;
   std::cout << "  'r' - Start/stop recording frames (uses Rec Col/Row/Frames)"
             << std::endl;
   std::cout << "  's' - Show recording status" << std::endl;
