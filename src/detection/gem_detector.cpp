@@ -367,88 +367,100 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
   // Atomic counter for dynamic tile distribution
   std::atomic<int> nextTile(0);
 
-  // Use a persistent thread pool with dynamic work distribution
-  StaticThreadPool::Instance().ParallelFor([&gameBoard, gridPtr, &nextTile,
-                                            needDebugMap](int threadIndex,
-                                                          int numThreads) {
-    int idx;
-    while ((idx = nextTile.fetch_add(1)) < TOTAL_TILES) {
-      int row = idx / Config::GRID_SIZE;
-      int col = idx % Config::GRID_SIZE;
+  struct GemDetectWork {
+    const cv::Mat &gameBoard;
+    std::vector<std::vector<Gem>> *gridPtr;
+    std::atomic<int> &nextTile;
+    bool needDebugMap;
 
-      Gem &gem = (*gridPtr)[row][col];
-      gem.gridPos = cv::Point(col, row);
-      gem.state = GemState::NORMAL;
-      gem.ringValue = -1;
-      gem.ringHSV = cv::Vec3i(-1, -1, -1);
+    void operator()(int threadIndex, int numThreads) {
+      (void)threadIndex;
+      (void)numThreads;
 
-      // Calculate cell position
-      int cellX = col * Config::CELL_SIZE;
-      int cellY = row * Config::CELL_SIZE;
+      int idx;
+      while ((idx = nextTile.fetch_add(1)) < TOTAL_TILES) {
+        int row = idx / Config::GRID_SIZE;
+        int col = idx % Config::GRID_SIZE;
 
-      // Use full cell
-      gem.shapeRoi =
-          cv::Rect(cellX, cellY, Config::CELL_SIZE, Config::CELL_SIZE);
-      gem.roi = gem.shapeRoi;
+        Gem &gem = (*gridPtr)[row][col];
+        gem.gridPos = cv::Point(col, row);
+        gem.state = GemState::NORMAL;
+        gem.ringValue = -1;
+        gem.ringHSV = cv::Vec3i(-1, -1, -1);
 
-      // Check if ROI is valid
-      bool roiValid = gem.shapeRoi.x >= 0 && gem.shapeRoi.y >= 0 &&
-                      gem.shapeRoi.x + gem.shapeRoi.width <= gameBoard.cols &&
-                      gem.shapeRoi.y + gem.shapeRoi.height <= gameBoard.rows;
+        // Calculate cell position
+        int cellX = col * Config::CELL_SIZE;
+        int cellY = row * Config::CELL_SIZE;
 
-      if (!roiValid) {
-        gem.type = GemType::UNKNOWN;
+        // Use full cell
+        gem.shapeRoi =
+            cv::Rect(cellX, cellY, Config::CELL_SIZE, Config::CELL_SIZE);
+        gem.roi = gem.shapeRoi;
+
+        // Check if ROI is valid
+        bool roiValid = gem.shapeRoi.x >= 0 && gem.shapeRoi.y >= 0 &&
+                        gem.shapeRoi.x + gem.shapeRoi.width <= gameBoard.cols &&
+                        gem.shapeRoi.y + gem.shapeRoi.height <= gameBoard.rows;
+
+        if (!roiValid) {
+          gem.type = GemType::UNKNOWN;
+          gem.closestType = GemType::UNKNOWN;
+          gem.bestMatch = 0.0f;
+          gem.matchedThreshold = false;
+          continue;
+        }
+
+        // Get gem region
+        cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
+        gem.avgColor = cv::mean(shapeRegion);
+
+        // Classify gem
+        cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
+        cv::Mat processedLab;
+        cv::cvtColor(processed, processedLab, cv::COLOR_BGR2Lab);
+        gem.type = ClassifyGemByShape(processed, processedLab, row, col,
+                                      &gem.bestMatch, &gem.bestMatchFrame,
+                                      needDebugMap);
+        gem.shapeMask = GetDebugVisualization(shapeRegion);
         gem.closestType = GemType::UNKNOWN;
-        gem.bestMatch = 0.0f;
-        gem.matchedThreshold = false;
-        continue;
-      }
+        gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
 
-      // Get gem region
-      cv::Mat shapeRegion = gameBoard(gem.shapeRoi);
-      gem.avgColor = cv::mean(shapeRegion);
+        // Compute ring HSV V value for flame/lightning state debug
+        if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
+            MaskLoader::AreMasksLoaded()) {
+          int frameIndex = (gem.bestMatchFrame >= 0) ? gem.bestMatchFrame : 0;
+          const cv::Mat &ringMask =
+              MaskLoader::GetRingMask(gem.type, frameIndex);
 
-      // Classify gem
-      cv::Mat processed = ProcessGemForShapeMatching(shapeRegion);
-      cv::Mat processedLab;
-      cv::cvtColor(processed, processedLab, cv::COLOR_BGR2Lab);
-      gem.type =
-          ClassifyGemByShape(processed, processedLab, row, col, &gem.bestMatch,
-                             &gem.bestMatchFrame, needDebugMap);
-      gem.shapeMask = GetDebugVisualization(shapeRegion);
-      gem.closestType = GemType::UNKNOWN;
-      gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
+          if (!ringMask.empty()) {
+            cv::Mat mask = ringMask;
+            if (mask.size() != shapeRegion.size()) {
+              cv::resize(ringMask, mask, shapeRegion.size(), 0, 0,
+                         cv::INTER_NEAREST);
+            }
 
-      // Compute ring HSV V value for flame/lightning state debug
-      if (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY &&
-          MaskLoader::AreMasksLoaded()) {
-        int frameIndex = (gem.bestMatchFrame >= 0) ? gem.bestMatchFrame : 0;
-        const cv::Mat &ringMask = MaskLoader::GetRingMask(gem.type, frameIndex);
-
-        if (!ringMask.empty()) {
-          cv::Mat mask = ringMask;
-          if (mask.size() != shapeRegion.size()) {
-            cv::resize(ringMask, mask, shapeRegion.size(), 0, 0,
-                       cv::INTER_NEAREST);
-          }
-
-          if (cv::countNonZero(mask) > 0) {
-            cv::Scalar meanBgr = cv::mean(shapeRegion, mask);
-            cv::Mat tmpBgr(1, 1, CV_8UC3);
-            tmpBgr.at<cv::Vec3b>(0, 0) =
-                cv::Vec3b(cv::saturate_cast<uchar>(meanBgr[0]),
-                          cv::saturate_cast<uchar>(meanBgr[1]),
-                          cv::saturate_cast<uchar>(meanBgr[2]));
-            cv::Mat tmpHsv;
-            cv::cvtColor(tmpBgr, tmpHsv, cv::COLOR_BGR2HSV);
-            cv::Vec3b hsvVal = tmpHsv.at<cv::Vec3b>(0, 0);
-            gem.ringValue = hsvVal[2];
-            gem.ringHSV = cv::Vec3i(hsvVal[0], hsvVal[1], hsvVal[2]);
+            if (cv::countNonZero(mask) > 0) {
+              cv::Scalar meanBgr = cv::mean(shapeRegion, mask);
+              cv::Mat tmpBgr(1, 1, CV_8UC3);
+              tmpBgr.at<cv::Vec3b>(0, 0) =
+                  cv::Vec3b(cv::saturate_cast<uchar>(meanBgr[0]),
+                            cv::saturate_cast<uchar>(meanBgr[1]),
+                            cv::saturate_cast<uchar>(meanBgr[2]));
+              cv::Mat tmpHsv;
+              cv::cvtColor(tmpBgr, tmpHsv, cv::COLOR_BGR2HSV);
+              cv::Vec3b hsvVal = tmpHsv.at<cv::Vec3b>(0, 0);
+              gem.ringValue = hsvVal[2];
+              gem.ringHSV = cv::Vec3i(hsvVal[0], hsvVal[1], hsvVal[2]);
+            }
           }
         }
       }
     }
-  });
+  };
+
+  // Use a persistent thread pool with dynamic work distribution
+  GemDetectWork work{gameBoard, gridPtr, nextTile, needDebugMap};
+  StaticThreadPool::Instance().ParallelFor(work);
 
   // Post-process: Calculate average ring V and detect flame/star gems
   int normalGemCount = 0;

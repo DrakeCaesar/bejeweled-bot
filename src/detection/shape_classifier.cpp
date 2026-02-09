@@ -192,23 +192,30 @@ GenerateDebugVisualization(const cv::Mat &img1, const cv::Mat &img1Lab,
   // Generate diff map
   g_debugBestDiffMap = cv::Mat::zeros(img1Lab.rows, img1Lab.cols, CV_8UC3);
 
-  IterateAllPixels(img1Lab, img2Lab, [&](int x, int y, int dL, int da, int db) {
-    cv::Vec3b *diffRow = g_debugBestDiffMap.ptr<cv::Vec3b>(y);
-    float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
+  struct DebugDiffWork {
+    cv::Mat &diffMap;
 
-    if (dist < 10.0f) {
-      diffRow[x] = cv::Vec3b(0, 0, 0);
-    } else {
-      float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
-      uchar intensity = static_cast<uchar>(normalized * 255.0f);
-      if (normalized < 0.5f) {
-        diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
+    void operator()(int x, int y, int dL, int da, int db) {
+      cv::Vec3b *diffRow = diffMap.ptr<cv::Vec3b>(y);
+      float dist = std::sqrt(static_cast<float>(dL * dL + da * da + db * db));
+
+      if (dist < 10.0f) {
+        diffRow[x] = cv::Vec3b(0, 0, 0);
       } else {
-        diffRow[x] =
-            cv::Vec3b(0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
+        float normalized = std::min((dist - 10.0f) / 90.0f, 1.0f);
+        uchar intensity = static_cast<uchar>(normalized * 255.0f);
+        if (normalized < 0.5f) {
+          diffRow[x] = cv::Vec3b(0, intensity * 2, intensity * 2);
+        } else {
+          diffRow[x] = cv::Vec3b(
+              0, static_cast<uchar>((1.0f - normalized) * 510.0f), 255);
+        }
       }
     }
-  });
+  };
+
+  DebugDiffWork work{g_debugBestDiffMap};
+  IterateAllPixels(img1Lab, img2Lab, work);
 }
 
 // ============================================================================

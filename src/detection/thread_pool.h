@@ -2,9 +2,10 @@
 
 #include <array>
 #include <condition_variable>
-#include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
+#include <type_traits>
 
 // ============================================================================
 // Static Thread Pool - Persistent worker threads for gem detection
@@ -25,7 +26,9 @@ public:
     // Store work function and signal new generation
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      work_ = [&workFunc](int idx, int total) { workFunc(idx, total); };
+      using WorkFunc = std::decay_t<Func>;
+      workContext_ = static_cast<void *>(std::addressof(workFunc));
+      workFn_ = &StaticThreadPool::InvokeWork<WorkFunc>;
       generation_++;
       completedCount_ = 0;
     }
@@ -63,6 +66,9 @@ private:
     int lastGeneration = 0;
 
     while (true) {
+      WorkFn fn = nullptr;
+      void *ctx = nullptr;
+
       // Wait for new work (new generation)
       {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -75,11 +81,13 @@ private:
         }
 
         lastGeneration = generation_;
+        fn = workFn_;
+        ctx = workContext_;
       }
 
       // Execute work
-      if (work_) {
-        work_(threadIndex, NUM_THREADS);
+      if (fn) {
+        fn(ctx, threadIndex, NUM_THREADS);
       }
 
       // Signal completion
@@ -91,8 +99,17 @@ private:
     }
   }
 
+  using WorkFn = void (*)(void *, int, int);
+
+  template <typename Func>
+  static void InvokeWork(void *ctx, int idx, int total) {
+    auto *func = static_cast<Func *>(ctx);
+    (*func)(idx, total);
+  }
+
   std::array<std::thread, NUM_THREADS> threads_;
-  std::function<void(int, int)> work_;
+  WorkFn workFn_ = nullptr;
+  void *workContext_ = nullptr;
   std::mutex mutex_;
   std::condition_variable startCv_;
   std::condition_variable doneCv_;
