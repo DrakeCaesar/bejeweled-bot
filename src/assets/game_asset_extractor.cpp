@@ -83,6 +83,10 @@ bool Parse7x7MArchive(const std::string &archivePath,
     return false;
   }
 
+  uint32_t version = ReadUInt32(decryptedData, pos);
+
+  size_t startPos = pos;
+
   // First pass: read file table
   while (pos < fileSize) {
     uint8_t flags = ReadByte(decryptedData, pos);
