@@ -120,9 +120,16 @@ void BoardState::applySwap(const MatchableSwap &swap) {
   std::swap(cells[swap.a.y][swap.a.x], cells[swap.b.y][swap.b.x]);
 }
 
-int BoardState::clearMatches() {
+int BoardState::clearMatches(const MatchableSwap *swap,
+                             bool allowSpecialCreation) {
+  // Phase 1: Find all straight 3+ matches and mark for clearing
   bool toClear[SIZE][SIZE] = {};
-  int cleared = 0;
+  struct Match {
+    int row, col, length;
+    bool isHorizontal;
+    GemType type; // Store gem type
+  };
+  std::vector<Match> matches;
 
   // Horizontal matches
   for (int row = 0; row < SIZE; ++row) {
@@ -139,6 +146,7 @@ int BoardState::clearMatches() {
         ++count;
       }
       if (count >= 3) {
+        matches.push_back({row, col, count, true, type});
         for (int i = 0; i < count; ++i) {
           toClear[row][col + i] = true;
         }
@@ -162,6 +170,7 @@ int BoardState::clearMatches() {
         ++count;
       }
       if (count >= 3) {
+        matches.push_back({row, col, count, false, type});
         for (int i = 0; i < count; ++i) {
           toClear[row + i][col] = true;
         }
@@ -170,7 +179,170 @@ int BoardState::clearMatches() {
     }
   }
 
-  // Clear marked cells
+  // Phase 2: Create special gems from 4+ or 5+ matches (before clearing)
+  if (allowSpecialCreation && !matches.empty()) {
+    for (const auto &match : matches) {
+      int targetRow, targetCol;
+
+      // Determine target position: prefer swap position if in match, otherwise
+      // center
+      auto getTargetPos = [&]() {
+        if (swap) {
+          bool swapAInMatch =
+              match.isHorizontal
+                  ? (match.row == swap->a.y && swap->a.x >= match.col &&
+                     swap->a.x < match.col + match.length)
+                  : (match.col == swap->a.x && swap->a.y >= match.row &&
+                     swap->a.y < match.row + match.length);
+          bool swapBInMatch =
+              match.isHorizontal
+                  ? (match.row == swap->b.y && swap->b.x >= match.col &&
+                     swap->b.x < match.col + match.length)
+                  : (match.col == swap->b.x && swap->b.y >= match.row &&
+                     swap->b.y < match.row + match.length);
+          if (swapAInMatch) {
+            targetRow = swap->a.y;
+            targetCol = swap->a.x;
+            return;
+          } else if (swapBInMatch) {
+            targetRow = swap->b.y;
+            targetCol = swap->b.x;
+            return;
+          }
+        }
+        // Fallback: center of match
+        targetRow =
+            match.isHorizontal ? match.row : match.row + match.length / 2;
+        targetCol =
+            match.isHorizontal ? match.col + match.length / 2 : match.col;
+      };
+
+      if (match.length >= 5) {
+        // 5+ creates STAR gem
+        getTargetPos();
+        toClear[targetRow][targetCol] = false;
+        cells[targetRow][targetCol].state = GemState::STAR;
+        cells[targetRow][targetCol].type = match.type; // Preserve color
+      } else if (match.length == 4) {
+        // 4-match creates FLAME gem
+        getTargetPos();
+        toClear[targetRow][targetCol] = false;
+        cells[targetRow][targetCol].state = GemState::FLAME;
+        cells[targetRow][targetCol].type = match.type; // Preserve color
+      }
+    }
+  }
+
+  // Phase 3: Detonate special gems in the match zone
+  std::vector<std::pair<int, int>> flameDetonations;
+  std::vector<std::pair<int, int>> starDetonations;
+  std::vector<std::pair<int, int>> hypercubeDetonations;
+
+  for (int row = 0; row < SIZE; ++row) {
+    for (int col = 0; col < SIZE; ++col) {
+      if (toClear[row][col]) {
+        GemState state = cells[row][col].state;
+        GemType type = cells[row][col].type;
+
+        if (state == GemState::FLAME) {
+          flameDetonations.push_back({row, col});
+        } else if (state == GemState::STAR) {
+          starDetonations.push_back({row, col});
+        } else if (type == GemType::HYPERCUBE) {
+          hypercubeDetonations.push_back({row, col});
+        }
+      }
+    }
+  }
+
+  // Handle flame detonations: clear 3x3 around each flame
+  for (const auto &[fRow, fCol] : flameDetonations) {
+    GemType flameColor = cells[fRow][fCol].type;
+    for (int dy = -1; dy <= 1; ++dy) {
+      for (int dx = -1; dx <= 1; ++dx) {
+        int r = fRow + dy;
+        int c = fCol + dx;
+        if (r >= 0 && r < SIZE && c >= 0 && c < SIZE) {
+          // Flame + Hypercube interaction: clear all gems of flame's color
+          if (cells[r][c].type == GemType::HYPERCUBE) {
+            for (int nr = 0; nr < SIZE; ++nr) {
+              for (int nc = 0; nc < SIZE; ++nc) {
+                if (cells[nr][nc].type == flameColor) {
+                  toClear[nr][nc] = true;
+                }
+              }
+            }
+          }
+          toClear[r][c] = true;
+        }
+      }
+    }
+  }
+
+  // Handle star detonations: clear entire row + column
+  for (const auto &[sRow, sCol] : starDetonations) {
+    GemType starColor = cells[sRow][sCol].type;
+    // Clear row
+    for (int c = 0; c < SIZE; ++c) {
+      if (cells[sRow][c].type == GemType::HYPERCUBE) {
+        // Star + Hypercube: clear all gems of star's color
+        for (int nr = 0; nr < SIZE; ++nr) {
+          for (int nc = 0; nc < SIZE; ++nc) {
+            if (cells[nr][nc].type == starColor) {
+              toClear[nr][nc] = true;
+            }
+          }
+        }
+      }
+      toClear[sRow][c] = true;
+    }
+    // Clear column
+    for (int r = 0; r < SIZE; ++r) {
+      if (cells[r][sCol].type == GemType::HYPERCUBE) {
+        for (int nr = 0; nr < SIZE; ++nr) {
+          for (int nc = 0; nc < SIZE; ++nc) {
+            if (cells[nr][nc].type == starColor) {
+              toClear[nr][nc] = true;
+            }
+          }
+        }
+      }
+      toClear[r][sCol] = true;
+    }
+  }
+
+  // Handle hypercube detonations (matched directly in a 3+)
+  for (const auto &[hRow, hCol] : hypercubeDetonations) {
+    // Find matched color (scan neighbors in cleared zone)
+    GemType matchedColor = GemType::UNKNOWN;
+    for (int dr = -1; dr <= 1 && matchedColor == GemType::UNKNOWN; ++dr) {
+      for (int dc = -1; dc <= 1 && matchedColor == GemType::UNKNOWN; ++dc) {
+        if (dr == 0 && dc == 0)
+          continue;
+        int r = hRow + dr;
+        int c = hCol + dc;
+        if (r >= 0 && r < SIZE && c >= 0 && c < SIZE && toClear[r][c]) {
+          GemType nType = cells[r][c].type;
+          if (IsMatchableType(nType)) {
+            matchedColor = nType;
+          }
+        }
+      }
+    }
+    // Clear all gems of that color
+    if (matchedColor != GemType::UNKNOWN) {
+      for (int r = 0; r < SIZE; ++r) {
+        for (int c = 0; c < SIZE; ++c) {
+          if (cells[r][c].type == matchedColor) {
+            toClear[r][c] = true;
+          }
+        }
+      }
+    }
+  }
+
+  // Phase 4: Actually clear all marked cells
+  int cleared = 0;
   for (int row = 0; row < SIZE; ++row) {
     for (int col = 0; col < SIZE; ++col) {
       if (toClear[row][col]) {
@@ -232,6 +404,18 @@ bool BoardState::isFullyIdentified() const {
   return true;
 }
 
+bool BoardState::equals(const BoardState &other) const {
+  for (int row = 0; row < SIZE; ++row) {
+    for (int col = 0; col < SIZE; ++col) {
+      if (cells[row][col].type != other.cells[row][col].type ||
+          cells[row][col].state != other.cells[row][col].state) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // ============================================================================
 // Match Length Computation
 // ============================================================================
@@ -286,8 +470,24 @@ int ComputeMatchLength(const BoardState &board, int row, int col,
 
 void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
   // Snapshot the board
-  board.initFromGrid(grid);
-  boardValid = board.isFullyIdentified();
+  BoardState newBoard;
+  newBoard.initFromGrid(grid);
+  boardValid = newBoard.isFullyIdentified();
+
+  // Skip analysis if board has any UNKNOWN gems
+  if (!boardValid) {
+    scoredSwaps.clear();
+    bestSwapIndex = -1;
+    board = newBoard; // Update board so next valid frame triggers re-analysis
+    return;
+  }
+
+  // Skip expensive re-analysis if board unchanged
+  if (board.equals(newBoard)) {
+    return;
+  }
+
+  board = newBoard;
 
   // Find all valid swaps
   std::vector<MatchableSwap> validSwaps = board.findValidSwaps();
@@ -312,7 +512,7 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
     // Simulate the swap to count clears and cascades
     BoardState simBoard = board;
     simBoard.applySwap(swap);
-    scored.immediateClears = simBoard.clearMatches();
+    scored.immediateClears = simBoard.clearMatches(&swap);
     simBoard.applyGravity();
 
     // Continue cascading

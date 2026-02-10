@@ -5,6 +5,8 @@
 #include <mutex>
 #include <opencv2/opencv.hpp>
 
+struct BoardAnalysis; // Forward declaration
+
 // ============================================================================
 // Buffer State Machine - Each buffer flows through states sequentially
 // ============================================================================
@@ -33,6 +35,9 @@ struct SharedFrameData {
 
   // Desktop Duplication context
   DuplicationContext *dupContext = nullptr;
+
+  // Board analysis (updated by process thread, read by main thread)
+  BoardAnalysis *currentAnalysis = nullptr;
 
   // Find first buffer in given state, returns -1 if none found
   int findBuffer(BufferState state) const {

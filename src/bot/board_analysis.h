@@ -46,9 +46,11 @@ struct BoardState {
   /// Apply a swap in-place (mutates the board)
   void applySwap(const MatchableSwap &swap);
 
-  /// Find and clear all 3+ matches. Returns number of gems cleared.
-  /// Sets cleared cells to EMPTY.
-  int clearMatches();
+  /// Find and clear all 3+ matches, including special detonations.
+  /// If a swap is provided, special creation prefers swap positions.
+  /// Returns number of gems cleared and sets cleared cells to EMPTY.
+  int clearMatches(const MatchableSwap *swap = nullptr,
+                   bool allowSpecialCreation = true);
 
   /// Apply gravity: drop gems down to fill empty spaces.
   /// Returns true if any gems moved.
@@ -62,6 +64,9 @@ struct BoardState {
 
   /// Check if all cells have a known gem type (board is fully identified)
   bool isFullyIdentified() const;
+
+  /// Compare two boards (type + state)
+  bool equals(const BoardState &other) const;
 };
 
 // ============================================================================

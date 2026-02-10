@@ -62,6 +62,10 @@ void ProcessThreadFunc(
         static BoardAnalysis boardAnalysis;
         boardAnalysis.analyze(gemGrid);
 
+        // Share analysis with main thread (no mutex needed - only process
+        // thread writes)
+        frameData.currentAnalysis = &boardAnalysis;
+
         // Draw overlays directly onto the buffer (in-place, zero-copy!)
         auto drawStart = std::chrono::high_resolution_clock::now();
 

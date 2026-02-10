@@ -2,6 +2,8 @@
 #include "assets/frame_processing.h"
 #include "assets/game_asset_extractor.h"
 #include "assets/loader.h"
+#include "bot/board_analysis.h"
+#include "bot/board_debug.h"
 #include "capture/capture_thread.h"
 #include "config.h"
 #include "detection/color_similarity.h"
@@ -502,6 +504,13 @@ void Application::HandleKeyboardInput(int key) {
                 << GetTotalFramesChecked() << " total frames)" << std::endl;
     } else {
       std::cout << "Not currently recording. Press 'R' to start." << std::endl;
+    }
+  } else if (key == 'p' || key == 'P') {
+    std::cout << "\n" << std::endl;
+    if (frameData_.currentAnalysis) {
+      BoardDebug::PrintFullAnalysis(*frameData_.currentAnalysis);
+    } else {
+      std::cout << "No board analysis available yet" << std::endl;
     }
   }
 }

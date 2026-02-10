@@ -47,9 +47,9 @@ const bool WRITE_EXTRACTED_ASSETS_TO_DISK =
 // adjusted via UI) Note: FINAL threshold is hard-coded minimum before returning
 // UNKNOWN type
 const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT =
-    100; // Default search threshold (0-100) - shown in UI
+    90; // Default search threshold (0-100) - shown in UI
 const int GEM_MATCH_FINAL_THRESHOLD_PERCENT =
-    50; // Hard minimum threshold (0-100) - classification threshold
+    60; // Hard minimum threshold (0-100) - classification threshold
 
 // Internal thresholds for squared-distance comparison (pre-sqrt)
 // These ensure the final sqrt-converted percentages match the config values
