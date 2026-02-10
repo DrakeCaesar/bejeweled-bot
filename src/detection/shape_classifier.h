@@ -19,6 +19,11 @@ inline std::atomic<int> debugStage{Config::DEBUG_STAGE_DEFAULT};
 // comparison
 inline std::atomic<int> matchThreshold{
     Config::GEM_MATCH_SEARCH_THRESHOLD_PERCENT};
+// L channel compression ceiling (0-254) - values above this get compressed
+inline std::atomic<int> lCompressionCeiling{139};
+// L channel compression strength (0-100) - intensity of compression above
+// ceiling
+inline std::atomic<int> lCompression{100};
 
 void CreateTrackbars(const std::string &windowName);
 } // namespace ShapeParams

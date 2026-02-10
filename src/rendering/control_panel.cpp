@@ -15,7 +15,7 @@ struct SliderDef {
 constexpr int kPanelX = 10;
 constexpr int kPanelY = 25;
 constexpr int kPanelW = 380;
-constexpr int kPanelH = 140;
+constexpr int kPanelH = 210; // Increased height for additional sliders
 
 constexpr int kSliderX = kPanelX + 140;
 constexpr int kSliderW = 200;
@@ -25,9 +25,11 @@ constexpr int kFirstSliderY = kPanelY + 24;
 
 int g_activeSlider = -1;
 
-const std::array<SliderDef, 2> kSliders = {
+const std::array<SliderDef, 4> kSliders = {
     SliderDef{"Debug", 0, 5, &ShapeParams::debugStage},
-    SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold}};
+    SliderDef{"Match%", 1, 100, &ShapeParams::matchThreshold},
+    SliderDef{"LCeil", 0, 254, &ShapeParams::lCompressionCeiling},
+    SliderDef{"LComp%", 0, 100, &ShapeParams::lCompression}};
 
 cv::Rect GetSliderTrackRect(int index) {
   int y = kFirstSliderY + index * kSliderSpacing;
@@ -90,41 +92,41 @@ void DrawControlPanel(cv::Mat &image) {
     cv::circle(image, cv::Point(knobX, track.y + track.height / 2), 6,
                cv::Scalar(30, 30, 30), 1, cv::LINE_AA);
   }
-}
 
-bool HandleControlPanelMouse(int event, int x, int y, int flags) {
-  // Check if within panel area
-  if (x < kPanelX || x > kPanelX + kPanelW || y < kPanelY ||
-      y > kPanelY + kPanelH) {
-    if (event == cv::EVENT_LBUTTONUP) {
-      g_activeSlider = -1;
+  bool HandleControlPanelMouse(int event, int x, int y, int flags) {
+    // Check if within panel area
+    if (x < kPanelX || x > kPanelX + kPanelW || y < kPanelY ||
+        y > kPanelY + kPanelH) {
+      if (event == cv::EVENT_LBUTTONUP) {
+        g_activeSlider = -1;
+      }
+      return false;
     }
-    return false;
-  }
 
-  if (event == cv::EVENT_LBUTTONDOWN) {
-    // Find slider under cursor
-    for (size_t i = 0; i < kSliders.size(); ++i) {
-      cv::Rect track = GetSliderTrackRect(static_cast<int>(i));
-      cv::Rect hit(track.x - 6, track.y - 6, track.width + 12,
-                   track.height + 12);
-      if (hit.contains(cv::Point(x, y))) {
-        g_activeSlider = static_cast<int>(i);
+    if (event == cv::EVENT_LBUTTONDOWN) {
+      // Find slider under cursor
+      for (size_t i = 0; i < kSliders.size(); ++i) {
+        cv::Rect track = GetSliderTrackRect(static_cast<int>(i));
+        cv::Rect hit(track.x - 6, track.y - 6, track.width + 12,
+                     track.height + 12);
+        if (hit.contains(cv::Point(x, y))) {
+          g_activeSlider = static_cast<int>(i);
+          int v = ValueFromX(g_activeSlider, x);
+          kSliders[g_activeSlider].value->store(v);
+          return true;
+        }
+      }
+    } else if (event == cv::EVENT_MOUSEMOVE &&
+               (flags & cv::EVENT_FLAG_LBUTTON)) {
+      if (g_activeSlider >= 0) {
         int v = ValueFromX(g_activeSlider, x);
         kSliders[g_activeSlider].value->store(v);
         return true;
       }
-    }
-  } else if (event == cv::EVENT_MOUSEMOVE && (flags & cv::EVENT_FLAG_LBUTTON)) {
-    if (g_activeSlider >= 0) {
-      int v = ValueFromX(g_activeSlider, x);
-      kSliders[g_activeSlider].value->store(v);
+    } else if (event == cv::EVENT_LBUTTONUP) {
+      g_activeSlider = -1;
       return true;
     }
-  } else if (event == cv::EVENT_LBUTTONUP) {
-    g_activeSlider = -1;
+
     return true;
   }
-
-  return true;
-}

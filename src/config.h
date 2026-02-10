@@ -33,7 +33,7 @@ const bool BOT_STOP_AFTER_SUPERNOVA_FOUND =
 const bool BOT_PREFER_NON_HYPERCUBE_MOVES =
     true; // Only match hypercubes if no other moves
 const int BOT_STABLE_FRAMES_REQUIRED =
-    50; // Number of stable frames required before making a move
+    20; // Number of stable frames required before making a move
 const int BOT_CLICK_DELAY_MS =
     500; // Milliseconds to wait between clicks in auto-play
 
