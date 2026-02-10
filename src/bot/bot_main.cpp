@@ -72,6 +72,17 @@ bool SwapCreatesMatch(const std::vector<std::vector<Gem>> &grid,
   GemType typeA = grid[swap.a.y][swap.a.x].type;
   GemType typeB = grid[swap.b.y][swap.b.x].type;
 
+  // Hypercube swaps are always valid (swap with any other gem)
+  if (typeA == GemType::HYPERCUBE || typeB == GemType::HYPERCUBE) {
+    // Must swap with a matchable type (not both hypercubes, not empty/unknown)
+    if (typeA == GemType::HYPERCUBE && IsMatchableType(typeB))
+      return true;
+    if (typeB == GemType::HYPERCUBE && IsMatchableType(typeA))
+      return true;
+    return false;
+  }
+
+  // Standard swap logic for non-hypercube gems
   if (!IsMatchableType(typeA) || !IsMatchableType(typeB))
     return false;
   if (typeA == typeB)
