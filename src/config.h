@@ -17,7 +17,7 @@ const int GRID_SIZE = 8; // 8x8 grid
 // Display settings
 const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
 const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
-const int DEBUG_STAGE_DEFAULT = 0;    // Default debug stage to show (0-5)
+const int DEBUG_STAGE_DEFAULT = 4;    // Default debug stage to show (0-5)
 
 // Bot debug settings
 const bool SHOW_BOT_MATCH_LINES = true; // Draw swap lines that create a match

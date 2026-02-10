@@ -48,7 +48,8 @@ void InitializeFreeType() {
 
 void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs,
                 double drawMs, double displayMs, int fpsWidth, int captureWidth,
-                int detectWidth, int drawWidth, int displayWidth) {
+                int detectWidth, int drawWidth, int displayWidth,
+                int stableFrames) {
   // Initialize FreeType on first call
   InitializeFreeType();
 
@@ -64,7 +65,8 @@ void DrawBanner(cv::Mat &image, float fps, double captureMs, double detectMs,
       << std::setw(captureWidth) << captureMs << "ms"
       << " | Detect: " << std::setw(detectWidth) << detectMs << "ms"
       << " | Draw: " << std::setw(drawWidth) << drawMs << "ms"
-      << " | Display: " << std::setw(displayWidth) << displayMs << "ms";
+      << " | Display: " << std::setw(displayWidth) << displayMs << "ms"
+      << " | Stable: " << stableFrames;
   static thread_local std::string bannerText;
   bannerText = oss.str();
 

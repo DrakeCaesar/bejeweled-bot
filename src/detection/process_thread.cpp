@@ -80,7 +80,8 @@ void ProcessThreadFunc(
                    timingInfo.avgDetectMs, timingInfo.avgDrawMs,
                    timingInfo.avgDisplayMs, timingInfo.maxFpsWidth,
                    timingInfo.maxCaptureWidth, timingInfo.maxDetectWidth,
-                   timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth);
+                   timingInfo.maxDrawWidth, timingInfo.maxDisplayWidth,
+                   boardAnalysis.stableFrameCount);
 
         if (Config::SHOW_DEBUG_OVERLAY) {
           DrawShapeOverlay(buffer, gemGrid, &boardAnalysis);

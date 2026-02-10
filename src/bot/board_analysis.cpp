@@ -483,9 +483,12 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
 
   // Skip expensive re-analysis if board unchanged
   if (board.equals(newBoard)) {
+    stableFrameCount++;
     return;
   }
 
+  // Board changed - reset counter and update
+  stableFrameCount = 1;
   board = newBoard;
 
   // Find all valid swaps (automatically skips swaps involving UNKNOWN gems)
