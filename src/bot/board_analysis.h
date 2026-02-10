@@ -92,7 +92,7 @@ struct BoardAnalysis {
   std::vector<ScoredSwap> scoredSwaps; // All valid swaps with scores
   int bestSwapIndex = -1;              // Index of highest-scored swap
   bool boardValid = false;             // Board is fully identified
-  int stableFrameCount = 0;            // Consecutive frames with same valid board
+  int stableFrameCount = 0; // Consecutive frames with same valid board
 
   /// Run full analysis: snapshot board, find swaps, score them
   void analyze(const std::vector<std::vector<Gem>> &grid);

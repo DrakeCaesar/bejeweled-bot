@@ -24,5 +24,4 @@
 void DrawBanner(cv::Mat &image, float fps, double captureMs = 0,
                 double detectMs = 0, double drawMs = 0, double displayMs = 0,
                 int fpsWidth = 5, int captureWidth = 4, int detectWidth = 4,
-                int drawWidth = 4, int displayWidth = 4,
-                int stableFrames = 0);
+                int drawWidth = 4, int displayWidth = 4, int stableFrames = 0);
