@@ -171,7 +171,7 @@ void PrintSwapSimulation(const BoardState &board, const MatchableSwap &swap) {
   // Step 3: After first clear
   BoardState afterClear = afterSwap;
   int firstClears = afterClear.clearMatches(&swap);
-  std::cout << BOLD << "   → Cleared " << firstClears << " gems\n" << RESET;
+  std::cout << BOLD << "     Cleared " << firstClears << " gems\n" << RESET;
   PrintBoard(afterClear, "3. After First Clear");
 
   // Step 4: After gravity
@@ -190,15 +190,21 @@ void PrintSwapSimulation(const BoardState &board, const MatchableSwap &swap) {
       break;
 
     totalCleared += cleared;
-    std::cout << BOLD << "   → Cascade " << cascadeNum << ": Cleared "
+    std::cout << BOLD << "     Cascade " << cascadeNum << ": Cleared "
               << cleared << " gems\n"
               << RESET;
 
-    std::ostringstream title;
-    title << "5." << cascadeNum << " After Cascade " << cascadeNum;
-    PrintBoard(cascading, title.str());
+    std::ostringstream titleClear;
+    titleClear << "5." << cascadeNum << "a After Cascade " << cascadeNum
+               << " Clear";
+    PrintBoard(cascading, titleClear.str());
 
     cascading.applyGravity();
+
+    std::ostringstream titleGravity;
+    titleGravity << "5." << cascadeNum << "b After Gravity";
+    PrintBoard(cascading, titleGravity.str());
+
     cascadeNum++;
   }
 
