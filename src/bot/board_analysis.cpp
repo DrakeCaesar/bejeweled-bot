@@ -472,15 +472,14 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
   // Snapshot the board
   BoardState newBoard;
   newBoard.initFromGrid(grid);
-  boardValid = newBoard.isFullyIdentified();
 
-  // Skip analysis if board has any UNKNOWN gems
-  if (!boardValid) {
-    scoredSwaps.clear();
-    bestSwapIndex = -1;
-    board = newBoard; // Update board so next valid frame triggers re-analysis
+  // Skip analysis if board has any UNKNOWN gems - keep previous analysis
+  if (!newBoard.isFullyIdentified()) {
+    boardValid = false;
     return;
   }
+
+  boardValid = true;
 
   // Skip expensive re-analysis if board unchanged
   if (board.equals(newBoard)) {
@@ -489,7 +488,7 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
 
   board = newBoard;
 
-  // Find all valid swaps
+  // Find all valid swaps (automatically skips swaps involving UNKNOWN gems)
   std::vector<MatchableSwap> validSwaps = board.findValidSwaps();
 
   // Score each swap

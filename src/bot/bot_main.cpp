@@ -122,11 +122,17 @@ void DrawMatchableSwaps(cv::Mat &image, const BoardAnalysis &analysis) {
   if (image.empty())
     return;
 
-  for (const auto &scored : analysis.scoredSwaps) {
+  for (size_t i = 0; i < analysis.scoredSwaps.size(); ++i) {
+    const auto &scored = analysis.scoredSwaps[i];
     cv::Point a = CellCenter(scored.swap.a.y, scored.swap.a.x);
     cv::Point b = CellCenter(scored.swap.b.y, scored.swap.b.x);
-    cv::line(image, a, b, Config::BOT_MATCH_LINE_COLOR,
-             Config::BOT_MATCH_LINE_THICKNESS, cv::LINE_AA);
+
+    // Draw best match in cyan, all other matches in red
+    cv::Scalar color = (static_cast<int>(i) == analysis.bestSwapIndex)
+                           ? Config::BOT_MATCH_LINE_COLOR
+                           : Config::BOT_OTHER_MATCH_LINE_COLOR;
+
+    cv::line(image, a, b, color, Config::BOT_MATCH_LINE_THICKNESS, cv::LINE_AA);
   }
 }
 
@@ -137,10 +143,11 @@ void DrawMatchableSwaps(cv::Mat &image,
 
   const std::vector<MatchableSwap> swaps = FindMatchableSwaps(grid);
 
+  // When board has unknown gems, draw all matches in red (no scoring available)
   for (const auto &swap : swaps) {
     cv::Point a = CellCenter(swap.a.y, swap.a.x);
     cv::Point b = CellCenter(swap.b.y, swap.b.x);
-    cv::line(image, a, b, Config::BOT_MATCH_LINE_COLOR,
+    cv::line(image, a, b, Config::BOT_OTHER_MATCH_LINE_COLOR,
              Config::BOT_MATCH_LINE_THICKNESS, cv::LINE_AA);
   }
 }

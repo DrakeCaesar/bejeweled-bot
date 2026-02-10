@@ -21,7 +21,10 @@ const int DEBUG_STAGE_DEFAULT = 0;    // Default debug stage to show (0-5)
 
 // Bot debug settings
 const bool SHOW_BOT_MATCH_LINES = true; // Draw swap lines that create a match
-const cv::Scalar BOT_MATCH_LINE_COLOR = cv::Scalar(0, 255, 255);
+const cv::Scalar BOT_MATCH_LINE_COLOR =
+    cv::Scalar(255, 255, 0); // Cyan - best match
+const cv::Scalar BOT_OTHER_MATCH_LINE_COLOR =
+    cv::Scalar(0, 0, 255); // Red - other matches
 const int BOT_MATCH_LINE_THICKNESS = 2;
 const int STATISICS_HISTORY_SIZE =
     100; // Number of frames to keep in rolling average for statistics

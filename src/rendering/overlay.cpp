@@ -385,7 +385,9 @@ void DrawShapeOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid,
 
   // Draw selected cell highlight on top
   if (Config::SHOW_BOT_MATCH_LINES && ShapeParams::debugStage.load() >= 1) {
-    if (analysis && analysis->boardValid) {
+    // Use analysis if available and has scored swaps, otherwise fall back to
+    // grid
+    if (analysis && !analysis->scoredSwaps.empty()) {
       DrawMatchableSwaps(image, *analysis);
     } else {
       DrawMatchableSwaps(image, grid);
