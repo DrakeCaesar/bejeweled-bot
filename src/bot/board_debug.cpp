@@ -90,6 +90,8 @@ std::string GetStateMarker(GemState state) {
     return "*"; // ASCII fallback for flame
   case GemState::STAR:
     return "+"; // ASCII fallback for star
+  case GemState::SUPERNOVA:
+    return "@"; // ASCII marker for supernova
   default:
     return " ";
   }
@@ -152,7 +154,8 @@ void PrintBoard(const BoardState &board, const std::string &title) {
   std::cout << "\n";
 
   // Legend
-  std::cout << DIM << "  * = Flame, + = Star, H = Hypercube" << RESET << "\n\n";
+  std::cout << DIM << "  * = Flame, + = Star, @ = Supernova, H = Hypercube"
+            << RESET << "\n\n";
 }
 
 void PrintSwapSimulation(const BoardState &board, const MatchableSwap &swap) {

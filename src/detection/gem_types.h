@@ -22,9 +22,9 @@ enum class GemType {
 
 enum class GemState {
   NORMAL,
-  FLAME,     // For future: flame gem detection
-  LIGHTNING, // For future: lightning gem detection
-  STAR       // For future: star gem detection
+  FLAME,    // 4-match creates flame gem (3x3 clear)
+  STAR,     // 5-match creates star gem (row+col clear)
+  SUPERNOVA // 6+ match creates supernova gem (board clear)
 };
 
 struct Gem {

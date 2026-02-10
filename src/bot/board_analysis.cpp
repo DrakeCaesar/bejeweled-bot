@@ -217,8 +217,14 @@ int BoardState::clearMatches(const MatchableSwap *swap,
             match.isHorizontal ? match.col + match.length / 2 : match.col;
       };
 
-      if (match.length >= 5) {
-        // 5+ creates STAR gem
+      if (match.length >= 6) {
+        // 6+ creates SUPERNOVA gem (board clear)
+        getTargetPos();
+        toClear[targetRow][targetCol] = false;
+        cells[targetRow][targetCol].state = GemState::SUPERNOVA;
+        cells[targetRow][targetCol].type = match.type; // Preserve color
+      } else if (match.length == 5) {
+        // 5-match creates STAR gem
         getTargetPos();
         toClear[targetRow][targetCol] = false;
         cells[targetRow][targetCol].state = GemState::STAR;
@@ -236,6 +242,7 @@ int BoardState::clearMatches(const MatchableSwap *swap,
   // Phase 3: Detonate special gems in the match zone
   std::vector<std::pair<int, int>> flameDetonations;
   std::vector<std::pair<int, int>> starDetonations;
+  std::vector<std::pair<int, int>> supernovaDetonations;
   std::vector<std::pair<int, int>> hypercubeDetonations;
 
   for (int row = 0; row < SIZE; ++row) {
@@ -248,6 +255,8 @@ int BoardState::clearMatches(const MatchableSwap *swap,
           flameDetonations.push_back({row, col});
         } else if (state == GemState::STAR) {
           starDetonations.push_back({row, col});
+        } else if (state == GemState::SUPERNOVA) {
+          supernovaDetonations.push_back({row, col});
         } else if (type == GemType::HYPERCUBE) {
           hypercubeDetonations.push_back({row, col});
         }
@@ -308,6 +317,54 @@ int BoardState::clearMatches(const MatchableSwap *swap,
         }
       }
       toClear[r][sCol] = true;
+    }
+  }
+
+  // Handle supernova detonations: clear row, column, and 2 adjacent
+  // rows/columns
+  for (const auto &[snRow, snCol] : supernovaDetonations) {
+    GemType supernovaColor = cells[snRow][snCol].type;
+
+    // Clear 3 rows: the supernova's row and one above/below
+    for (int rowOffset = -1; rowOffset <= 1; ++rowOffset) {
+      int r = snRow + rowOffset;
+      if (r < 0 || r >= SIZE)
+        continue;
+
+      for (int c = 0; c < SIZE; ++c) {
+        if (cells[r][c].type == GemType::HYPERCUBE) {
+          // Supernova + Hypercube: clear all gems of supernova's color
+          for (int nr = 0; nr < SIZE; ++nr) {
+            for (int nc = 0; nc < SIZE; ++nc) {
+              if (cells[nr][nc].type == supernovaColor) {
+                toClear[nr][nc] = true;
+              }
+            }
+          }
+        }
+        toClear[r][c] = true;
+      }
+    }
+
+    // Clear 3 columns: the supernova's column and one left/right
+    for (int colOffset = -1; colOffset <= 1; ++colOffset) {
+      int c = snCol + colOffset;
+      if (c < 0 || c >= SIZE)
+        continue;
+
+      for (int r = 0; r < SIZE; ++r) {
+        if (cells[r][c].type == GemType::HYPERCUBE) {
+          // Supernova + Hypercube: clear all gems of supernova's color
+          for (int nr = 0; nr < SIZE; ++nr) {
+            for (int nc = 0; nc < SIZE; ++nc) {
+              if (cells[nr][nc].type == supernovaColor) {
+                toClear[nr][nc] = true;
+              }
+            }
+          }
+        }
+        toClear[r][c] = true;
+      }
     }
   }
 
@@ -528,9 +585,18 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
     }
 
     // Weighted score: prioritize cascades > specials > immediate clears
-    scored.totalScore = scored.cascadeClears * 10 +
-                        (scored.createsSpecial ? 50 : 0) +
-                        scored.matchLength * 5;
+    // Special bonuses: Supernova (6+) = 100, Star (5) = 50, Flame (4) = 30
+    int specialBonus = 0;
+    if (scored.matchLength >= 6) {
+      specialBonus = 100; // Supernova - board clear
+    } else if (scored.matchLength == 5) {
+      specialBonus = 50; // Star - row+col clear
+    } else if (scored.matchLength == 4) {
+      specialBonus = 30; // Flame - 3x3 clear
+    }
+
+    scored.totalScore =
+        scored.cascadeClears * 10 + specialBonus + scored.matchLength * 5;
 
     scoredSwaps.push_back(scored);
 

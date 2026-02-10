@@ -318,6 +318,8 @@ void DrawShapeOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid,
               lines.push_back("FLAME");
             } else if (gem.state == GemState::STAR) {
               lines.push_back("STAR");
+            } else if (gem.state == GemState::SUPERNOVA) {
+              lines.push_back("SUPERNOVA");
             }
 
             oss << "H" << gem.ringHSV[0];
