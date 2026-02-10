@@ -66,11 +66,11 @@ const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT =
 // Per-color final thresholds (0-100) - classification threshold
 const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_BLUE = 60;
 const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_GREEN = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE = 60;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE = 40;
 const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_PURPLE = 60;
 const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_RED = 30;
 const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_WHITE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW = 60;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW = 40;
 
 // Internal thresholds for squared-distance comparison (pre-sqrt)
 // These ensure the final sqrt-converted percentages match the config values
