@@ -580,13 +580,16 @@ void Application::ExecuteBestSwap() {
                      now - lastClickTime_)
                      .count();
 
-  // Execute click sequence with timing (100ms between clicks)
-  if (clicksInProgress_ == 0 && elapsed >= 100) {
-    // First click - click on first gem
+  // Execute click sequence with timing
+  if (clicksInProgress_ == 0 && elapsed >= Config::BOT_CLICK_DELAY_MS) {
+    // Click both gems in sequence (no wait between clicks)
     SendMouseClickToGame(gameWindow_, x1, y1, true);
     SendMouseClickToGame(gameWindow_, x1, y1, false);
+    SendMouseClickToGame(gameWindow_, x2, y2, true);
+    SendMouseClickToGame(gameWindow_, x2, y2, false);
+
     lastClickTime_ = now;
-    clicksInProgress_ = 1;
+    clicksInProgress_ = 2;
 
     // Reset stable frame counter when we make a move
     if (frameData_.currentAnalysis) {
@@ -604,18 +607,11 @@ void Application::ExecuteBestSwap() {
       specialName = " [HYPERCUBE]";
     }
 
-    std::cout << "Auto-play: Clicking (" << swap.a.x << "," << swap.a.y
-              << ") - Score: " << bestSwap.totalScore << specialName
-              << std::endl;
-  } else if (clicksInProgress_ == 1 && elapsed >= 100) {
-    // Second click - click on second gem
-    SendMouseClickToGame(gameWindow_, x2, y2, true);
-    SendMouseClickToGame(gameWindow_, x2, y2, false);
-    lastClickTime_ = now;
-    clicksInProgress_ = 2;
-    std::cout << "Auto-play: Swapping with (" << swap.b.x << "," << swap.b.y
-              << ")" << std::endl;
-  } else if (clicksInProgress_ == 2 && elapsed >= 100) {
+    // std::cout << "Auto-play: Swapping (" << swap.a.x << "," << swap.a.y
+    //           << ") <-> (" << swap.b.x << "," << swap.b.y
+    //           << ") - Score: " << bestSwap.totalScore << specialName
+    //           << std::endl;
+  } else if (clicksInProgress_ == 2 && elapsed >= Config::BOT_CLICK_DELAY_MS) {
     // Wait period complete - ready for next move
     clicksInProgress_ = 0;
   }
@@ -628,7 +624,8 @@ void Application::UpdateAutoPlay() {
 
   // Only make moves when we have a stable board
   if (!frameData_.currentAnalysis ||
-      frameData_.currentAnalysis->stableFrameCount < 10) {
+      frameData_.currentAnalysis->stableFrameCount <
+          Config::BOT_STABLE_FRAMES_REQUIRED) {
     return;
   }
 
