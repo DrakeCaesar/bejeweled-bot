@@ -15,7 +15,7 @@ struct SliderDef {
 constexpr int kPanelX = 10;
 constexpr int kPanelY = 25;
 constexpr int kPanelW = 380;
-constexpr int kPanelH = 210; // Increased height for additional sliders
+constexpr int kPanelH = 140;
 
 constexpr int kSliderX = kPanelX + 140;
 constexpr int kSliderW = 200;
