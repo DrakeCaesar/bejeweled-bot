@@ -222,6 +222,29 @@ GenerateDebugVisualization(const cv::Mat &img1, const cv::Mat &img1Lab,
 // Gem Classification Helper Functions
 // ============================================================================
 
+// Get per-color final threshold based on gem type
+static int GetFinalThresholdForType(GemType type) {
+  switch (type) {
+  case GemType::BLUE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_BLUE;
+  case GemType::GREEN:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_GREEN;
+  case GemType::ORANGE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_ORANGE;
+  case GemType::PURPLE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_PURPLE;
+  case GemType::RED:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_RED;
+  case GemType::WHITE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_WHITE;
+  case GemType::YELLOW:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_YELLOW;
+  default:
+    // For UNKNOWN, EMPTY, HYPERCUBE, use the lowest threshold
+    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_BLUE;
+  }
+}
+
 // Check a specific type/frame with caching to avoid redundant comparisons
 static int CheckMatchScore(GemType type, int frame,
                            const cv::Mat &processedImagePlanarLab,
@@ -465,9 +488,9 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
     }
   }
 
-  // Integer comparison: bestScore is 0-10000, using internal threshold that
-  // accounts for sqrt scaling
-  if (bestScore < Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL)
+  // Integer comparison: bestScore is 0-10000, using per-color internal
+  // threshold that accounts for sqrt scaling
+  if (bestScore < GetFinalThresholdForType(bestType))
     return GemType::UNKNOWN;
 
   return bestType;
