@@ -10,10 +10,60 @@
 #include <sstream>
 
 // ============================================================================
-// Frame Recording for Asset Collection
+// Helper Functions
 // ============================================================================
 
 namespace {
+// Get per-color final threshold percentage (0-100) based on gem type
+static int GetFinalThresholdPercent(GemType type) {
+  switch (type) {
+  case GemType::BLUE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_BLUE;
+  case GemType::GREEN:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_GREEN;
+  case GemType::ORANGE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE;
+  case GemType::PURPLE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_PURPLE;
+  case GemType::RED:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_RED;
+  case GemType::WHITE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_WHITE;
+  case GemType::YELLOW:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW;
+  default:
+    // For UNKNOWN, EMPTY, HYPERCUBE, use lowest 60%
+    return 60;
+  }
+}
+
+// Get star gem threshold percentage (0-100) - lower for special gems
+static int GetStarThresholdPercent(GemType type) {
+  switch (type) {
+  case GemType::BLUE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_BLUE;
+  case GemType::GREEN:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_GREEN;
+  case GemType::ORANGE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_ORANGE;
+  case GemType::PURPLE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_PURPLE;
+  case GemType::RED:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_RED;
+  case GemType::WHITE:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_WHITE;
+  case GemType::YELLOW:
+    return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_YELLOW;
+  default:
+    // For UNKNOWN, EMPTY, HYPERCUBE, use 40%
+    return 40;
+  }
+}
+
+// ============================================================================
+// Frame Recording for Asset Collection
+// ============================================================================
+
 // Recording configuration
 bool g_recordingEnabled = false;
 int g_recordCol = 0;
@@ -501,6 +551,29 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
         } else {
           gem.state = GemState::NORMAL;
         }
+      }
+    }
+  }
+
+  // Apply final thresholds based on gem state
+  for (int row = 0; row < Config::GRID_SIZE; row++) {
+    for (int col = 0; col < Config::GRID_SIZE; col++) {
+      Gem &gem = grid[row][col];
+      if (gem.type == GemType::UNKNOWN) {
+        continue; // Skip UNKNOWN gems
+      }
+
+      // Apply state-specific threshold (direct percentage comparison)
+      int thresholdPercent = (gem.state == GemState::STAR || gem.state == GemState::FLAME)
+                                 ? GetStarThresholdPercent(gem.type)
+                                 : GetFinalThresholdPercent(gem.type);
+
+      // Re-evaluate based on stored bestMatch score (0.0-1.0)
+      gem.matchedThreshold = gem.bestMatch >= (thresholdPercent / 100.0f);
+
+      // If gem doesn't meet threshold, mark as UNKNOWN
+      if (!gem.matchedThreshold) {
+        gem.type = GemType::UNKNOWN;
       }
     }
   }

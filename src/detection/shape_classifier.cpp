@@ -127,8 +127,8 @@ static void IterateAllPixels(const cv::Mat &img1Lab, const cv::Mat &img2Lab,
   }
 }
 
-// Helper: Convert interleaved BGR to planar LAB with optional L channel compression
-// Stores image dimensions in the matrix for easy access
+// Helper: Convert interleaved BGR to planar LAB with optional L channel
+// compression Stores image dimensions in the matrix for easy access
 static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut,
                                int lCompressionCeiling = 180,
                                int lCompressionStrength = 0) {
@@ -146,7 +146,8 @@ static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut,
     const float compressionRange = 255.0f - compressionCeiling;
 
     // Calculate compression factor based on strength (0 to 1.0)
-    const float compressionFactor = static_cast<float>(lCompressionStrength) / 100.0f;
+    const float compressionFactor =
+        static_cast<float>(lCompressionStrength) / 100.0f;
 
     // Process L channel pixels
     for (int y = 0; y < rows; ++y) {
@@ -159,11 +160,13 @@ static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut,
           float normalizedValue = (L - compressionCeiling) / compressionRange;
 
           // Apply non-linear compression curve: x^a where a > 1
-          const float exponent = 1.0f + (compressionFactor * 2.0f); // 1.0 to 3.0
+          const float exponent =
+              1.0f + (compressionFactor * 2.0f); // 1.0 to 3.0
           float compressedNormalized = std::pow(normalizedValue, exponent);
 
           // Map back to 0-255 range
-          L = compressionCeiling + static_cast<uchar>(compressedNormalized * compressionRange);
+          L = compressionCeiling +
+              static_cast<uchar>(compressedNormalized * compressionRange);
         }
         // Values at or below compressionCeiling remain unchanged
       }
@@ -282,29 +285,6 @@ GenerateDebugVisualization(const cv::Mat &img1, const cv::Mat &img1Lab,
 // ============================================================================
 // Gem Classification Helper Functions
 // ============================================================================
-
-// Get per-color final threshold based on gem type
-static int GetFinalThresholdForType(GemType type) {
-  switch (type) {
-  case GemType::BLUE:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_BLUE;
-  case GemType::GREEN:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_GREEN;
-  case GemType::ORANGE:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_ORANGE;
-  case GemType::PURPLE:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_PURPLE;
-  case GemType::RED:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_RED;
-  case GemType::WHITE:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_WHITE;
-  case GemType::YELLOW:
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_YELLOW;
-  default:
-    // For UNKNOWN, EMPTY, HYPERCUBE, use the lowest threshold
-    return Config::GEM_MATCH_FINAL_THRESHOLD_INTERNAL_BLUE;
-  }
-}
 
 // Check a specific type/frame with caching to avoid redundant comparisons
 static int CheckMatchScore(GemType type, int frame,
@@ -550,11 +530,6 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
                                  alphaMask, refImageBgr, bestType, bestFrame);
     }
   }
-
-  // Integer comparison: bestScore is 0-10000, using per-color internal
-  // threshold that accounts for sqrt scaling
-  if (bestScore < GetFinalThresholdForType(bestType))
-    return GemType::UNKNOWN;
 
   return bestType;
 }

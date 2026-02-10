@@ -92,41 +92,41 @@ void DrawControlPanel(cv::Mat &image) {
     cv::circle(image, cv::Point(knobX, track.y + track.height / 2), 6,
                cv::Scalar(30, 30, 30), 1, cv::LINE_AA);
   }
+}
 
-  bool HandleControlPanelMouse(int event, int x, int y, int flags) {
-    // Check if within panel area
-    if (x < kPanelX || x > kPanelX + kPanelW || y < kPanelY ||
-        y > kPanelY + kPanelH) {
-      if (event == cv::EVENT_LBUTTONUP) {
-        g_activeSlider = -1;
-      }
-      return false;
+bool HandleControlPanelMouse(int event, int x, int y, int flags) {
+  // Check if within panel area
+  if (x < kPanelX || x > kPanelX + kPanelW || y < kPanelY ||
+      y > kPanelY + kPanelH) {
+    if (event == cv::EVENT_LBUTTONUP) {
+      g_activeSlider = -1;
     }
+    return false;
+  }
 
-    if (event == cv::EVENT_LBUTTONDOWN) {
-      // Find slider under cursor
-      for (size_t i = 0; i < kSliders.size(); ++i) {
-        cv::Rect track = GetSliderTrackRect(static_cast<int>(i));
-        cv::Rect hit(track.x - 6, track.y - 6, track.width + 12,
-                     track.height + 12);
-        if (hit.contains(cv::Point(x, y))) {
-          g_activeSlider = static_cast<int>(i);
-          int v = ValueFromX(g_activeSlider, x);
-          kSliders[g_activeSlider].value->store(v);
-          return true;
-        }
-      }
-    } else if (event == cv::EVENT_MOUSEMOVE &&
-               (flags & cv::EVENT_FLAG_LBUTTON)) {
-      if (g_activeSlider >= 0) {
+  if (event == cv::EVENT_LBUTTONDOWN) {
+    // Find slider under cursor
+    for (size_t i = 0; i < kSliders.size(); ++i) {
+      cv::Rect track = GetSliderTrackRect(static_cast<int>(i));
+      cv::Rect hit(track.x - 6, track.y - 6, track.width + 12,
+                   track.height + 12);
+      if (hit.contains(cv::Point(x, y))) {
+        g_activeSlider = static_cast<int>(i);
         int v = ValueFromX(g_activeSlider, x);
         kSliders[g_activeSlider].value->store(v);
         return true;
       }
-    } else if (event == cv::EVENT_LBUTTONUP) {
-      g_activeSlider = -1;
+    }
+  } else if (event == cv::EVENT_MOUSEMOVE && (flags & cv::EVENT_FLAG_LBUTTON)) {
+    if (g_activeSlider >= 0) {
+      int v = ValueFromX(g_activeSlider, x);
+      kSliders[g_activeSlider].value->store(v);
       return true;
     }
-
+  } else if (event == cv::EVENT_LBUTTONUP) {
+    g_activeSlider = -1;
     return true;
   }
+
+  return true;
+}
