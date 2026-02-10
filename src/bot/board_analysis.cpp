@@ -91,7 +91,8 @@ bool BoardState::swapCreatesMatch(const MatchableSwap &swap) const {
          wouldFormMatchAt(swap.b.y, swap.b.x, swap);
 }
 
-std::vector<MatchableSwap> BoardState::findValidSwaps() const {
+std::vector<MatchableSwap>
+BoardState::findValidSwaps(bool excludeHypercubes) const {
   std::vector<MatchableSwap> swaps;
 
   for (int row = 0; row < SIZE; ++row) {
@@ -99,6 +100,14 @@ std::vector<MatchableSwap> BoardState::findValidSwaps() const {
       // Horizontal swap
       if (col + 1 < SIZE) {
         MatchableSwap swap{cv::Point(col, row), cv::Point(col + 1, row)};
+
+        // Skip if excluding hypercubes and either cell is a hypercube
+        if (excludeHypercubes &&
+            (cells[row][col].type == GemType::HYPERCUBE ||
+             cells[row][col + 1].type == GemType::HYPERCUBE)) {
+          continue;
+        }
+
         if (swapCreatesMatch(swap)) {
           swaps.push_back(swap);
         }
@@ -106,6 +115,14 @@ std::vector<MatchableSwap> BoardState::findValidSwaps() const {
       // Vertical swap
       if (row + 1 < SIZE) {
         MatchableSwap swap{cv::Point(col, row), cv::Point(col, row + 1)};
+
+        // Skip if excluding hypercubes and either cell is a hypercube
+        if (excludeHypercubes &&
+            (cells[row][col].type == GemType::HYPERCUBE ||
+             cells[row + 1][col].type == GemType::HYPERCUBE)) {
+          continue;
+        }
+
         if (swapCreatesMatch(swap)) {
           swaps.push_back(swap);
         }
@@ -218,25 +235,55 @@ int BoardState::clearMatches(const MatchableSwap *swap,
       };
 
       if (match.length >= 6) {
-        // 6+ creates SUPERNOVA gem (board clear)
+        // 6+ in a row creates SUPERNOVA gem
         getTargetPos();
         toClear[targetRow][targetCol] = false;
         cells[targetRow][targetCol].state = GemState::SUPERNOVA;
         cells[targetRow][targetCol].type = match.type; // Preserve color
       } else if (match.length == 5) {
-        // 5-match creates STAR gem
+        // 5 in a row creates HYPERCUBE
         getTargetPos();
         toClear[targetRow][targetCol] = false;
-        cells[targetRow][targetCol].state = GemState::STAR;
-        cells[targetRow][targetCol].type = match.type; // Preserve color
+        cells[targetRow][targetCol].type = GemType::HYPERCUBE;
+        cells[targetRow][targetCol].state = GemState::NORMAL;
       } else if (match.length == 4) {
-        // 4-match creates FLAME gem
+        // 4 in a row creates FLAME gem
         getTargetPos();
         toClear[targetRow][targetCol] = false;
         cells[targetRow][targetCol].state = GemState::FLAME;
         cells[targetRow][targetCol].type = match.type; // Preserve color
       }
     }
+  }
+
+  // Phase 2b: Check for T-shape patterns (creates STAR gem)
+  if (allowSpecialCreation && swap) {
+    // T-shape: 3+ horizontal with 3+ vertical intersecting
+    for (const auto &hMatch : matches) {
+      if (!hMatch.isHorizontal || hMatch.length < 3)
+        continue;
+
+      for (const auto &vMatch : matches) {
+        if (vMatch.isHorizontal || vMatch.length < 3)
+          continue;
+
+        // Check if they intersect
+        for (int hPos = hMatch.col; hPos < hMatch.col + hMatch.length; ++hPos) {
+          for (int vPos = vMatch.row; vPos < vMatch.row + vMatch.length;
+               ++vPos) {
+            if (hMatch.row == vPos && vMatch.col == hPos &&
+                hMatch.type == vMatch.type) {
+              // Found T-shape intersection - create STAR at intersection
+              toClear[vPos][hPos] = false;
+              cells[vPos][hPos].state = GemState::STAR;
+              cells[vPos][hPos].type = hMatch.type;
+              goto t_shape_done; // Exit nested loops
+            }
+          }
+        }
+      }
+    }
+  t_shape_done:;
   }
 
   // Phase 3: Detonate special gems in the match zone
@@ -548,8 +595,18 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
   stableFrameCount = 1;
   board = newBoard;
 
-  // Find all valid swaps (automatically skips swaps involving UNKNOWN gems)
-  std::vector<MatchableSwap> validSwaps = board.findValidSwaps();
+  // Find all valid swaps - prefer non-hypercube moves if configured
+  std::vector<MatchableSwap> validSwaps;
+  if (Config::BOT_PREFER_NON_HYPERCUBE_MOVES) {
+    // Try to find non-hypercube swaps first
+    validSwaps = board.findValidSwaps(true);
+    // If no non-hypercube swaps, allow hypercube swaps
+    if (validSwaps.empty()) {
+      validSwaps = board.findValidSwaps(false);
+    }
+  } else {
+    validSwaps = board.findValidSwaps(false);
+  }
 
   // Score each swap
   scoredSwaps.clear();
@@ -571,6 +628,31 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
     // Simulate the swap to count clears and cascades
     BoardState simBoard = board;
     simBoard.applySwap(swap);
+
+    // Detect what special gem is created (if any)
+    scored.specialType = GemState::NORMAL;
+    if (scored.matchLength >= 6) {
+      scored.specialType = GemState::SUPERNOVA;
+      scored.createsSpecial = true;
+    } else if (scored.matchLength == 5) {
+      // 5 in a row creates Hypercube (represented as hypercube type, not a
+      // state)
+      scored.createsSpecial = true;
+    } else if (scored.matchLength == 4) {
+      scored.specialType = GemState::FLAME;
+      scored.createsSpecial = true;
+    } else if (scored.matchLength == 3) {
+      // Check for T-shape: 3+ horizontal and 3+ vertical intersecting
+      // This happens when both swap positions form matches
+      int lenA = ComputeMatchLength(board, swap.a.y, swap.a.x, swap);
+      int lenB = ComputeMatchLength(board, swap.b.y, swap.b.x, swap);
+      if (lenA >= 3 && lenB >= 3) {
+        // Both positions have matches - likely a T-shape
+        scored.specialType = GemState::STAR;
+        scored.createsSpecial = true;
+      }
+    }
+
     scored.immediateClears = simBoard.clearMatches(&swap);
     simBoard.applyGravity();
 
@@ -584,15 +666,18 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
       simBoard.applyGravity();
     }
 
-    // Weighted score: prioritize cascades > specials > immediate clears
-    // Special bonuses: Supernova (6+) = 100, Star (5) = 50, Flame (4) = 30
+    // Weighted score: prioritize supernova above all else
+    // Special bonuses: Supernova (6) = 10000, Hypercube (5) = 100, Star (T) =
+    // 50, Flame (4) = 30
     int specialBonus = 0;
-    if (scored.matchLength >= 6) {
-      specialBonus = 100; // Supernova - board clear
+    if (scored.specialType == GemState::SUPERNOVA) {
+      specialBonus = 10000; // Supernova - massive bonus
     } else if (scored.matchLength == 5) {
-      specialBonus = 50; // Star - row+col clear
-    } else if (scored.matchLength == 4) {
-      specialBonus = 30; // Flame - 3x3 clear
+      specialBonus = 100; // Hypercube - 5 in a row
+    } else if (scored.specialType == GemState::STAR) {
+      specialBonus = 50; // Star - T-shape
+    } else if (scored.specialType == GemState::FLAME) {
+      specialBonus = 30; // Flame - 4 in a row
     }
 
     scored.totalScore =

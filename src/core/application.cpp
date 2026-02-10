@@ -423,6 +423,7 @@ void Application::Run() {
 
   while (running_) {
     DisplayFrame();
+    UpdateAutoPlay();
 
     int key = cv::waitKey(1);
     HandleKeyboardInput(key);
@@ -512,6 +513,19 @@ void Application::HandleKeyboardInput(int key) {
     } else {
       std::cout << "No board analysis available yet" << std::endl;
     }
+  } else if (key == 'b' || key == 'B') {
+    autoPlayEnabled_ = !autoPlayEnabled_;
+    if (autoPlayEnabled_) {
+      std::cout << "Auto-play ENABLED";
+      if (Config::BOT_STOP_AFTER_SUPERNOVA_FOUND) {
+        std::cout << " (will stop when supernova move is found)";
+      }
+      std::cout << std::endl;
+      lastClickTime_ = std::chrono::high_resolution_clock::now();
+      clicksInProgress_ = 0;
+    } else {
+      std::cout << "Auto-play DISABLED" << std::endl;
+    }
   }
 }
 
@@ -538,4 +552,108 @@ void Application::Shutdown() {
   }
 
   cv::destroyAllWindows();
+}
+
+void Application::ExecuteBestSwap() {
+  if (!frameData_.currentAnalysis ||
+      frameData_.currentAnalysis->scoredSwaps.empty()) {
+    return;
+  }
+
+  const BoardAnalysis &analysis = *frameData_.currentAnalysis;
+  if (analysis.bestSwapIndex < 0) {
+    return;
+  }
+
+  const ScoredSwap &bestSwap = analysis.scoredSwaps[analysis.bestSwapIndex];
+  const MatchableSwap &swap = bestSwap.swap;
+
+  // Calculate screen coordinates for both gems (swap.a and swap.b are in (col,
+  // row) format)
+  int x1 = swap.a.x * Config::CELL_SIZE + Config::CELL_SIZE / 2;
+  int y1 = swap.a.y * Config::CELL_SIZE + Config::CELL_SIZE / 2;
+  int x2 = swap.b.x * Config::CELL_SIZE + Config::CELL_SIZE / 2;
+  int y2 = swap.b.y * Config::CELL_SIZE + Config::CELL_SIZE / 2;
+
+  auto now = std::chrono::high_resolution_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                     now - lastClickTime_)
+                     .count();
+
+  // Execute click sequence with timing (100ms between clicks)
+  if (clicksInProgress_ == 0 && elapsed >= 100) {
+    // First click - click on first gem
+    SendMouseClickToGame(gameWindow_, x1, y1, true);
+    SendMouseClickToGame(gameWindow_, x1, y1, false);
+    lastClickTime_ = now;
+    clicksInProgress_ = 1;
+
+    // Reset stable frame counter when we make a move
+    if (frameData_.currentAnalysis) {
+      frameData_.currentAnalysis->stableFrameCount = 0;
+    }
+
+    const char *specialName = "";
+    if (bestSwap.specialType == GemState::SUPERNOVA) {
+      specialName = " [SUPERNOVA]";
+    } else if (bestSwap.specialType == GemState::STAR) {
+      specialName = " [STAR]";
+    } else if (bestSwap.specialType == GemState::FLAME) {
+      specialName = " [FLAME]";
+    } else if (bestSwap.matchLength == 5) {
+      specialName = " [HYPERCUBE]";
+    }
+
+    std::cout << "Auto-play: Clicking (" << swap.a.x << "," << swap.a.y
+              << ") - Score: " << bestSwap.totalScore << specialName
+              << std::endl;
+  } else if (clicksInProgress_ == 1 && elapsed >= 100) {
+    // Second click - click on second gem
+    SendMouseClickToGame(gameWindow_, x2, y2, true);
+    SendMouseClickToGame(gameWindow_, x2, y2, false);
+    lastClickTime_ = now;
+    clicksInProgress_ = 2;
+    std::cout << "Auto-play: Swapping with (" << swap.b.x << "," << swap.b.y
+              << ")" << std::endl;
+  } else if (clicksInProgress_ == 2 && elapsed >= 100) {
+    // Wait period complete - ready for next move
+    clicksInProgress_ = 0;
+  }
+}
+
+void Application::UpdateAutoPlay() {
+  if (!autoPlayEnabled_) {
+    return;
+  }
+
+  // Only make moves when we have a stable board
+  if (!frameData_.currentAnalysis ||
+      frameData_.currentAnalysis->stableFrameCount < 10) {
+    return;
+  }
+
+  // Check if best move creates a supernova and stop if configured
+  if (Config::BOT_STOP_AFTER_SUPERNOVA_FOUND &&
+      frameData_.currentAnalysis->bestSwapIndex >= 0) {
+    const auto &bestSwap =
+        frameData_.currentAnalysis
+            ->scoredSwaps[frameData_.currentAnalysis->bestSwapIndex];
+    if (bestSwap.specialType == GemState::SUPERNOVA) {
+      autoPlayEnabled_ = false;
+      std::cout << "\nAuto-play STOPPED: Supernova move detected!" << std::endl;
+      std::cout << "Best move: (" << bestSwap.swap.a.x << ","
+                << bestSwap.swap.a.y << ") <-> (" << bestSwap.swap.b.x << ","
+                << bestSwap.swap.b.y << ") - Score: " << bestSwap.totalScore
+                << " [SUPERNOVA]" << std::endl;
+      return;
+    }
+  }
+
+  // Only start new moves when previous click sequence is complete
+  if (clicksInProgress_ == 0) {
+    ExecuteBestSwap();
+  } else {
+    // Continue executing current click sequence
+    ExecuteBestSwap();
+  }
 }

@@ -2,6 +2,7 @@
 
 #include "types/frame_data.h"
 #include "types/timing.h"
+#include <chrono>
 #include <opencv2/opencv.hpp>
 #include <thread>
 #include <windows.h>
@@ -49,6 +50,11 @@ private:
 
   void DisplayFrame();
 
+  // Auto-play helpers
+  void ExecuteBestSwap();
+
+  void UpdateAutoPlay();
+
   // State
   HWND gameWindow_ = nullptr;
   bool running_ = false;
@@ -65,4 +71,9 @@ private:
   // Threads
   std::thread captureThread_;
   std::thread processThread_;
+
+  // Auto-play state
+  bool autoPlayEnabled_ = false;
+  std::chrono::high_resolution_clock::time_point lastClickTime_;
+  int clicksInProgress_ = 0; // Track click sequence state (0, 1, or 2)
 };

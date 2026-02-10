@@ -26,6 +26,13 @@ const cv::Scalar BOT_MATCH_LINE_COLOR =
 const cv::Scalar BOT_OTHER_MATCH_LINE_COLOR =
     cv::Scalar(0, 0, 255); // Red - other matches
 const int BOT_MATCH_LINE_THICKNESS = 2;
+
+// Auto-play settings
+const bool BOT_STOP_AFTER_SUPERNOVA_FOUND =
+    true; // Stop bot when supernova move is detected
+const bool BOT_PREFER_NON_HYPERCUBE_MOVES =
+    true; // Only match hypercubes if no other moves
+
 const int STATISICS_HISTORY_SIZE =
     100; // Number of frames to keep in rolling average for statistics
 

@@ -41,7 +41,9 @@ struct BoardState {
   bool swapCreatesMatch(const MatchableSwap &swap) const;
 
   /// Find all valid swaps that create at least one match
-  std::vector<MatchableSwap> findValidSwaps() const;
+  /// @param excludeHypercubes If true, exclude swaps involving hypercube gems
+  std::vector<MatchableSwap>
+  findValidSwaps(bool excludeHypercubes = false) const;
 
   /// Apply a swap in-place (mutates the board)
   void applySwap(const MatchableSwap &swap);
@@ -81,6 +83,7 @@ struct ScoredSwap {
   int matchLength = 0;         // Length of the longest match created
   int totalScore = 0;          // Combined weighted score
   bool createsSpecial = false; // Whether it creates a 4+ match (flame/star)
+  GemState specialType = GemState::NORMAL; // Type of special gem created
 };
 
 // ============================================================================
