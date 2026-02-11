@@ -13,8 +13,6 @@ namespace ShapeParams {
 // Trackbar backing variables (OpenCV requires int pointers)
 static int debugStageTrack = debugStage.load();
 static int matchThresholdTrack = matchThreshold.load();
-static int lCompressionCeilingTrack = lCompressionCeiling.load();
-static int lCompressionTrack = lCompression.load();
 
 static void OnDebugStageChange(int value, void *) { debugStage.store(value); }
 
@@ -27,33 +25,11 @@ static void OnMatchThresholdChange(int value, void *) {
   matchThreshold.store(v);
 }
 
-static void OnLCompressionCeilingChange(int value, void *) {
-  int v = value;
-  if (v < 0)
-    v = 0;
-  if (v > 254)
-    v = 254;
-  lCompressionCeiling.store(v);
-}
-
-static void OnLCompressionChange(int value, void *) {
-  int v = value;
-  if (v < 0)
-    v = 0;
-  if (v > 100)
-    v = 100;
-  lCompression.store(v);
-}
-
 void CreateTrackbars(const std::string &windowName) {
   cv::createTrackbar("Debug Stage", windowName, &debugStageTrack, 5,
                      OnDebugStageChange);
   cv::createTrackbar("Match Thresh %", windowName, &matchThresholdTrack, 100,
                      OnMatchThresholdChange);
-  cv::createTrackbar("L Ceiling", windowName, &lCompressionCeilingTrack, 254,
-                     OnLCompressionCeilingChange);
-  cv::createTrackbar("L Compress %", windowName, &lCompressionTrack, 100,
-                     OnLCompressionChange);
 }
 } // namespace ShapeParams
 
@@ -127,51 +103,11 @@ static void IterateAllPixels(const cv::Mat &img1Lab, const cv::Mat &img2Lab,
   }
 }
 
-// Helper: Convert interleaved BGR to planar LAB with optional L channel
-// compression Stores image dimensions in the matrix for easy access
-static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut,
-                               int lCompressionCeiling = 180,
-                               int lCompressionStrength = 0) {
+// Helper: Convert interleaved BGR to planar LAB
+// Stores image dimensions in the matrix for easy access
+static void ConvertToPlanarLab(const cv::Mat &bgrImage, cv::Mat &planarLabOut) {
   // Convert BGR to LAB using pre-allocated temp mat
   cv::cvtColor(bgrImage, g_tempLabImage, cv::COLOR_BGR2Lab);
-
-  // Apply non-linear compression to high L channel values only
-  if (lCompressionStrength > 0 && lCompressionCeiling < 254) {
-    // Extract L channel (first channel in Lab image)
-    const int rows = g_tempLabImage.rows;
-    const int cols = g_tempLabImage.cols;
-
-    // Define ceiling at which compression begins (from slider)
-    const uchar compressionCeiling = static_cast<uchar>(lCompressionCeiling);
-    const float compressionRange = 255.0f - compressionCeiling;
-
-    // Calculate compression factor based on strength (0 to 1.0)
-    const float compressionFactor =
-        static_cast<float>(lCompressionStrength) / 100.0f;
-
-    // Process L channel pixels
-    for (int y = 0; y < rows; ++y) {
-      cv::Vec3b *row = g_tempLabImage.ptr<cv::Vec3b>(y);
-      for (int x = 0; x < cols; ++x) {
-        uchar &L = row[x][0]; // L channel
-
-        // Only compress values above the ceiling
-        if (L > compressionCeiling) {
-          float normalizedValue = (L - compressionCeiling) / compressionRange;
-
-          // Apply non-linear compression curve: x^a where a > 1
-          const float exponent =
-              1.0f + (compressionFactor * 2.0f); // 1.0 to 3.0
-          float compressedNormalized = std::pow(normalizedValue, exponent);
-
-          // Map back to 0-255 range
-          L = compressionCeiling +
-              static_cast<uchar>(compressedNormalized * compressionRange);
-        }
-        // Values at or below compressionCeiling remain unchanged
-      }
-    }
-  }
 
   // Map planar output rows to 2D views and split directly into them
   const int rows = g_tempLabImage.rows;
@@ -379,9 +315,7 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
   // Convert to planar LAB format for optimal SIMD performance
   // Reuse pre-allocated mat from pool based on tile position
   cv::Mat &processedImagePlanarLab = g_planarMatPool.mats[gemRow * 8 + gemCol];
-  ConvertToPlanarLab(processedImage, processedImagePlanarLab,
-                     ShapeParams::lCompressionCeiling.load(),
-                     ShapeParams::lCompression.load());
+  ConvertToPlanarLab(processedImage, processedImagePlanarLab);
   if (processedImagePlanarLab.empty()) {
     if (outBestMatch)
       *outBestMatch = 0.0f;

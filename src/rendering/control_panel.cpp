@@ -25,11 +25,9 @@ constexpr int kFirstSliderY = kPanelY + 24;
 
 int g_activeSlider = -1;
 
-const std::array<SliderDef, 4> kSliders = {
+const std::array<SliderDef, 2> kSliders = {
     SliderDef{"Debug", 0, 5, &ShapeParams::debugStage},
-    SliderDef{"Match%", 1, 100, &ShapeParams::matchThreshold},
-    SliderDef{"LCeil", 0, 254, &ShapeParams::lCompressionCeiling},
-    SliderDef{"LComp%", 0, 100, &ShapeParams::lCompression}};
+    SliderDef{"Match%", 0, 100, &ShapeParams::matchThreshold}};
 
 cv::Rect GetSliderTrackRect(int index) {
   int y = kFirstSliderY + index * kSliderSpacing;
