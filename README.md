@@ -23,18 +23,17 @@ cd vcpkg
 
 ### 2. Install Dependencies
 
-Navigate to the project directory and install OpenCV:
+Navigate to the project directory and install the required packages (dynamic):
 
 ```bash
-vcpkg install
+vcpkg install opencv[contrib,freetype,openjpeg] --triplet x64-windows
 ```
 
-Or manually:
+For a static build:
 
 ```bash
-vcpkg install opencv4:x64-windows
+vcpkg install opencv[contrib,freetype,openjpeg] --triplet x64-windows-static
 ```
-
 ### 3. Configure CMake with vcpkg
 
 ```bash

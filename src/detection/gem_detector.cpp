@@ -564,9 +564,10 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
       }
 
       // Apply state-specific threshold (direct percentage comparison)
-      int thresholdPercent = (gem.state == GemState::STAR || gem.state == GemState::FLAME)
-                                 ? GetStarThresholdPercent(gem.type)
-                                 : GetFinalThresholdPercent(gem.type);
+      int thresholdPercent =
+          (gem.state == GemState::STAR || gem.state == GemState::FLAME)
+              ? GetStarThresholdPercent(gem.type)
+              : GetFinalThresholdPercent(gem.type);
 
       // Re-evaluate based on stored bestMatch score (0.0-1.0)
       gem.matchedThreshold = gem.bestMatch >= (thresholdPercent / 100.0f);
