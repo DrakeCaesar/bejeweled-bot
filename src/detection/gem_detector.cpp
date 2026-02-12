@@ -475,7 +475,39 @@ std::vector<std::vector<Gem>> &DetectGems(const cv::Mat &gameBoard,
         gem.type = ClassifyGemByShape(processed, processedLab, row, col,
                                       &gem.bestMatch, &gem.bestMatchFrame,
                                       needDebugMap);
-        gem.shapeMask = GetDebugVisualization(shapeRegion);
+
+        // Apply alpha mask to captured image for gradient comparison
+        if (gem.type != GemType::UNKNOWN && gem.bestMatchFrame >= 0 &&
+            MaskLoader::AreMasksLoaded()) {
+          const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(gem.type, gem.bestMatchFrame);
+
+          if (!alphaMask.empty()) {
+            cv::Mat mask = alphaMask;
+            if (mask.size() != shapeRegion.size()) {
+              cv::resize(alphaMask, mask, shapeRegion.size(), 0, 0, cv::INTER_NEAREST);
+            }
+
+            // Apply mask: set background pixels to black
+            cv::Mat maskedInput = shapeRegion.clone();
+            for (int y = 0; y < maskedInput.rows; y++) {
+              cv::Vec3b *colorRow = maskedInput.ptr<cv::Vec3b>(y);
+              const uchar *maskRow = mask.ptr<uchar>(y);
+
+              for (int x = 0; x < maskedInput.cols; x++) {
+                if (maskRow[x] == 0) {
+                  // Background pixel - set to black
+                  colorRow[x] = cv::Vec3b(0, 0, 0);
+                }
+              }
+            }
+            gem.shapeMask = maskedInput;
+          } else {
+            gem.shapeMask = shapeRegion.clone();
+          }
+        } else {
+          gem.shapeMask = shapeRegion.clone();
+        }
+
         gem.closestType = GemType::UNKNOWN;
         gem.matchedThreshold = (gem.type != GemType::UNKNOWN);
 

@@ -27,6 +27,10 @@ const cv::Scalar BOT_OTHER_MATCH_LINE_COLOR =
     cv::Scalar(0, 0, 255); // Red - other matches
 const int BOT_MATCH_LINE_THICKNESS = 2;
 
+// Gradient matching debug visualization
+const bool DEBUG_GRADIENT_MATCHING =
+    false; // Show when gradient fallback is used
+
 // Auto-play settings
 const bool BOT_STOP_AFTER_SUPERNOVA_FOUND =
     true; // Stop bot when supernova move is detected
@@ -61,25 +65,31 @@ const bool WRITE_EXTRACTED_ASSETS_TO_DISK =
 // adjusted via UI) Note: FINAL threshold is hard-coded minimum before returning
 // UNKNOWN type
 const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT =
-    90; // Default search threshold (0-100) - shown in UI
+    100; // Default search threshold (0-100) - shown in UI
+
+// Gradient matching threshold (0-100) - used for star overlay gems
+// Lower than color threshold because gradients are more robust but noisier
+// This is the minimum confidence required to classify a gem using gradient
+// matching when color matching fails
+const int GEM_MATCH_GRADIENT_THRESHOLD_PERCENT = 100; // 75% vs 90% for color
 
 // Per-color final thresholds (0-100) - classification threshold
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_BLUE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_GREEN = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_PURPLE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_RED = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_WHITE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW = 60;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_BLUE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_GREEN = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_PURPLE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_RED = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_WHITE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW = 1;
 
 // Star gem final thresholds (0-100) - used for special gems (STAR, SUPERNOVA)
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_BLUE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_GREEN = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_ORANGE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_PURPLE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_RED = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_WHITE = 60;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_YELLOW = 60;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_BLUE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_GREEN = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_ORANGE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_PURPLE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_RED = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_WHITE = 1;
+const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_YELLOW = 1;
 
 // Internal thresholds for squared-distance comparison (pre-sqrt)
 // These ensure the final sqrt-converted percentages match the config values

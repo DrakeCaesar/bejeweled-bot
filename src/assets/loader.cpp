@@ -12,12 +12,14 @@ static FrameProcessing::MaskStorage s_masks;
 static FrameProcessing::LabMaskStorage s_labMasks; // Legacy interleaved format
 static PlanarLabMaskStorage
     s_planarLabMasks; // Planar format: LLL...AAA...BBB...
+static FrameProcessing::GradientMaskStorage s_gradientMasks; // Gradient magnitude
 static FrameProcessing::AlphaMaskStorage s_alphaMasks;
 static FrameProcessing::RingMaskStorage s_ringMasks;
 static FrameProcessing::HypercubeMaskStorage s_hypercubeMasks;
 static FrameProcessing::HypercubeLabMaskStorage
     s_hypercubeLabMasks;                                        // Legacy format
 static HypercubePlanarLabMaskStorage s_hypercubePlanarLabMasks; // Planar format
+static HypercubeGradientMaskStorage s_hypercubeGradientMasks;    // Gradient magnitude
 static FrameProcessing::HypercubeAlphaMaskStorage s_hypercubeAlphaMasks;
 static bool s_loaded = false;
 static cv::Mat s_emptyMask;
@@ -198,9 +200,21 @@ bool LoadGem(const std::string &assetsPath) {
     // Convert to planar format for SIMD optimization
     s_planarLabMasks[gemIndex][0] = ConvertToPlanarLab(s_labMasks[gemIndex][0]);
 
-    // Compute bitmask for SIMD optimization
-    GetBitmaskStorage()[gemIndex][0] =
+    // Compute bitmask for SIMD optimization and count active pixels
+    auto [bitmask, pixelCount] =
         ComputeBitmaskFromLabMask(s_labMasks[gemIndex][0]);
+    GetBitmaskStorage()[gemIndex][0] = bitmask;
+    GetMaskPixelCountStorage()[gemIndex][0] = pixelCount;
+
+    // Generate gradient image from the processed color image
+    s_gradientMasks[gemIndex][0] =
+        FrameProcessing::GenerateGradientImage(s_masks[gemIndex][0]);
+    if (gemIndex == 0) { // Only print for first gem type
+      std::cout << "Generated gradient for static gem: " << GemTypeToString(type)
+                << " size=" << s_gradientMasks[gemIndex][0].size()
+                << " channels=" << s_gradientMasks[gemIndex][0].channels()
+                << " type=" << s_gradientMasks[gemIndex][0].type() << std::endl;
+    }
   }
 
   s_staticColorsLoaded = true;
@@ -261,8 +275,17 @@ bool LoadGemAnimation(const std::string &assetsPath, GemType type) {
           ConvertToPlanarLab(s_labMasks[gemIndex][frameIndex]);
 
       // Compute bitmask for SIMD optimization
-      GetBitmaskStorage()[gemIndex][frameIndex] =
+      auto [bitmask, pixelCount] =
           ComputeBitmaskFromLabMask(s_labMasks[gemIndex][frameIndex]);
+      GetBitmaskStorage()[gemIndex][frameIndex] = bitmask;
+      GetMaskPixelCountStorage()[gemIndex][frameIndex] = pixelCount;
+
+      // Generate gradient image from the processed color image
+      s_gradientMasks[gemIndex][frameIndex] =
+          FrameProcessing::GenerateGradientImage(s_masks[gemIndex][frameIndex]);
+      if (gemIndex == 0 && frameIndex % 10 == 0) { // Print every 10 frames
+        std::cout << "  Generated gradient frame " << frameIndex << std::endl;
+      }
 
       frameIndex++;
     }
@@ -313,8 +336,14 @@ bool LoadHypercube(const std::string &assetsPath) {
           ConvertToPlanarLab(s_hypercubeLabMasks[frameIndex]);
 
       // Compute bitmask for SIMD optimization
-      GetHypercubeBitmaskStorage()[frameIndex] =
+      auto [bitmask, pixelCount] =
           ComputeBitmaskFromLabMask(s_hypercubeLabMasks[frameIndex]);
+      GetHypercubeBitmaskStorage()[frameIndex] = bitmask;
+      GetHypercubeMaskPixelCountStorage()[frameIndex] = pixelCount;
+
+      // Generate gradient image from the processed color image
+      s_hypercubeGradientMasks[frameIndex] =
+          FrameProcessing::GenerateGradientImage(s_hypercubeMasks[frameIndex]);
 
       frameIndex++;
     }
@@ -348,6 +377,17 @@ bool LoadAllImages(const std::string &assetsPath, int resolution) {
 
   std::cout << "Precomputed " << totalRefImages
             << " bitmasks for SIMD optimization" << std::endl;
+
+  // Verify gradient images were generated correctly
+  const cv::Mat &testGradient = GetGradientMask(GemType::RED, 0);
+  if (testGradient.empty()) {
+    std::cerr << "ERROR: Gradient images not generated!" << std::endl;
+    return false;
+  } else {
+    std::cout << "✓ Gradient images generated successfully (size: "
+              << testGradient.size() << ", channels: " << testGradient.channels()
+              << ")" << std::endl;
+  }
 
   return true;
 }
@@ -435,6 +475,22 @@ const cv::Mat &GetPlanarLabMask(GemType type, int frameIndex) {
     return s_emptyMask;
   }
   return s_planarLabMasks[gemIndex][frameIndex];
+}
+
+const cv::Mat &GetGradientMask(GemType type, int frameIndex) {
+  if (type == GemType::HYPERCUBE) {
+    if (frameIndex < 0 || frameIndex >= HYPERCUBE_FRAMES) {
+      return s_emptyMask;
+    }
+    return s_hypercubeGradientMasks[frameIndex];
+  }
+
+  int gemIndex = GemTypeToIndex(type);
+  if (gemIndex < 0 || frameIndex < 0 || frameIndex >= FRAMES_PER_GEM) {
+    return s_emptyMask;
+  }
+
+  return s_gradientMasks[gemIndex][frameIndex];
 }
 
 int GetFrameCount(GemType type) {

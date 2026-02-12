@@ -2,6 +2,7 @@
 #include "assets/loader.h"
 #include "color_similarity.h"
 #include "config.h"
+#include "gradient_classifier.h"
 #include <cmath>
 #include <opencv2/opencv.hpp>
 
@@ -307,6 +308,70 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
     return GemType::UNKNOWN;
   }
 
+  // ==================== Debug: Force Gradient-Only Mode ====================
+  if (ShapeParams::forceGradientOnly) {
+    // Helper to get per-color final threshold (same logic as gem_detector)
+    auto GetFinalThreshold = [](GemType type) -> int {
+      switch (type) {
+      case GemType::BLUE:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_BLUE;
+      case GemType::GREEN:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_GREEN;
+      case GemType::ORANGE:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE;
+      case GemType::PURPLE:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_PURPLE;
+      case GemType::RED:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_RED;
+      case GemType::WHITE:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_WHITE;
+      case GemType::YELLOW:
+        return Config::GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW;
+      default:
+        // For UNKNOWN, EMPTY, HYPERCUBE, use lowest threshold
+        return 1;
+      }
+    };
+
+    // Directly call gradient classifier, bypassing all color matching
+    GemType result = ClassifyGemByGradient(processedImage, gemRow, gemCol,
+                                             outBestMatch, outBestFrame);
+
+    // Apply final per-color threshold (like gem_detector does)
+    // This ensures gradient-only mode respects the same thresholds
+    if (result != GemType::UNKNOWN && outBestMatch) {
+      int finalThreshold = GetFinalThreshold(result);
+      if (*outBestMatch < finalThreshold / 100.0f) {
+        result = GemType::UNKNOWN;
+        if (outBestFrame)
+          *outBestFrame = -1;
+      }
+    }
+
+    // Generate debug visualization if needed
+    if (needDebugMap && result != GemType::UNKNOWN && outBestFrame &&
+        *outBestFrame >= 0) {
+      const cv::Mat &refImageLab = MaskLoader::GetLabMask(result, *outBestFrame);
+      const cv::Mat &refImageBgr = MaskLoader::GetMask(result, *outBestFrame);
+      const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(result, *outBestFrame);
+      if (!refImageLab.empty()) {
+        GenerateDebugVisualization(processedImage, processedImageLab,
+                                   refImageLab, alphaMask, refImageBgr,
+                                   result, *outBestFrame);
+      }
+    }
+
+    // std::cout << "[GRADIENT-ONLY] Classified gem at (" << gemRow << "," <<
+    // gemCol
+    //           << ") as " << GemTypeToString(result)
+    //           << " with confidence " << (outBestMatch ? *outBestMatch *
+    //           100.0f : 0.0f) << "%"
+    //           << std::endl;
+
+    return result;
+  }
+  // ==================== End Gradient-Only Mode ====================
+
   // Initialize planar mat pool on first use for this thread
   if (!g_planarMatPool.initialized) {
     g_planarMatPool.Initialize(processedImage.cols, processedImage.rows);
@@ -358,6 +423,8 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
   thread_local int scoreCache[MAX_CACHE_SIZE];
   thread_local bool checkedFlags[MAX_CACHE_SIZE];
   std::fill(std::begin(checkedFlags), std::end(checkedFlags), false);
+
+  // ==================== Color Matching Phases ====================
 
   // Phase 0: Temporal coherence - check cached match and next animation frame
   if (lastType != GemType::UNKNOWN && lastFrame >= 0) {
@@ -440,6 +507,49 @@ GemType ClassifyGemByShape(const cv::Mat &processedImage,
                              outBestFrame, needDebugMap, processedImage,
                              processedImageLab);
       }
+    }
+  }
+
+  // ==================== Gradient Fallback Phase ====================
+
+  // Phase 3: Gradient fallback - if color matching failed, try gradient matching
+  // This handles star overlay gems where color is altered but edges remain stable
+  if (bestScore < threshold && bestScore > 0) {
+    float gradientMatch;
+    int gradientFrame;
+    GemType gradientType = ClassifyGemByGradient(
+        processedImage, gemRow, gemCol, &gradientMatch, &gradientFrame);
+
+    // Only use gradient result if it's more confident than color matching
+    // and meets the gradient-specific threshold
+    if (gradientType != GemType::UNKNOWN &&
+        gradientMatch >= Config::GEM_MATCH_GRADIENT_THRESHOLD_PERCENT / 100.0f &&
+        gradientMatch > ConvertScoreToPercentage(bestScore)) {
+      // Use gradient result - update both color and gradient caches
+      cache.type = gradientType;
+      cache.frame = gradientFrame;
+
+      if (outBestMatch)
+        *outBestMatch = gradientMatch;
+      if (outBestFrame)
+        *outBestFrame = gradientFrame;
+
+      // Generate debug visualization using the gradient-matched reference
+      if (needDebugMap) {
+        const cv::Mat &refImageLab =
+            MaskLoader::GetLabMask(gradientType, gradientFrame);
+        const cv::Mat &refImageBgr =
+            MaskLoader::GetMask(gradientType, gradientFrame);
+        const cv::Mat &alphaMask =
+            MaskLoader::GetAlphaMask(gradientType, gradientFrame);
+        if (!refImageLab.empty()) {
+          GenerateDebugVisualization(processedImage, processedImageLab,
+                                     refImageLab, alphaMask, refImageBgr,
+                                     gradientType, gradientFrame);
+        }
+      }
+
+      return gradientType;
     }
   }
 

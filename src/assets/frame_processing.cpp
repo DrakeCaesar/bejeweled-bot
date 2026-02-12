@@ -109,4 +109,38 @@ void ProcessSingleFrame(const cv::Mat &colorRoi, const cv::Mat &maskRoi,
   outLab = labFrame;
 }
 
+cv::Mat GenerateGradientImage(const cv::Mat& colorImage) {
+  if (colorImage.empty()) {
+    return cv::Mat();
+  }
+
+  // Convert to grayscale
+  cv::Mat gray;
+  if (colorImage.channels() == 3) {
+    cv::cvtColor(colorImage, gray, cv::COLOR_BGR2GRAY);
+  } else {
+    gray = colorImage.clone();
+  }
+
+  // Apply Gaussian blur to reduce noise
+  cv::GaussianBlur(gray, gray, cv::Size(3, 3), 0);
+
+  // Compute Sobel gradients in x and y directions
+  cv::Mat gradX, gradY;
+  cv::Sobel(gray, gradX, CV_32F, 1, 0, 3);
+  cv::Sobel(gray, gradY, CV_32F, 0, 1, 3);
+
+  // Compute gradient magnitude: sqrt(dx^2 + dy^2)
+  cv::Mat magnitude;
+  cv::magnitude(gradX, gradY, magnitude);
+
+  // Normalize to 0-255 range
+  cv::normalize(magnitude, magnitude, 0, 255, cv::NORM_MINMAX);
+  magnitude.convertTo(magnitude, CV_8U);
+
+  // Return as single-channel planar format (GGG... only)
+  // No need to duplicate across 3 planes for gradients
+  return magnitude.reshape(0, 1);
+}
+
 } // namespace FrameProcessing

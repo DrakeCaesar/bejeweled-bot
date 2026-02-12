@@ -44,6 +44,12 @@ using PlanarLabMaskStorage =
 using LabMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
+// Storage for gradient magnitude images (single channel, planar format).
+// Gradient images are computed from grayscale using Sobel operator and stored
+// in optimized single-channel planar format (GGG... only, no channel duplication).
+using GradientMaskStorage =
+    std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+
 // Storage for binary alpha masks: [gem_type][frame_index] -> grayscale mask
 using AlphaMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
@@ -59,6 +65,13 @@ using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubePlanarLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+using HypercubeGradientMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+
+// Storage for mask pixel counts (for score normalization)
+// Indexed by [gem_type][frame_index] -> number of active pixels
+using MaskPixelCountStorage =
+    std::array<std::array<int, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+using HypercubeMaskPixelCountStorage = std::array<int, HYPERCUBE_FRAMES>;
 
 /**
  * Load all gem reference images from the assets folder.
@@ -148,6 +161,29 @@ const cv::Mat &GetLabMask(GemType type, int frameIndex);
  * found
  */
 const cv::Mat &GetPlanarLabMask(GemType type, int frameIndex);
+
+/**
+ * Get a specific gradient magnitude reference image for a gem type and frame.
+ * Gradient images are pre-computed from grayscale using Sobel operator and stored
+ * in optimized single-channel planar format (GGG... only).
+ *
+ * @param type The gem type (RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, WHITE,
+ * HYPERCUBE)
+ * @param frameIndex Frame index 0-20 (or 0-59 for HYPERCUBE)
+ * @return The gradient magnitude image in planar format, or empty Mat if not
+ * found
+ */
+const cv::Mat &GetGradientMask(GemType type, int frameIndex);
+
+/**
+ * Get the mask pixel count for normalization.
+ * This is needed because different gem types have different mask sizes.
+ *
+ * @param type Gem type
+ * @param frameIndex Frame index
+ * @return Number of active (non-zero) pixels in the mask, or 0 if not loaded
+ */
+int GetMaskPixelCount(GemType type, int frameIndex);
 
 /**
  * Get the number of frames for a given gem type.

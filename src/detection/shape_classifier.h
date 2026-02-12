@@ -20,6 +20,10 @@ inline std::atomic<int> debugStage{Config::DEBUG_STAGE_DEFAULT};
 inline std::atomic<int> matchThreshold{
     Config::GEM_MATCH_SEARCH_THRESHOLD_PERCENT};
 
+// Debug flag: Force gradient-only classification (bypass color matching)
+// Set to true to test gradient classifier in isolation
+inline bool forceGradientOnly = true;
+
 void CreateTrackbars(const std::string &windowName);
 } // namespace ShapeParams
 

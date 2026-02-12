@@ -2,6 +2,7 @@
 #include "assets/loader.h"
 #include "bot/bot_main.h"
 #include "detection/shape_classifier.h"
+#include "detection/gradient_classifier.h"
 #include <array>
 #include <iomanip>
 #include <sstream>
@@ -156,15 +157,136 @@ void DrawShapeOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid,
       bool isKnown =
           (gem.type != GemType::UNKNOWN && gem.type != GemType::EMPTY);
 
-      // Draw the shape mask if available
-      if (!gem.shapeMask.empty()) {
+      int stage = ShapeParams::debugStage.load();
+
+      // Check if we should show gradient debug visualization
+      // (stages 2-4 with gradient-only mode or when gradient was used)
+      bool showGradientDebug = (stage >= 2 && stage <= 4) &&
+                               (ShapeParams::forceGradientOnly ||
+                                gem.type == GemType::UNKNOWN);
+
+      // Draw the shape mask or gradient debug
+      if (!gem.shapeMask.empty() || showGradientDebug) {
         // Check if the mask is grayscale or color
         bool isColorMask = (gem.shapeMask.channels() == 3);
         int stage = ShapeParams::debugStage.load();
 
         cv::Mat maskColored;
 
-        if (isColorMask) {
+        // Check if we should show gradient debug visualization
+        // (stages 2-4 with gradient-only mode or when gradient was used)
+        bool showGradientDebug = (stage >= 2 && stage <= 4) &&
+                                 (ShapeParams::forceGradientOnly ||
+                                  gem.type == GemType::UNKNOWN);
+
+        if (showGradientDebug) {
+          // Generate gradient debug visualization on-demand for this cell
+          if (gem.bestMatchFrame >= 0 && gem.type != GemType::UNKNOWN) {
+            // Get the matched reference gradient
+            const cv::Mat &refGradient = MaskLoader::GetGradientMask(gem.type, gem.bestMatchFrame);
+            const cv::Mat &alphaMask = MaskLoader::GetAlphaMask(gem.type, gem.bestMatchFrame);
+            const cv::Mat &inputColor = gem.shapeMask; // This is the captured gem
+
+            if (!refGradient.empty() && !inputColor.empty() && !alphaMask.empty()) {
+              // Create visualization for this cell based on stage
+              switch (stage) {
+              case 2: // Show reference gradient
+                {
+                  cv::Mat refMat = refGradient.row(0).reshape(0, offsetRoi.height);
+                  cv::cvtColor(refMat, maskColored, cv::COLOR_GRAY2BGR);
+                  if (maskColored.size() != offsetRoi.size()) {
+                    cv::resize(maskColored, maskColored, offsetRoi.size(), 0, 0, cv::INTER_NEAREST);
+                  }
+                }
+                break;
+              case 3: // Show captured gradient
+                {
+                  // Apply alpha mask to captured image first
+                  cv::Mat maskedInput = inputColor.clone();
+                  for (int y = 0; y < maskedInput.rows; y++) {
+                    cv::Vec3b* colorRow = maskedInput.ptr<cv::Vec3b>(y);
+                    const uchar* maskRow = alphaMask.ptr<uchar>(y);
+                    for (int x = 0; x < maskedInput.cols; x++) {
+                      if (maskRow[x] == 0) {
+                        colorRow[x] = cv::Vec3b(0, 0, 0);
+                      }
+                    }
+                  }
+
+                  // Generate gradient from masked captured image
+                  cv::Mat inputGradient = ConvertToPlanarGradient(maskedInput);
+                  cv::Mat capturedMat = inputGradient.row(0).reshape(0, offsetRoi.height);
+
+                  // Normalize to match reference gradient range (0-255)
+                  cv::normalize(capturedMat, capturedMat, 0, 255, cv::NORM_MINMAX);
+
+                  cv::cvtColor(capturedMat, maskColored, cv::COLOR_GRAY2BGR);
+                  if (maskColored.size() != offsetRoi.size()) {
+                    cv::resize(maskColored, maskColored, offsetRoi.size(), 0, 0, cv::INTER_NEAREST);
+                  }
+                }
+                break;
+              case 4: // Show gradient diff map
+                {
+                  // Generate gradients
+                  cv::Mat inputGradient = ConvertToPlanarGradient(inputColor);
+                  cv::Mat capturedMat = inputGradient.row(0).reshape(0, offsetRoi.height);
+                  cv::Mat refMat = refGradient.row(0).reshape(0, offsetRoi.height);
+
+                  // Create diff map
+                  cv::Mat diff = cv::Mat::zeros(offsetRoi.height, offsetRoi.width, CV_8U);
+
+                  // Compute absolute difference
+                  for (int y = 0; y < capturedMat.rows; y++) {
+                    const uchar* capRow = capturedMat.ptr<uchar>(y);
+                    const uchar* refRow = refMat.ptr<uchar>(y);
+                    const uchar* maskRow = alphaMask.empty() ? nullptr : alphaMask.ptr<uchar>(y);
+                    uchar* diffRow = diff.ptr<uchar>(y);
+
+                    for (int x = 0; x < capturedMat.cols; x++) {
+                      if (maskRow && maskRow[x] == 0) {
+                        diffRow[x] = 0;
+                      } else {
+                        int d = abs(int(capRow[x]) - int(refRow[x]));
+                        // Scale for visibility (0-255)
+                        diffRow[x] = cv::saturate_cast<uchar>(d * 4);
+                      }
+                    }
+                  }
+
+                  // Convert to color
+                  cv::cvtColor(diff, maskColored, cv::COLOR_GRAY2BGR);
+                  if (maskColored.size() != offsetRoi.size()) {
+                    cv::resize(maskColored, maskColored, offsetRoi.size(), 0, 0, cv::INTER_NEAREST);
+                  }
+                }
+                break;
+              case 5: // Overlay (similar to color stage 4)
+                {
+                  cv::Mat refMat = refGradient.row(0).reshape(0, offsetRoi.height);
+                  cv::Mat refColor;
+                  cv::cvtColor(refMat, refColor, cv::COLOR_GRAY2BGR);
+
+                  cv::Mat input = gem.shapeMask.clone();
+                  if (input.size() != offsetRoi.size()) {
+                    cv::resize(input, input, offsetRoi.size(), 0, 0, cv::INTER_NEAREST);
+                  }
+                  if (refColor.size() != offsetRoi.size()) {
+                    cv::resize(refColor, refColor, offsetRoi.size(), 0, 0, cv::INTER_NEAREST);
+                  }
+
+                  // Blend 50/50 like color debug
+                  cv::addWeighted(input, 0.5, refColor, 0.5, 0, maskColored);
+                }
+                break;
+              }
+            } else {
+              maskColored = cv::Mat::zeros(offsetRoi.size(), CV_8UC3);
+            }
+          } else {
+            maskColored = cv::Mat::zeros(offsetRoi.size(), CV_8UC3);
+          }
+        } else if (isColorMask) {
           // New color-based system: shapeMask is already a BGR image
           // Apply alpha mask to captured gem for visualization
           cv::Mat capturedGem = gem.shapeMask.clone();

@@ -22,6 +22,13 @@ using MaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 using LabMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+
+// Storage for gradient magnitude images (single channel, planar format)
+// Gradient images are computed from grayscale and stored in planar format for
+// SIMD compatibility using GGG... (single channel repeated 3x for compatibility)
+using GradientMaskStorage =
+    std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
+
 using AlphaMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 using RingMaskStorage =
@@ -30,6 +37,10 @@ using HypercubeMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
+
+// Storage for hypercube gradient magnitude images (single channel, planar format)
+// Using optimized single-channel format (GGG... only, no duplication)
+using HypercubeGradientMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 // Resolution-dependent kernel sizes (set by application)
 // Can be adjusted per resolution if needed
@@ -81,5 +92,9 @@ void ProcessSingleFrame(const cv::Mat &colorRoi, const cv::Mat &maskRoi,
                         const FrameProcessingParams &params, cv::Mat &outColor,
                         cv::Mat &outMask, cv::Mat &outRingMask,
                         cv::Mat &outLab);
+
+// Generate gradient magnitude image from color image
+// Uses Sobel operator and returns single-channel planar format image (GGG... only)
+cv::Mat GenerateGradientImage(const cv::Mat &colorImage);
 
 } // namespace FrameProcessing
