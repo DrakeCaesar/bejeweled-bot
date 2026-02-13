@@ -21,23 +21,29 @@ int GetInterpolationFlag(int method) {
 } // namespace TexelOffsetConfig
 
 cv::Mat ApplyHalfTexelOffset(const cv::Mat &image, int interpolation) {
-  if (image.empty()) {
-    return cv::Mat();
-  }
+
+  std::cout << "Applying half-texel offset: OFFSET_X="
+            << TexelOffsetConfig::OFFSET_X
+            << " OFFSET_Y=" << TexelOffsetConfig::OFFSET_Y
+            << " SCALE_X=" << TexelOffsetConfig::SCALE_X
+            << " SCALE_Y=" << TexelOffsetConfig::SCALE_Y << std::endl;
 
   cv::Mat shifted;
-  cv::Mat transform =
-      (cv::Mat_<double>(2, 3) << 1.0, 0.0, TexelOffsetConfig::OFFSET_X, 0.0,
-       1.0, TexelOffsetConfig::OFFSET_Y);
+  double centerX = (image.cols - 1) * 0.5;
+  double centerY = (image.rows - 1) * 0.5;
+  double scaleX = TexelOffsetConfig::SCALE_X;
+  double scaleY = TexelOffsetConfig::SCALE_Y;
+  double translateX = TexelOffsetConfig::OFFSET_X + (1.0 - scaleX) * centerX;
+  double translateY = TexelOffsetConfig::OFFSET_Y + (1.0 - scaleY) * centerY;
+
+  cv::Mat transform = (cv::Mat_<double>(2, 3) << scaleX, 0.0, translateX, 0.0,
+                       scaleY, translateY);
   cv::warpAffine(image, shifted, transform, image.size(), interpolation,
                  cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
   return shifted;
 }
 
 cv::Mat BuildRingMask(const cv::Mat &alphaMask) {
-  if (alphaMask.empty()) {
-    return cv::Mat();
-  }
 
   cv::Mat outer;
   cv::Mat outerKernel =
@@ -84,10 +90,6 @@ void ProcessSingleFrame(const cv::Mat &colorRoi, const cv::Mat &maskRoi,
     colorFrame = ApplyHalfTexelOffset(
         colorFrame, TexelOffsetConfig::GetInterpolationFlag(
                         TexelOffsetConfig::COLOR_INTERPOLATION));
-    maskFrame = ApplyHalfTexelOffset(
-        maskFrame, TexelOffsetConfig::GetInterpolationFlag(
-                       TexelOffsetConfig::ALPHA_INTERPOLATION));
-    ringMask = BuildRingMask(maskFrame);
   }
 
   for (int y = 0; y < colorFrame.rows; y++) {
@@ -109,10 +111,7 @@ void ProcessSingleFrame(const cv::Mat &colorRoi, const cv::Mat &maskRoi,
   outLab = labFrame;
 }
 
-cv::Mat GenerateGradientImage(const cv::Mat& colorImage) {
-  if (colorImage.empty()) {
-    return cv::Mat();
-  }
+cv::Mat GenerateGradientImage(const cv::Mat &colorImage) {
 
   // Convert to grayscale
   cv::Mat gray;

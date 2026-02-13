@@ -25,7 +25,8 @@ using LabMaskStorage =
 
 // Storage for gradient magnitude images (single channel, planar format)
 // Gradient images are computed from grayscale and stored in planar format for
-// SIMD compatibility using GGG... (single channel repeated 3x for compatibility)
+// SIMD compatibility using GGG... (single channel repeated 3x for
+// compatibility)
 using GradientMaskStorage =
     std::array<std::array<cv::Mat, FRAMES_PER_GEM>, NUM_GEM_TYPES>;
 
@@ -38,8 +39,8 @@ using HypercubeLabMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeAlphaMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 using HypercubeRingMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
-// Storage for hypercube gradient magnitude images (single channel, planar format)
-// Using optimized single-channel format (GGG... only, no duplication)
+// Storage for hypercube gradient magnitude images (single channel, planar
+// format) Using optimized single-channel format (GGG... only, no duplication)
 using HypercubeGradientMaskStorage = std::array<cv::Mat, HYPERCUBE_FRAMES>;
 
 // Resolution-dependent kernel sizes (set by application)
@@ -58,8 +59,7 @@ struct FrameProcessingParams {
 // Other values are constant: threshold=254, kernelShape=ELLIPSE,
 // colorInterp=LINEAR, alphaInterp=NEAREST
 inline FrameProcessingParams GetStandardGemParams() {
-  return {kStandardGemKernelSize, true}; // applyHalfTexelOffset controlled via
-                                         // TexelOffsetConfig::OFFSET_X/Y
+  return {kStandardGemKernelSize, false};
 }
 
 inline FrameProcessingParams GetStaticColorParams() {
@@ -75,6 +75,9 @@ namespace TexelOffsetConfig {
 // For 600p/1200p: 0.5, 0.5 | For 768p: -0.5, -0.5
 inline double OFFSET_X = 0.5;
 inline double OFFSET_Y = 0.5;
+// Subtle texel scale (resolution-dependent, set by application)
+inline double SCALE_X = 129 / 128.0;
+inline double SCALE_Y = 129 / 128.0;
 constexpr int COLOR_INTERPOLATION = 1;
 constexpr int ALPHA_INTERPOLATION = 0;
 
@@ -94,7 +97,8 @@ void ProcessSingleFrame(const cv::Mat &colorRoi, const cv::Mat &maskRoi,
                         cv::Mat &outLab);
 
 // Generate gradient magnitude image from color image
-// Uses Sobel operator and returns single-channel planar format image (GGG... only)
+// Uses Sobel operator and returns single-channel planar format image (GGG...
+// only)
 cv::Mat GenerateGradientImage(const cv::Mat &colorImage);
 
 } // namespace FrameProcessing

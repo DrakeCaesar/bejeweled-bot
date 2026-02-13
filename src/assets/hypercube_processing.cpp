@@ -88,10 +88,6 @@ void ProcessHypercubeFrame(const cv::Mat &colorSheet, const cv::Mat &maskSheet,
         processedColor,
         FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(
             FrameProcessing::TexelOffsetConfig::COLOR_INTERPOLATION));
-    processedMask = FrameProcessing::ApplyHalfTexelOffset(
-        processedMask,
-        FrameProcessing::TexelOffsetConfig::GetInterpolationFlag(
-            FrameProcessing::TexelOffsetConfig::ALPHA_INTERPOLATION));
   }
 
   cv::cvtColor(processedColor, outLab, cv::COLOR_BGR2Lab);
