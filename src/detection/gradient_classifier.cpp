@@ -171,39 +171,41 @@ GemType ClassifyGemByGradient(const cv::Mat &processedImage, int gemRow,
     }
   }
 
-  // Phase 1: Check only static frames (frame 0) for debug purposes
+  // Phase 1: Check static frame 0 and first animated frame 1 for debugging
   // This makes it easier to understand what's happening during debugging
   for (int i = 0; i < numStaticGemTypes; i++) {
     GemType type = staticGemTypes[i];
-    const int STATIC_FRAME = 0; // Only check the static frame
+    const int debugFrames[] = {0, 1};
 
-    const cv::Mat &refGradient =
-        MaskLoader::GetGradientMask(type, STATIC_FRAME);
-    if (refGradient.empty()) {
-      continue;
-    }
-
-    const auto &bitmask = MaskLoader::GetBitmask(type, STATIC_FRAME);
-    int score =
-        CalculateGradientSimilarity(processedImagePlanarGradient, refGradient,
-                                    bitmask, imageWidth, imageHeight);
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestType = type;
-      bestFrame = STATIC_FRAME;
-    }
-
-    // Check for early exit if above gradient search threshold
-    if (score >= threshold) {
-      cache.type = type;
-      cache.frame = STATIC_FRAME;
-      if (outBestMatch) {
-        *outBestMatch = static_cast<float>(score) / 10000.0f;
+    for (int frameIndex : debugFrames) {
+      const cv::Mat &refGradient =
+          MaskLoader::GetGradientMask(type, frameIndex);
+      if (refGradient.empty()) {
+        continue;
       }
-      if (outBestFrame)
-        *outBestFrame = STATIC_FRAME;
-      return type;
+
+      const auto &bitmask = MaskLoader::GetBitmask(type, frameIndex);
+      int score =
+          CalculateGradientSimilarity(processedImagePlanarGradient, refGradient,
+                                      bitmask, imageWidth, imageHeight);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestType = type;
+        bestFrame = frameIndex;
+      }
+
+      // Check for early exit if above gradient search threshold
+      if (score >= threshold) {
+        cache.type = type;
+        cache.frame = frameIndex;
+        if (outBestMatch) {
+          *outBestMatch = static_cast<float>(score) / 10000.0f;
+        }
+        if (outBestFrame)
+          *outBestFrame = frameIndex;
+        return type;
+      }
     }
   }
 
