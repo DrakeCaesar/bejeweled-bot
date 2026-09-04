@@ -8,6 +8,7 @@
 #include "config.h"
 #include "detection/color_similarity.h"
 #include "detection/gem_detector.h"
+#include "detection/gradient_classifier.h"
 #include "detection/process_thread.h"
 #include "rendering/control_panel.h"
 #include "rendering/overlay.h"
@@ -248,6 +249,9 @@ bool Application::Initialize() {
   // Create display window
   cv::namedWindow(Config::DISPLAY_WINDOW_NAME,
                   cv::WINDOW_AUTOSIZE | cv::WINDOW_KEEPRATIO);
+
+  // Create trackbars for gradient parameters
+  GradientParams::CreateTrackbars(Config::DISPLAY_WINDOW_NAME);
 
   // Mouse click selection for recording cell
   g_gameWindow = gameWindow_;

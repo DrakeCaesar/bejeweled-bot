@@ -6,13 +6,14 @@
 
 /**
  * Calculate similarity between two gradient magnitude images.
- * Uses absolute differences with thresholding, more robust for gradients than
- * squared differences.
+ * Uses bidirectional subtraction: counts both missing AND extra edges.
+ * Score = (total_edges - missing_edges - extra_edges) / total_edges * 10000
  *
- * Scoring approach:
- * 1. Calculate absolute differences between captured and reference gradients
- * 2. Only count pixels with differences >= 8 as "significantly different"
- * 3. Score = (ratio_of_similar_pixels * 10000) - penalty_based_on_avg_diff
+ * For gradient images (white=edges, black=flat):
+ * - missing_edges = max(0, reference - captured)  // Edges we should have but don't
+ * - extra_edges = max(0, captured - reference)    // Edges we have but shouldn't
+ *
+ * Both missing and extra edges are bad for matching!
  *
  * @param capturedGradient Single-channel planar gradient (GGG... format)
  * @param referenceGradient Single-channel planar reference gradient
@@ -31,6 +32,17 @@ int CalculateGradientSimilarity(const cv::Mat &capturedGradient,
  * Call once before using CalculateGradientSimilarity.
  */
 void InitializeGradientSimilarityLut();
+
+/**
+ * Set edge detection threshold (0-255, higher = stricter edge definition).
+ * Pixels >= threshold in reference count as expected edges.
+ */
+void SetEdgeThreshold(int threshold);
+
+/**
+ * Get current edge detection threshold.
+ */
+int GetEdgeThreshold();
 
 /**
  * Calculate gradient difference statistics with visualization.
@@ -54,3 +66,24 @@ void CalculateGradientDiffWithVisualization(
     const std::vector<uint64_t> &bitmask, int imageWidth, int imageHeight,
     int diffThreshold, cv::Mat &outDiffImage, int &outTotalDiff,
     int &outPixelCount, int &outSignificantCount);
+
+/**
+ * Create visual debug image showing edge matching.
+ * Shows:
+ * - Black: masked areas
+ * - Gray: correct match
+ * - Yellow: missing edge (should have but doesn't)
+ * - Red: extra edge (shouldn't have but does)
+ *
+ * @param capturedGradient Single-channel planar gradient (GGG... format)
+ * @param referenceGradient Single-channel planar reference gradient
+ * @param bitmask 64-bit masks for 8x8 pixel blocks
+ * @param imageWidth Width of the gradient images
+ * @param imageHeight Height of the gradient images
+ * @param threshold Threshold for what counts as an edge
+ * @return 3-channel BGR debug visualization
+ */
+cv::Mat CreateEdgeMatchVisualization(
+    const cv::Mat &capturedGradient, const cv::Mat &referenceGradient,
+    const std::vector<uint64_t> &bitmask, int imageWidth, int imageHeight,
+    int threshold);

@@ -2,11 +2,21 @@
 
 #include "config.h"
 #include "gem_types.h"
+#include <atomic>
 #include <opencv2/opencv.hpp>
 
 // ============================================================================
 // Gradient Classification - Gradient-based gem matching for star overlay gems
 // ============================================================================
+
+namespace GradientParams {
+// Adjustable edge detection threshold (0-255)
+// Higher values = only brighter pixels count as edges
+inline std::atomic<int> edgeThreshold{60};
+
+// Create trackbars for gradient parameters
+void CreateTrackbars(const std::string& windowName);
+} // namespace GradientParams
 
 /**
  * Classify a gem by comparing its gradient magnitude to reference images.

@@ -8,6 +8,29 @@
 #include <opencv2/opencv.hpp>
 
 // ============================================================================
+// Trackbar Creation for Edge Threshold Adjustment
+// ============================================================================
+
+namespace GradientParams {
+// Trackbar backing variable
+static int edgeThresholdTrack = edgeThreshold.load();
+
+static void OnEdgeThresholdChange(int value, void*) {
+  int v = value;
+  if (v < 0) v = 0;
+  if (v > 255) v = 255;
+  edgeThreshold.store(v);
+  SetEdgeThreshold(v);
+  std::cout << "[GRADIENT] Edge threshold: " << v << "/255" << std::endl;
+}
+
+void CreateTrackbars(const std::string& windowName) {
+  cv::createTrackbar("GradEdgeThresh", windowName, &edgeThresholdTrack, 255,
+                     OnEdgeThresholdChange);
+}
+} // namespace GradientParams
+
+// ============================================================================
 // Gradient Classification - Gradient-based gem matching
 // ============================================================================
 
@@ -56,7 +79,11 @@ cv::Mat ConvertToPlanarGradient(const cv::Mat &bgrImage) {
 namespace {
 // Initialize LUT on first use
 struct GradientLutInit {
-  GradientLutInit() { InitializeGradientSimilarityLut(); }
+  GradientLutInit() {
+    InitializeGradientSimilarityLut();
+    // Initialize edge threshold from parameter
+    SetEdgeThreshold(GradientParams::edgeThreshold.load());
+  }
 };
 static GradientLutInit g_gradientLutInit;
 } // namespace

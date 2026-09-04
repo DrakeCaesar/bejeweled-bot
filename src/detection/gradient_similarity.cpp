@@ -1,13 +1,20 @@
 // ============================================================================
-// Gradient Similarity - Simple absolute difference matching
+// Gradient Similarity - Missing Edge Detection with Threshold
 // ============================================================================
 //
-// Simple and effective approach for gradient matching:
-// 1. Calculate absolute differences between captured and reference gradients
-// 2. Average the differences across all pixels
-// 3. Convert to similarity score (lower avg diff = higher score)
+// For gradient images (white=edges, black=flat):
+// leftover = max(0, reference - captured)
 //
-// This matches the overlay visualization math exactly.
+// This detects MISSING edges - places where reference has gradients
+// but captured doesn't. Very white pixels in leftover drastically lower score.
+//
+// Algorithm:
+// 1. Calculate reference edge energy (sum of white pixels in reference)
+// 2. Calculate leftover: reference - captured, clipped at 0
+// 3. Sum leftover values (how much edge is missing)
+// 4. Score = (ref_energy - leftover) / ref_energy * 10000
+//
+// The more edges missing (bright leftover), the lower the score.
 //
 // ============================================================================
 
@@ -16,15 +23,21 @@
 #include <algorithm>
 #include <cmath>
 
+// Adjustable threshold for what counts as an edge (0-255)
+namespace {
+int g_edgeThreshold = 60; // Default: pixels >= 60/255 count as edges
+}
+
 void InitializeGradientSimilarityLut() {
-  // No LUT needed for simple pixel-by-pixel approach
+  // No LUT needed
 }
 
 int CalculateGradientSimilarity(const cv::Mat& capturedGradient,
                                const cv::Mat& referenceGradient,
                                const std::vector<uint64_t>& bitmask,
                                int imageWidth, int imageHeight) {
-  int64_t totalDiff = 0;
+  int64_t refEnergy = 0;          // Sum of all reference edge pixels
+  int64_t missingEdges = 0;       // Sum of leftover (reference - captured)
   int pixelCount = 0;
 
   const uchar* capturedBase = capturedGradient.ptr<uchar>(0);
@@ -50,9 +63,23 @@ int CalculateGradientSimilarity(const cv::Mat& capturedGradient,
           int pixelIdxInBlock = (y - startY) * 8 + (x - startX);
           if (mask & (1ULL << pixelIdxInBlock)) {
             int pixelOffset = y * imageWidth + x;
-            int diff = std::abs(static_cast<int>(capturedBase[pixelOffset]) -
-                               static_cast<int>(referenceBase[pixelOffset]));
-            totalDiff += diff;
+            int refVal = referenceBase[pixelOffset];
+
+            // Sum reference edge energy (white pixels above threshold)
+            if (refVal >= g_edgeThreshold) {
+              refEnergy += refVal;
+            }
+
+            // Calculate leftover: reference - captured, clipped at 0
+            int capturedVal = capturedBase[pixelOffset];
+            int leftover = refVal - capturedVal;
+            if (leftover > 0) {
+              // Only count significant missing edges (above threshold in ref)
+              if (refVal >= g_edgeThreshold) {
+                missingEdges += leftover;
+              }
+            }
+
             pixelCount++;
           }
         }
@@ -60,18 +87,28 @@ int CalculateGradientSimilarity(const cv::Mat& capturedGradient,
     }
   }
 
-  if (pixelCount == 0) {
-    return 0; // Avoid division by zero
+  if (pixelCount == 0 || refEnergy == 0) {
+    return 0; // Avoid division by zero or no edges to match
   }
 
-  // Calculate average difference normalized by mask size
-  // This ensures fair comparison between gems of different sizes
-  float avgDiffPerPixel = static_cast<float>(totalDiff) / pixelCount;
+  // Calculate score: matched edges = reference energy minus missing edges
+  // The more edges missing, the lower the score
+  float matchedEnergy = static_cast<float>(refEnergy - missingEdges);
+  float score = (matchedEnergy / static_cast<float>(refEnergy)) * 10000.0f;
 
-  // Convert to similarity score (0-10000)
-  // Lower avg diff = higher score
-  // Formula: score = 10000 * (1 - avgDiff/255)
-  float score = 10000.0f * (1.0f - avgDiffPerPixel / 255.0f);
+  // Clamp score to valid range (0-10000)
+  if (score < 0) score = 0;
+  if (score > 10000) score = 10000;
 
   return static_cast<int>(score);
+}
+
+// Set edge detection threshold (0-255, higher = stricter edge definition)
+void SetEdgeThreshold(int threshold) {
+  g_edgeThreshold = std::max(0, std::min(255, threshold));
+}
+
+// Get current edge threshold
+int GetEdgeThreshold() {
+  return g_edgeThreshold;
 }

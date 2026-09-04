@@ -3,6 +3,7 @@
 #include "bot/bot_main.h"
 #include "detection/shape_classifier.h"
 #include "detection/gradient_classifier.h"
+#include "detection/gradient_similarity.h"
 #include <array>
 #include <iomanip>
 #include <sstream>
@@ -226,39 +227,52 @@ void DrawShapeOverlay(cv::Mat &image, const std::vector<std::vector<Gem>> &grid,
                   }
                 }
                 break;
-              case 4: // Show gradient diff map
+              case 4: // Show gradient leftover map (reference - captured)
                 {
                   // Generate gradients
                   cv::Mat inputGradient = ConvertToPlanarGradient(inputColor);
                   cv::Mat capturedMat = inputGradient.row(0).reshape(0, offsetRoi.height);
                   cv::Mat refMat = refGradient.row(0).reshape(0, offsetRoi.height);
 
-                  // Create diff map
-                  cv::Mat diff = cv::Mat::zeros(offsetRoi.height, offsetRoi.width, CV_8U);
+                  // Create leftover map: reference - captured, clipped at 0
+                  cv::Mat leftover = cv::Mat::zeros(offsetRoi.height, offsetRoi.width, CV_8U);
+                  int edgeThreshold = GetEdgeThreshold(); // Get current threshold
 
-                  // Compute absolute difference
                   for (int y = 0; y < capturedMat.rows; y++) {
                     const uchar* capRow = capturedMat.ptr<uchar>(y);
                     const uchar* refRow = refMat.ptr<uchar>(y);
                     const uchar* maskRow = alphaMask.empty() ? nullptr : alphaMask.ptr<uchar>(y);
-                    uchar* diffRow = diff.ptr<uchar>(y);
+                    uchar* leftoverRow = leftover.ptr<uchar>(y);
 
                     for (int x = 0; x < capturedMat.cols; x++) {
                       if (maskRow && maskRow[x] == 0) {
-                        diffRow[x] = 0;
+                        leftoverRow[x] = 0; // Masked area
                       } else {
-                        int d = abs(int(capRow[x]) - int(refRow[x]));
-                        // Scale for visibility (0-255)
-                        diffRow[x] = cv::saturate_cast<uchar>(d * 4);
+                        // Calculate reference - captured, clipped at 0
+                        int leftoverVal = int(refRow[x]) - int(capRow[x]);
+                        if (leftoverVal < 0) leftoverVal = 0;
+
+                        // Only show pixels above edge threshold in reference
+                        if (refRow[x] >= edgeThreshold) {
+                          leftoverRow[x] = cv::saturate_cast<uchar>(leftoverVal);
+                        } else {
+                          leftoverRow[x] = 0; // Below threshold, treat as black
+                        }
                       }
                     }
                   }
 
                   // Convert to color
-                  cv::cvtColor(diff, maskColored, cv::COLOR_GRAY2BGR);
+                  cv::cvtColor(leftover, maskColored, cv::COLOR_GRAY2BGR);
                   if (maskColored.size() != offsetRoi.size()) {
                     cv::resize(maskColored, maskColored, offsetRoi.size(), 0, 0, cv::INTER_NEAREST);
                   }
+
+                  // Add edge threshold text overlay
+                  std::ostringstream oss;
+                  oss << "Edge Thresh: " << edgeThreshold << "/255";
+                  cv::putText(maskColored, oss.str(), cv::Point(5, 20),
+                              cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
                 }
                 break;
               case 5: // Overlay (similar to color stage 4)
