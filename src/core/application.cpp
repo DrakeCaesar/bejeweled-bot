@@ -10,6 +10,7 @@
 #include "detection/gem_detector.h"
 #include "detection/gradient_classifier.h"
 #include "detection/process_thread.h"
+#include "hook/memory_hook.h"
 #include "rendering/control_panel.h"
 #include "rendering/overlay.h"
 #include <iostream>
@@ -310,6 +311,16 @@ bool Application::FindAndSetupGameWindow() {
   std::cout << "Game window found!" << std::endl;
   std::cout << std::endl;
 
+  // Attach memory hook (for direct board-state reads)
+  if (MemoryHook::Attach(gameWindow_)) {
+    std::cout << "Memory hook attached (base 0x" << std::hex
+              << MemoryHook::ModuleBase() << std::dec << ") - press 'M' to "
+              << "dump board state" << std::endl;
+  } else {
+    std::cout << "Memory hook could not attach (board dump unavailable)"
+              << std::endl;
+  }
+
   // Set game window to always on top
   SetWindowAlwaysOnTop(gameWindow_, true);
   std::cout << "Set game window to always on top" << std::endl;
@@ -517,6 +528,9 @@ void Application::HandleKeyboardInput(int key) {
     } else {
       std::cout << "No board analysis available yet" << std::endl;
     }
+  } else if (key == 'm' || key == 'M') {
+    std::cout << "Dumping board memory..." << std::endl;
+    MemoryHook::DumpBoardState();
   } else if (key == 'b' || key == 'B') {
     autoPlayEnabled_ = !autoPlayEnabled_;
     if (autoPlayEnabled_) {
@@ -554,6 +568,9 @@ void Application::Shutdown() {
     CleanupDesktopDuplication(frameData_.dupContext);
     frameData_.dupContext = nullptr;
   }
+
+  // Detach memory hook
+  MemoryHook::Detach();
 
   cv::destroyAllWindows();
 }
