@@ -33,6 +33,8 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 
 # Glob all source files recursively (re-run CMake on changes)
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+# Exclude legacy (capture/classifier/rendering) code from the build.
+list(FILTER SOURCES EXCLUDE REGEX "src/legacy/")
 
 add_executable(bejeweled-bot ${SOURCES})
 

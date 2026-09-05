@@ -1,32 +1,32 @@
 #pragma once
 
-#include "types/frame_data.h"
-#include "types/timing.h"
+#include "bot/board_analysis.h"
 #include <chrono>
-#include <opencv2/opencv.hpp>
-#include <thread>
 #include <windows.h>
 
 // ============================================================================
-// Application - Main application lifecycle management
+// Application - Main application lifecycle (memory-hook mode)
+//
+// The board is read directly from game memory via the memory hook; there is no
+// capture/detection/classification pipeline. Auto-play runs the move logic on
+// the memory board and forwards clicks to the game window.
 // ============================================================================
 
 class Application {
 public:
-  Application();
+  Application() = default;
 
   ~Application();
 
   /**
-   * Initialize the application.
-   * Finds game window, sets up capture, allocates buffers.
-   * @return true if initialization succeeded
+   * Find the game window, attach the memory hook, and determine resolution
+   * (for click coordinate translation).
    */
   bool Initialize();
 
   /**
-   * Run the main display loop.
-   * Handles keyboard input and displays processed frames.
+   * Run the main loop: read the board, drive auto-play, render the live grid,
+   * and handle keyboard input.
    */
   void Run();
 
@@ -36,48 +36,25 @@ public:
   void Shutdown();
 
 private:
-  // Setup helpers
   bool FindAndSetupGameWindow();
 
-  bool InitializeCapture();
+  void RunHookMode();
 
-  bool AllocateBuffers();
-
-  void StartThreads();
-
-  // Display loop helpers
   void HandleKeyboardInput(int key);
 
-  void DisplayFrame();
-
-  // Auto-play helpers
+  // Auto-play
   void ExecuteBestSwap();
-
   void UpdateAutoPlay();
-
-  // Hook mode: read the board from game memory and drive auto-play directly,
-  // with no capture/detection/display pipeline.
-  void RunHookMode();
 
   // State
   HWND gameWindow_ = nullptr;
   bool running_ = false;
 
-  // Shared data
-  SharedFrameData frameData_;
-  TimingInfo timingInfo_;
-
-  // FPS tracking
-  std::chrono::high_resolution_clock::time_point lastFpsUpdateTime_;
-  int frameCount_ = 0;
-  float currentFps_ = 0.0f;
-
-  // Threads
-  std::thread captureThread_;
-  std::thread processThread_;
-
   // Auto-play state
   bool autoPlayEnabled_ = false;
   std::chrono::high_resolution_clock::time_point lastClickTime_;
-  int clicksInProgress_ = 0; // Track click sequence state (0, 1, or 2)
+  int clicksInProgress_ = 0; // 0 = idle, 2 = waiting after a click sequence
+
+  // Current board analysis (produced by the hook loop, consumed by auto-play)
+  BoardAnalysis analysis_;
 };

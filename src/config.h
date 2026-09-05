@@ -1,10 +1,9 @@
 #pragma once
 
-#include <opencv2/opencv.hpp>
 #include <string>
 
 // ============================================================================
-// CONFIGURATION CONSTANTS - Fill these out based on your setup
+// CONFIGURATION CONSTANTS (active memory-hook path)
 // ============================================================================
 
 namespace Config {
@@ -14,27 +13,8 @@ const std::string WINDOW_TITLE = "Bejeweled 3";
 // Grid configuration (constant across all resolutions)
 const int GRID_SIZE = 8; // 8x8 grid
 
-// Board source: read the board directly from game memory (memory hook) rather
-// than capturing + classifying pixels. When true, all visual/capture/detection
-// processing is disabled; only the memory hook + move logic run.
-const bool USE_MEMORY_HOOK = true;
-
 // Display settings
 const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
-const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay
-const int DEBUG_STAGE_DEFAULT = 4;    // Default debug stage to show (0-5)
-
-// Bot debug settings
-const bool SHOW_BOT_MATCH_LINES = true; // Draw swap lines that create a match
-const cv::Scalar BOT_MATCH_LINE_COLOR =
-    cv::Scalar(255, 255, 0); // Cyan - best match
-const cv::Scalar BOT_OTHER_MATCH_LINE_COLOR =
-    cv::Scalar(0, 0, 255); // Red - other matches
-const int BOT_MATCH_LINE_THICKNESS = 2;
-
-// Gradient matching debug visualization
-const bool DEBUG_GRADIENT_MATCHING =
-    false; // Show when gradient fallback is used
 
 // Auto-play settings
 const bool BOT_STOP_AFTER_SUPERNOVA_FOUND =
@@ -46,66 +26,6 @@ const int BOT_STABLE_FRAMES_REQUIRED =
 const int BOT_CLICK_DELAY_MS =
     500; // Milliseconds to wait between clicks in auto-play
 
-const int STATISICS_HISTORY_SIZE =
-    100; // Number of frames to keep in rolling average for statistics
-
-// Capture interval (ms)
-const int CAPTURE_INTERVAL_MS = 10; // Capture every 10 ms
-
-// Capture method
-const bool USE_DESKTOP_DUPLICATION =
-    false; // Use DXGI Desktop Duplication API (synced to display refresh) vs
-// BitBlt
-
-// Thread priority
-const bool BOOST_THREAD_PRIORITY =
-    true; // Reduce FPS drop when window loses focus
-
-// Asset extraction
-const bool WRITE_EXTRACTED_ASSETS_TO_DISK =
-    false; // Keep in memory always; optionally write to disk
-
-// Gem classification settings
-// Note: SEARCH threshold controls early exit during matching phases (can be
-// adjusted via UI) Note: FINAL threshold is hard-coded minimum before returning
-// UNKNOWN type
-const int GEM_MATCH_SEARCH_THRESHOLD_PERCENT =
-    100; // Default search threshold (0-100) - shown in UI
-
-// Gradient matching threshold (0-100) - used for star overlay gems
-// Lower than color threshold because gradients are more robust but noisier
-// This is the minimum confidence required to classify a gem using gradient
-// matching when color matching fails
-const int GEM_MATCH_GRADIENT_THRESHOLD_PERCENT = 100; // 75% vs 90% for color
-
-// Per-color final thresholds (0-100) - classification threshold
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_BLUE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_GREEN = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_ORANGE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_PURPLE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_RED = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_WHITE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_YELLOW = 1;
-
-// Star gem final thresholds (0-100) - used for special gems (STAR, SUPERNOVA)
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_BLUE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_GREEN = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_ORANGE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_PURPLE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_RED = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_WHITE = 1;
-const int GEM_MATCH_FINAL_THRESHOLD_PERCENT_STAR_YELLOW = 1;
-
-// Internal thresholds for squared-distance comparison (pre-sqrt)
-// These ensure the final sqrt-converted percentages match the config values
-// above Derived from: score = 10000 - (100 - finalPercentage)^2 =
-// finalPercentage * (200 - finalPercentage) For
-// GEM_MATCH_SEARCH_THRESHOLD_PERCENT=90: 90 * (200 - 90) = 9900 For
-// GEM_MATCH_FINAL_THRESHOLD_PERCENT=80: 80 * (200 - 80) = 9600
-constexpr int GEM_MATCH_SEARCH_THRESHOLD_INTERNAL =
-    GEM_MATCH_SEARCH_THRESHOLD_PERCENT *
-    (200 - GEM_MATCH_SEARCH_THRESHOLD_PERCENT);
-
 // Resolution-dependent values that will be set at runtime
 inline int BOARD_X = 523;      // Will be set by application based on resolution
 inline int BOARD_Y = 75;       // Will be set by application based on resolution
@@ -115,57 +35,25 @@ inline int BOARD_HEIGHT =
 inline int CELL_SIZE = 128; // Will be set by application based on resolution
 inline int BANNER_HEIGHT =
     200; // Will be set by application based on resolution
-inline int FRAME_DIFF_REGION_WIDTH =
-    25; // Will be set by application based on resolution
-inline int FRAME_DIFF_REGION_HEIGHT =
-    45; // Will be set by application based on resolution
-
-// Banner colors (constant)
-const cv::Scalar BANNER_BG_COLOR =
-    cv::Scalar(40, 40, 40); // Dark gray background
-const cv::Scalar BANNER_TEXT_COLOR = cv::Scalar(0, 255, 0); // Green text
 
 // Resolution-specific configuration
 struct ResolutionConfig {
-  int boardX;                // X offset from left edge of window
-  int boardY;                // Y offset from top edge of window
-  int cellSize;              // Grid cell size in pixels
-  int bannerHeight;          // Height of info banner
-  int frameDiffRegionWidth;  // Frame diff region width
-  int frameDiffRegionHeight; // Frame diff region height
+  int boardX;       // X offset from left edge of window
+  int boardY;       // Y offset from top edge of window
+  int cellSize;     // Grid cell size in pixels
+  int bannerHeight; // Height of info banner
 };
 
 // Resolution configurations for supported resolutions
 inline ResolutionConfig GetResolutionConfig(int height) {
   switch (height) {
   case 600:
-    return {
-        261, // boardX
-        37,  // boardY
-        64,  // cellSize (8x8 grid of 64x64 cells)
-        150, // bannerHeight (scaled down)
-        25,  // frameDiffRegionWidth
-        45   // frameDiffRegionHeight
-    };
+    return {261, 37, 64, 150};
   case 768:
-    return {
-        334, // boardX
-        47,  // boardY
-        82,  // cellSize (8x8 grid of 82x82 cells)
-        175, // bannerHeight (scaled down)
-        25,  // frameDiffRegionWidth
-        45   // frameDiffRegionHeight
-    };
+    return {334, 47, 82, 175};
   case 1200:
   default:
-    return {
-        523, // boardX
-        75,  // boardY
-        128, // cellSize (8x8 grid of 128x128 cells)
-        200, // bannerHeight
-        25,  // frameDiffRegionWidth
-        45   // frameDiffRegionHeight
-    };
+    return {523, 75, 128, 200};
   }
 }
 
