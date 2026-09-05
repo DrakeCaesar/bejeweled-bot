@@ -5,6 +5,7 @@
 #include "bot/board_analysis.h"
 #include "bot/board_debug.h"
 #include "capture/capture_thread.h"
+#include "capture/window_capture.h"
 #include "config.h"
 #include "detection/color_similarity.h"
 #include "detection/gem_detector.h"
@@ -13,6 +14,8 @@
 #include "hook/memory_hook.h"
 #include "rendering/control_panel.h"
 #include "rendering/overlay.h"
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -90,6 +93,77 @@ void OnMouse(int event, int x, int y, int flags, void *) {
   }
 }
 
+// Map the game's internal color code (0..6) to a GemType, in the actual sprite
+// order confirmed visually: 0=RED 1=WHITE 2=GREEN 3=YELLOW 4=PURPLE 5=ORANGE
+// 6=BLUE.
+GemType HookColorToGemType(int v) {
+  static const GemType map[7] = {
+      GemType::RED,    // 0
+      GemType::WHITE,  // 1
+      GemType::GREEN,  // 2
+      GemType::YELLOW, // 3
+      GemType::PURPLE, // 4
+      GemType::ORANGE, // 5
+      GemType::BLUE,   // 6
+  };
+  return (v >= 0 && v <= 6) ? map[v] : GemType::UNKNOWN;
+}
+
+// Draw the hook-read board as a colored 8x8 grid into `image`. `board` is the
+// raw 64 color codes (0..6); `analysis` supplies the best-move highlight.
+void DrawHookBoard(cv::Mat &image, const int *board,
+                   const BoardAnalysis *analysis, bool autoPlay,
+                   const std::string &timingStr) {
+  const int n = Config::GRID_SIZE;
+  const int banner = 48;
+  const int cell = image.cols / n;
+
+  // Banner
+  image(cv::Rect(0, 0, image.cols, banner)).setTo(cv::Scalar(40, 40, 40));
+  std::string status = "Auto-play: " + std::string(autoPlay ? "ON" : "OFF");
+  if (analysis && analysis->boardValid && analysis->bestSwapIndex >= 0) {
+    const auto &s = analysis->scoredSwaps[analysis->bestSwapIndex];
+    status += "  Best: (" + std::to_string(s.swap.a.x) + "," +
+              std::to_string(s.swap.a.y) + ")<->(" + std::to_string(s.swap.b.x) +
+              "," + std::to_string(s.swap.b.y) + ")";
+  }
+  cv::putText(image, status, cv::Point(10, 16), cv::FONT_HERSHEY_SIMPLEX, 0.5,
+              cv::Scalar(0, 255, 0), 1);
+  cv::putText(image, timingStr, cv::Point(10, 38), cv::FONT_HERSHEY_SIMPLEX, 0.5,
+              cv::Scalar(0, 255, 255), 1);
+
+  if (!board) {
+    cv::putText(image, "Board not available", cv::Point(10, banner + 40),
+                cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 255), 2);
+    return;
+  }
+
+  for (int r = 0; r < n; r++) {
+    for (int c = 0; c < n; c++) {
+      int v = board[r * n + c];
+      GemType type = HookColorToGemType(v);
+      cv::Rect rect(c * cell, banner + r * cell, cell, cell);
+      cv::rectangle(image, rect, GemTypeToColor(type), cv::FILLED);
+      cv::rectangle(image, rect, cv::Scalar(30, 30, 30), 1);
+      cv::putText(image, std::to_string(v),
+                  cv::Point(c * cell + cell / 2 - 8,
+                            banner + r * cell + cell / 2 + 8),
+                  cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
+    }
+  }
+
+  // Highlight the best swap.
+  if (analysis && analysis->boardValid && analysis->bestSwapIndex >= 0) {
+    const auto &s = analysis->scoredSwaps[analysis->bestSwapIndex];
+    auto hl = [&](cv::Point p) {
+      cv::Rect rect(p.x * cell, banner + p.y * cell, cell, cell);
+      cv::rectangle(image, rect, cv::Scalar(0, 255, 255), 3);
+    };
+    hl(s.swap.a);
+    hl(s.swap.b);
+  }
+}
+
 } // namespace
 
 // ============================================================================
@@ -142,6 +216,20 @@ bool Application::Initialize() {
   MaskLoader::FRAME_HEIGHT = resConfig.cellSize;
   MaskLoader::HYPERCUBE_FRAME_WIDTH = resConfig.cellSize;
   MaskLoader::HYPERCUBE_FRAME_HEIGHT = resConfig.cellSize;
+
+  // Memory-hook mode: skip all visual/capture/detection setup. The board is
+  // read directly from game memory; only the hook + move logic run.
+  if (Config::USE_MEMORY_HOOK) {
+    std::cout << "Memory hook mode: visual processing disabled." << std::endl;
+    std::cout << std::endl;
+    std::cout << "Controls:" << std::endl;
+    std::cout << "  'q' - Quit" << std::endl;
+    std::cout << "  'b' - Toggle auto-play" << std::endl;
+    std::cout << "  'p' - Print board analysis" << std::endl;
+    std::cout << "  'm' - Dump board memory" << std::endl;
+    std::cout << std::endl;
+    return true;
+  }
 
   // Set half-texel offset values based on resolution
   // 768p needs negative offsets, 600p/1200p need positive
@@ -433,6 +521,11 @@ void Application::StartThreads() {
 }
 
 void Application::Run() {
+  if (Config::USE_MEMORY_HOOK) {
+    RunHookMode();
+    return;
+  }
+
   StartThreads();
   running_ = true;
 
@@ -452,6 +545,133 @@ void Application::Run() {
         frameData_.shouldExit = true;
       }
       frameData_.cv.notify_one();
+      running_ = false;
+    }
+  }
+}
+
+void Application::RunHookMode() {
+  running_ = true;
+
+  static BoardAnalysis analysis;
+  frameData_.currentAnalysis = &analysis;
+
+  // Keep the game window "active" (not paused) even when it loses focus,
+  // using the same helper the capture thread used.
+  constexpr int kActivationIntervalMs = 1000;
+  auto lastActivation = std::chrono::steady_clock::now();
+
+  // Display window for the live (memory-read) board.
+  const int cell = 80;
+  const int banner = 48;
+  cv::Mat display(Config::GRID_SIZE * cell + banner, Config::GRID_SIZE * cell,
+                  CV_8UC3);
+  cv::namedWindow(Config::DISPLAY_WINDOW_NAME, cv::WINDOW_AUTOSIZE);
+
+  std::cout << "Memory hook mode active. 'b'=auto-play 'p'=print 'm'=dump "
+               "'q'=quit\n";
+
+  // Track the previous board and timing for diagnostics.
+  int prevBoard[64] = {};
+  bool havePrevBoard = false;
+  bool prevAutoPlay = autoPlayEnabled_;
+  long long loopIndex = 0;
+  double readMs = 0, analyzeMs = 0, autoPlayMs = 0, keepMs = 0, drawMs = 0,
+         waitMs = 0, totalMs = 0;
+  auto lastTimingPrint = std::chrono::steady_clock::now();
+
+  while (running_) {
+    auto loopStart = std::chrono::high_resolution_clock::now();
+
+    // Read the board directly from game memory.
+    int board[64];
+    bool haveBoard = MemoryHook::ReadBoard(board);
+    auto tRead = std::chrono::high_resolution_clock::now();
+
+    bool boardChanged = false;
+    if (haveBoard) {
+      boardChanged = !havePrevBoard ||
+                     std::memcmp(board, prevBoard, sizeof(board)) != 0;
+      if (boardChanged) {
+        std::memcpy(prevBoard, board, sizeof(board));
+        havePrevBoard = true;
+      }
+      // Analyze every frame so the stability counter advances even when the
+      // board is unchanged (analyze() is cheap on unchanged boards).
+      std::vector<std::vector<Gem>> grid(
+          Config::GRID_SIZE, std::vector<Gem>(Config::GRID_SIZE));
+      for (int r = 0; r < Config::GRID_SIZE; r++) {
+        for (int c = 0; c < Config::GRID_SIZE; c++) {
+          int v = board[r * Config::GRID_SIZE + c];
+          grid[r][c].type = HookColorToGemType(v);
+          grid[r][c].state = GemState::NORMAL;
+          grid[r][c].gridPos = cv::Point(c, r);
+        }
+      }
+      analysis.analyze(grid);
+    }
+    auto tAnalyze = std::chrono::high_resolution_clock::now();
+
+    UpdateAutoPlay();
+    auto tAutoPlay = std::chrono::high_resolution_clock::now();
+
+    // Periodically keep the game window active (not paused) when unfocused.
+    auto nowSteady = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            nowSteady - lastActivation)
+            .count() >= kActivationIntervalMs) {
+      KeepGameActive(gameWindow_);
+      lastActivation = nowSteady;
+    }
+    auto tKeep = std::chrono::high_resolution_clock::now();
+
+    // Draw every frame so the timing line updates live.
+    char timingBuf[256];
+    std::snprintf(timingBuf, sizeof(timingBuf),
+                  "L%lld read=%.2f analyze=%.2f autoplay=%.2f keep=%.2f "
+                  "draw=%.2f wait=%.2f total=%.2f ms",
+                  loopIndex, readMs, analyzeMs, autoPlayMs, keepMs, drawMs,
+                  waitMs, totalMs);
+    DrawHookBoard(display, haveBoard ? board : nullptr, &analysis,
+                  autoPlayEnabled_, timingBuf);
+    cv::imshow(Config::DISPLAY_WINDOW_NAME, display);
+    auto tDraw = std::chrono::high_resolution_clock::now();
+
+    int key = cv::waitKey(1);
+    auto tWait = std::chrono::high_resolution_clock::now();
+
+    readMs =
+        std::chrono::duration<double, std::milli>(tRead - loopStart).count();
+    analyzeMs =
+        std::chrono::duration<double, std::milli>(tAnalyze - tRead).count();
+    autoPlayMs =
+        std::chrono::duration<double, std::milli>(tAutoPlay - tAnalyze).count();
+    keepMs =
+        std::chrono::duration<double, std::milli>(tKeep - tAutoPlay).count();
+    drawMs = std::chrono::duration<double, std::milli>(tDraw - tKeep).count();
+    waitMs = std::chrono::duration<double, std::milli>(tWait - tDraw).count();
+    totalMs =
+        std::chrono::duration<double, std::milli>(tWait - loopStart).count();
+    loopIndex++;
+
+    // Print timing to console once per second.
+    auto nowPrint = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            nowPrint - lastTimingPrint)
+            .count() >= 1000) {
+      std::printf("loop=%lld read=%.2f analyze=%.2f autoplay=%.2f keep=%.2f "
+                  "draw=%.2f wait=%.2f total=%.2f ms\n",
+                  loopIndex, readMs, analyzeMs, autoPlayMs, keepMs, drawMs,
+                  waitMs, totalMs);
+      lastTimingPrint = nowPrint;
+    }
+
+    if (key != -1) {
+      HandleKeyboardInput(key);
+    }
+
+    if (cv::getWindowProperty(Config::DISPLAY_WINDOW_NAME,
+                              cv::WND_PROP_VISIBLE) <= 0) {
       running_ = false;
     }
   }
@@ -495,7 +715,7 @@ void Application::HandleKeyboardInput(int key) {
     }
     frameData_.cv.notify_one();
     running_ = false;
-  } else if (key == 'i' || key == 'I') {
+  } else if (!Config::USE_MEMORY_HOOK && (key == 'i' || key == 'I')) {
     std::cout << "Window info:" << std::endl;
     std::lock_guard<std::mutex> lock(frameData_.mutex);
     for (int i = 0; i < 3; i++) {
@@ -505,7 +725,7 @@ void Application::HandleKeyboardInput(int key) {
         break;
       }
     }
-  } else if (key == 'r' || key == 'R') {
+  } else if (!Config::USE_MEMORY_HOOK && (key == 'r' || key == 'R')) {
     if (!IsRecording()) {
       StartRecording(g_recordColTrack, g_recordRowTrack, 5000,
                      "recorded_frames");
@@ -513,7 +733,7 @@ void Application::HandleKeyboardInput(int key) {
     } else {
       StopRecording();
     }
-  } else if (key == 's' || key == 'S') {
+  } else if (!Config::USE_MEMORY_HOOK && (key == 's' || key == 'S')) {
     if (IsRecording()) {
       std::cout << "Recording status: " << GetRecordedFrameCount()
                 << " unique frames captured (checked "

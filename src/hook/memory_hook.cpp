@@ -26,6 +26,10 @@ State g_state;
 uint32_t g_prevBoardAddr = 0;
 std::vector<uint8_t> g_prevBoardBytes;
 
+// Cached board object address (found once via full-process scan, reused on
+// every read; reset on Detach). Avoids re-scanning the whole process each frame.
+uint32_t g_boardAddr = 0;
+
 // ---------------------------------------------------------------------------
 // Module enumeration: find Bejeweled3.exe base + size in the (32-bit) target.
 // ---------------------------------------------------------------------------
@@ -602,6 +606,7 @@ void Detach() {
   g_state.moduleBase = 0;
   g_state.moduleSize = 0;
   g_state.attached = false;
+  g_boardAddr = 0; // invalidate cached board address
 }
 
 bool IsAttached() { return g_state.attached; }
@@ -1000,9 +1005,28 @@ static uint32_t FindBoardObject() {
       base + kQuestBoardVftRva,     base + kPokerBoardVftRva,
       base + kTimeLimitBoardVftRva,
   };
+
+  // Reuse the cached address if its vtable (first dword) still matches a known
+  // board vtable. This turns a multi-second scan into a single dword read.
+  if (g_boardAddr != 0) {
+    uint32_t vft = 0;
+    if (ReadU32(g_boardAddr, vft)) {
+      for (uint32_t bv : boardVfts) {
+        if (vft == bv) {
+          return g_boardAddr;
+        }
+      }
+    }
+    g_boardAddr = 0; // stale -> rescan
+  }
+
+  // One-time full-process scan.
   for (uint32_t vft : boardVfts) {
     for (uint32_t h : ScanForDword(vft)) {
-      if ((h & 3) == 0) return h;
+      if ((h & 3) == 0) {
+        g_boardAddr = h;
+        return h;
+      }
     }
   }
   return 0;
@@ -1010,34 +1034,19 @@ static uint32_t FindBoardObject() {
 
 bool ReadBoard(int board[64]) {
   if (!g_state.attached) {
-    std::cerr << "[MemoryHook] Not attached.\n";
     return false;
   }
 
   uint32_t b = FindBoardObject();
   if (!b) {
-    std::cerr << "[MemoryHook] Board object not found.\n";
     return false;
   }
-  std::printf("\nBoard @ 0x%08X\n", b);
 
   uint32_t grid[64];
   if (!Read(b + kGridOffset, grid, sizeof(grid))) {
-    std::printf("[MemoryHook] Failed to read gem grid @ +0x%X.\n", kGridOffset);
     return false;
   }
 
-  // Raw pointer grid (diagnostic).
-  std::cout << "Gem pointers @ +0xF8:\n";
-  for (int r = 0; r < 8; r++) {
-    std::printf("  row %d:", r);
-    for (int c = 0; c < 8; c++) {
-      std::printf(" %08X", grid[r * 8 + c]);
-    }
-    std::printf("\n");
-  }
-
-  // Dereference each pointer and read the type dword at +kGemTypeOffset.
   int deref = 0;
   for (int i = 0; i < 64; i++) {
     uint32_t gem = grid[i];
@@ -1048,7 +1057,40 @@ bool ReadBoard(int board[64]) {
     }
     board[i] = (int)type;
   }
-  std::printf("Dereferenced %d/64 gem pointers (type @ +0x%X).\n", deref,
+  return deref == 64;
+}
+
+void DumpGrid() {
+  if (!g_state.attached) {
+    std::cerr << "[MemoryHook] Not attached.\n";
+    return;
+  }
+
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    std::cerr << "[MemoryHook] Board object not found.\n";
+    return;
+  }
+  std::printf("\nBoard @ 0x%08X\n", b);
+
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    std::printf("[MemoryHook] Failed to read gem grid @ +0x%X.\n", kGridOffset);
+    return;
+  }
+
+  std::cout << "Gem pointers @ +0xF8:\n";
+  for (int r = 0; r < 8; r++) {
+    std::printf("  row %d:", r);
+    for (int c = 0; c < 8; c++) {
+      std::printf(" %08X", grid[r * 8 + c]);
+    }
+    std::printf("\n");
+  }
+
+  int board[64];
+  bool ok = ReadBoard(board);
+  std::printf("Read %s (type @ +0x%X).\n", ok ? "OK" : "FAILED",
               kGemTypeOffset);
 
   std::cout << "8x8 gem grid (game-internal color codes):\n";
@@ -1059,8 +1101,6 @@ bool ReadBoard(int board[64]) {
     }
     std::printf("\n");
   }
-
-  return deref == 64;
 }
 
 } // namespace MemoryHook

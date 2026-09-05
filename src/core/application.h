@@ -55,6 +55,10 @@ private:
 
   void UpdateAutoPlay();
 
+  // Hook mode: read the board from game memory and drive auto-play directly,
+  // with no capture/detection/display pipeline.
+  void RunHookMode();
+
   // State
   HWND gameWindow_ = nullptr;
   bool running_ = false;

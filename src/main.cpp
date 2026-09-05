@@ -89,10 +89,9 @@ int main(int argc, char **argv) {
       std::cerr << "Error: attach failed.\n";
       return -1;
     }
-    int board[64];
-    bool ok = MemoryHook::ReadBoard(board);
+    MemoryHook::DumpGrid();
     MemoryHook::Detach();
-    return ok ? 0 : -1;
+    return 0;
   }
   if (argc > 1 && std::strcmp(argv[1], "--watch") == 0) {
     HWND hwnd = FindGameWindow(Config::WINDOW_TITLE);

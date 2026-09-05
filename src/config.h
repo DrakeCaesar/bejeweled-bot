@@ -14,6 +14,11 @@ const std::string WINDOW_TITLE = "Bejeweled 3";
 // Grid configuration (constant across all resolutions)
 const int GRID_SIZE = 8; // 8x8 grid
 
+// Board source: read the board directly from game memory (memory hook) rather
+// than capturing + classifying pixels. When true, all visual/capture/detection
+// processing is disabled; only the memory hook + move logic run.
+const bool USE_MEMORY_HOOK = true;
+
 // Display settings
 const std::string DISPLAY_WINDOW_NAME = "Bejeweled 3 - Game Board";
 const bool SHOW_DEBUG_OVERLAY = true; // Show grid and detection overlay

@@ -79,6 +79,11 @@ void FindGemGridByPattern(const int board[64]);
 // Read the live 8x8 gem grid (64 color codes, row-major board[r*8+c]) by
 // dereferencing the 64 gem pointers at Board+kGridOffset and reading the type
 // dword at each gem+kGemTypeOffset. Returns true and fills `board` on success.
+// Quiet: no console output (safe to call every frame).
 bool ReadBoard(int board[64]);
+
+// Verbose diagnostic: locate the board, print the raw gem pointer grid and the
+// decoded 8x8 color grid. Used by the --dumpgrid CLI mode.
+void DumpGrid();
 
 } // namespace MemoryHook
