@@ -573,6 +573,69 @@ bool BoardState::equals(const BoardState &other) const {
   return true;
 }
 
+int BoardState::simulateMove(const MatchableSwap &swap,
+                             BoardState &finalBoard) const {
+  finalBoard = *this;
+  finalBoard.applySwap(swap);
+
+  int total = finalBoard.clearMatches(&swap);
+  finalBoard.applyGravity();
+  while (true) {
+    int more = finalBoard.clearMatches();
+    if (more == 0)
+      break;
+    total += more;
+    finalBoard.applyGravity();
+  }
+  return total;
+}
+
+std::string BoardState::toString() const {
+  std::string s;
+  s.reserve(SIZE * (SIZE + 1));
+  for (int row = 0; row < SIZE; ++row) {
+    for (int col = 0; col < SIZE; ++col) {
+      char ch;
+      switch (cells[row][col].type) {
+      case GemType::RED:
+        ch = 'r';
+        break;
+      case GemType::ORANGE:
+        ch = 'o';
+        break;
+      case GemType::YELLOW:
+        ch = 'y';
+        break;
+      case GemType::GREEN:
+        ch = 'g';
+        break;
+      case GemType::BLUE:
+        ch = 'b';
+        break;
+      case GemType::PURPLE:
+        ch = 'p';
+        break;
+      case GemType::WHITE:
+        ch = 'w';
+        break;
+      case GemType::HYPERCUBE:
+        ch = 'H';
+        break;
+      case GemType::EMPTY:
+        ch = '.';
+        break;
+      default:
+        ch = '?';
+        break;
+      }
+      s += ch;
+    }
+    if (row + 1 < SIZE)
+      s += '\n';
+  }
+  return s;
+}
+
 // ============================================================================
 // Match Length Computation
 // ============================================================================

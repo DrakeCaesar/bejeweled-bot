@@ -62,6 +62,21 @@ GemState HookSpecialToGemState(int v) {
   }
 }
 
+// Compact 8-line rendering of a raw memory board (0..6, -1) using the same
+// letters as BoardState::toString(), for predicted-vs-actual diffing.
+std::string MemBoardToString(const int board[64]) {
+  static const char map[7] = {'r', 'w', 'g', 'y', 'p', 'o', 'b'};
+  std::string s;
+  s.reserve(72);
+  for (int i = 0; i < 64; i++) {
+    int v = board[i];
+    s += (v == -1) ? 'H' : (v >= 0 && v <= 6 ? map[v] : '?');
+    if (i % 8 == 7 && i != 63)
+      s += '\n';
+  }
+  return s;
+}
+
 // Draw the hook-read board as a colored 8x8 grid into `image`. `board` is the
 // raw 64 color codes (0..6); `analysis` supplies the best-move highlight.
 void DrawHookBoard(cv::Mat &image, const int *board, const int *states,
@@ -238,6 +253,20 @@ void Application::RunHookMode() {
         }
       }
       analysis_.analyze(grid);
+
+      // Cascade validation: record distinct live boards until the board
+      // settles, then print the predicted-vs-actual comparison.
+      if (observingCascade_) {
+        std::string s = MemBoardToString(board);
+        if (observedStates_.empty() || observedStates_.back() != s) {
+          observedStates_.push_back(s);
+        }
+        if (!analysis_.settling &&
+            analysis_.stableFrameCount >= Config::BOT_STABLE_FRAMES_REQUIRED) {
+          PrintCascadeComparison();
+          observingCascade_ = false;
+        }
+      }
     }
 
     UpdateAutoPlay();
@@ -343,9 +372,44 @@ void Application::ExecuteBestSwap() {
     analysis_.stableFrameCount = 0;
     settleUntil_ = std::chrono::steady_clock::now() +
                    std::chrono::milliseconds(Config::BOT_SETTLE_DELAY_MS);
+
+    // Cascade validation: predict this move's result via simulation and start
+    // observing the live board to compare against it.
+    BoardState predicted;
+    predictedClears_ = analysis_.board.simulateMove(swap, predicted);
+    predictedBoard_ = predicted.toString();
+    observedStates_.clear();
+    observingCascade_ = true;
   } else if (clicksInProgress_ == 2 && elapsed >= Config::BOT_CLICK_DELAY_MS) {
     clicksInProgress_ = 0;
   }
+}
+
+void Application::PrintCascadeComparison() {
+  std::cout << "\n=== Cascade validation ===\n";
+  std::cout << "Predicted clears: " << predictedClears_ << "\n";
+  std::cout << "Predicted final board:\n" << predictedBoard_ << "\n";
+
+  const std::string &actual = observedStates_.back();
+  std::cout << "Actual distinct states: " << observedStates_.size() << "\n";
+  std::cout << "Actual final board:\n" << actual << "\n";
+
+  // Diff predicted vs actual final board (ignoring newlines).
+  int diff = 0;
+  size_t j = 0;
+  for (char pc : predictedBoard_) {
+    if (pc == '\n')
+      continue;
+    while (j < actual.size() && actual[j] == '\n')
+      ++j;
+    if (j >= actual.size())
+      break;
+    if (pc != actual[j])
+      ++diff;
+    ++j;
+  }
+  std::cout << "Cells differing from prediction: " << diff << "/64\n";
+  std::cout << "============================\n";
 }
 
 void Application::UpdateAutoPlay() {

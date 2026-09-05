@@ -73,6 +73,15 @@ struct BoardState {
 
   /// Compare two boards (type + state)
   bool equals(const BoardState &other) const;
+
+  /// Simulate a move to completion (swap + full cascade) and write the final
+  /// settled board into `finalBoard`. New falling gems are NOT modeled (known
+  /// gap). Returns the total number of gems cleared.
+  int simulateMove(const MatchableSwap &swap, BoardState &finalBoard) const;
+
+  /// Compact 8-line rendering for diffing/prediction: r,o,y,g,b,p,w = colors,
+  /// H = hypercube, '.' = empty, '?' = unknown.
+  std::string toString() const;
 };
 
 // ============================================================================

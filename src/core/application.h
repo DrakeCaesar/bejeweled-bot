@@ -2,6 +2,8 @@
 
 #include "bot/board_analysis.h"
 #include <chrono>
+#include <string>
+#include <vector>
 #include <windows.h>
 
 // ============================================================================
@@ -46,6 +48,9 @@ private:
   void ExecuteBestSwap();
   void UpdateAutoPlay();
 
+  // Cascade validation harness
+  void PrintCascadeComparison();
+
   // State
   HWND gameWindow_ = nullptr;
   bool running_ = false;
@@ -55,6 +60,12 @@ private:
   std::chrono::high_resolution_clock::time_point lastClickTime_;
   int clicksInProgress_ = 0; // 0 = idle, 2 = waiting after a click sequence
   std::chrono::steady_clock::time_point settleUntil_{}; // don't act until then
+
+  // Cascade validation harness state
+  bool observingCascade_ = false;
+  int predictedClears_ = 0;
+  std::string predictedBoard_;          // simulation's final board (toString)
+  std::vector<std::string> observedStates_; // distinct live boards since move
 
   // Current board analysis (produced by the hook loop, consumed by auto-play)
   BoardAnalysis analysis_;
