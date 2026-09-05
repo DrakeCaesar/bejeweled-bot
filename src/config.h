@@ -25,6 +25,8 @@ const int BOT_STABLE_FRAMES_REQUIRED =
     20; // Number of stable frames required before making a move
 const int BOT_CLICK_DELAY_MS =
     500; // Milliseconds to wait between clicks in auto-play
+const int BOT_SETTLE_DELAY_MS =
+    50; // Min wait after a move before acting again (let cascades finish)
 
 // Resolution-dependent values that will be set at runtime
 inline int BOARD_X = 523;      // Will be set by application based on resolution

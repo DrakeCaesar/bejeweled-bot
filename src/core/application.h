@@ -54,6 +54,7 @@ private:
   bool autoPlayEnabled_ = false;
   std::chrono::high_resolution_clock::time_point lastClickTime_;
   int clicksInProgress_ = 0; // 0 = idle, 2 = waiting after a click sequence
+  std::chrono::steady_clock::time_point settleUntil_{}; // don't act until then
 
   // Current board analysis (produced by the hook loop, consumed by auto-play)
   BoardAnalysis analysis_;

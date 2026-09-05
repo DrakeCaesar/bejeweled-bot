@@ -102,6 +102,48 @@ bool BoardState::swapCreatesMatch(const MatchableSwap &swap) const {
          wouldFormMatchAt(swap.b.y, swap.b.x, swap);
 }
 
+bool BoardState::hasExistingMatch() const {
+  // Horizontal runs of 3+
+  for (int row = 0; row < SIZE; ++row) {
+    int col = 0;
+    while (col < SIZE - 2) {
+      GemType type = cells[row][col].type;
+      if (!IsMatchableType(type)) {
+        ++col;
+        continue;
+      }
+      int count = 1;
+      while (col + count < SIZE && cells[row][col + count].type == type) {
+        ++count;
+      }
+      if (count >= 3)
+        return true;
+      col += count;
+    }
+  }
+
+  // Vertical runs of 3+
+  for (int col = 0; col < SIZE; ++col) {
+    int row = 0;
+    while (row < SIZE - 2) {
+      GemType type = cells[row][col].type;
+      if (!IsMatchableType(type)) {
+        ++row;
+        continue;
+      }
+      int count = 1;
+      while (row + count < SIZE && cells[row + count][col].type == type) {
+        ++count;
+      }
+      if (count >= 3)
+        return true;
+      row += count;
+    }
+  }
+
+  return false;
+}
+
 std::vector<MatchableSwap>
 BoardState::findValidSwaps(bool excludeHypercubes) const {
   std::vector<MatchableSwap> swaps;
@@ -595,6 +637,19 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
   }
 
   boardValid = true;
+
+  // A board with a pre-existing match is mid-cascade / not yet settled. Never
+  // act on it — clear any pending best move and reset the stability counter so
+  // the bot waits for the board to fully resolve.
+  if (newBoard.hasExistingMatch()) {
+    settling = true;
+    stableFrameCount = 0;
+    board = newBoard;
+    scoredSwaps.clear();
+    bestSwapIndex = -1;
+    return;
+  }
+  settling = false;
 
   // Skip expensive re-analysis if board unchanged
   if (board.equals(newBoard)) {

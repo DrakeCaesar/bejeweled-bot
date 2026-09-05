@@ -40,6 +40,10 @@ struct BoardState {
   /// Check if a swap creates any match
   bool swapCreatesMatch(const MatchableSwap &swap) const;
 
+  /// Check if the board already contains a 3+ match (i.e. it is mid-cascade /
+  /// not yet settled). A playable board never has an existing match.
+  bool hasExistingMatch() const;
+
   /// Find all valid swaps that create at least one match
   /// @param excludeHypercubes If true, exclude swaps involving hypercube gems
   std::vector<MatchableSwap>
@@ -95,6 +99,7 @@ struct BoardAnalysis {
   std::vector<ScoredSwap> scoredSwaps; // All valid swaps with scores
   int bestSwapIndex = -1;              // Index of highest-scored swap
   bool boardValid = false;             // Board is fully identified
+  bool settling = false; // Board currently has a pending match (mid-cascade)
   int stableFrameCount = 0; // Consecutive frames with same valid board
 
   /// Run full analysis: snapshot board, find swaps, score them

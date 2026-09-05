@@ -338,8 +338,11 @@ void Application::ExecuteBestSwap() {
     lastClickTime_ = now;
     clicksInProgress_ = 2;
 
-    // Reset the stability counter so we wait for the board to settle again.
+    // Reset the stability counter so we wait for the board to settle again,
+    // and enforce a minimum settle delay so cascades finish before we act.
     analysis_.stableFrameCount = 0;
+    settleUntil_ = std::chrono::steady_clock::now() +
+                   std::chrono::milliseconds(Config::BOT_SETTLE_DELAY_MS);
   } else if (clicksInProgress_ == 2 && elapsed >= Config::BOT_CLICK_DELAY_MS) {
     clicksInProgress_ = 0;
   }
@@ -347,6 +350,16 @@ void Application::ExecuteBestSwap() {
 
 void Application::UpdateAutoPlay() {
   if (!autoPlayEnabled_) {
+    return;
+  }
+
+  // Don't act until the post-move settle delay has elapsed.
+  if (std::chrono::steady_clock::now() < settleUntil_) {
+    return;
+  }
+
+  // Don't act if the board has a pending match (cascade still resolving).
+  if (analysis_.settling) {
     return;
   }
 
