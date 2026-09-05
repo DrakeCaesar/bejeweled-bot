@@ -1060,6 +1060,34 @@ bool ReadBoard(int board[64]) {
   return deref == 64;
 }
 
+bool ReadSpecialState(int state[64]) {
+  if (!g_state.attached) {
+    return false;
+  }
+
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    return false;
+  }
+
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    return false;
+  }
+
+  int deref = 0;
+  for (int i = 0; i < 64; i++) {
+    uint32_t gem = grid[i];
+    uint32_t s = 0;
+    if (gem >= 0x00F00000 && gem < 0x7FFF0000 &&
+        ReadU32(gem + kSpecialStateOffset, s)) {
+      deref++;
+    }
+    state[i] = (int)s;
+  }
+  return deref == 64;
+}
+
 void DumpGrid() {
   if (!g_state.attached) {
     std::cerr << "[MemoryHook] Not attached.\n";
@@ -1100,6 +1128,41 @@ void DumpGrid() {
       std::printf(" %2d", board[r * 8 + c]);
     }
     std::printf("\n");
+  }
+
+  // Special state field (+0x228): print "type:state" per cell to correlate.
+  std::cout << "\n8x8 type:state grid (+0x220 : +0x228):\n";
+  for (int r = 0; r < 8; r++) {
+    std::printf("  ");
+    for (int c = 0; c < 8; c++) {
+      uint32_t gem = grid[r * 8 + c];
+      int t = board[r * 8 + c];
+      uint32_t s = 0;
+      if (gem >= 0x00F00000 && gem < 0x7FFF0000) ReadU32(gem + 0x228, s);
+      std::printf(" %2d:%d", t, (int)s);
+    }
+    std::printf("\n");
+  }
+
+  // Diagnostic: probe candidate special-gem state fields near the type field.
+  // A special gem (flame/star/supernova) will make one of these non-zero.
+  std::cout << "\nSpecial-state candidates (dword offsets, distinct values):\n";
+  for (uint32_t off = 0x220; off <= 0x240; off += 4) {
+    int distinct = 0, seen[16];
+    for (int i = 0; i < 64; i++) {
+      uint32_t gem = grid[i];
+      if (gem < 0x00F00000 || gem >= 0x7FFF0000) continue;
+      uint32_t v = 0;
+      if (!ReadU32(gem + off, v)) continue;
+      bool isNew = true;
+      for (int j = 0; j < distinct; j++)
+        if (seen[j] == (int)v) { isNew = false; break; }
+      if (isNew && distinct < 16) seen[distinct++] = (int)v;
+    }
+    std::printf("  +0x%03X: %d distinct [", off, distinct);
+    for (int j = 0; j < distinct; j++)
+      std::printf("%d%s", seen[j], j + 1 < distinct ? "," : "");
+    std::printf("]\n");
   }
 }
 

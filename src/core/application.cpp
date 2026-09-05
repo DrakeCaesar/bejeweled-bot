@@ -32,6 +32,9 @@ void SendMouseClickToGame(HWND gameWindow, int x, int y, bool isDown) {
 // order confirmed visually: 0=RED 1=WHITE 2=GREEN 3=YELLOW 4=PURPLE 5=ORANGE
 // 6=BLUE.
 GemType HookColorToGemType(int v) {
+  if (v == -1) {
+    return GemType::HYPERCUBE; // hypercube is encoded as -1 (0xFFFFFFFF)
+  }
   static const GemType map[7] = {
       GemType::RED,    // 0
       GemType::WHITE,  // 1
@@ -44,11 +47,25 @@ GemType HookColorToGemType(int v) {
   return (v >= 0 && v <= 6) ? map[v] : GemType::UNKNOWN;
 }
 
+// Map the game's special-gem state code (0x228) to a GemState. Observed
+// values: 0 = normal, 1 = flame, 2 = supernova, 4 = star.
+GemState HookSpecialToGemState(int v) {
+  switch (v) {
+  case 1:
+    return GemState::FLAME;
+  case 2:
+    return GemState::SUPERNOVA;
+  case 4:
+    return GemState::STAR;
+  default:
+    return GemState::NORMAL;
+  }
+}
+
 // Draw the hook-read board as a colored 8x8 grid into `image`. `board` is the
 // raw 64 color codes (0..6); `analysis` supplies the best-move highlight.
-void DrawHookBoard(cv::Mat &image, const int *board,
-                   const BoardAnalysis *analysis, bool autoPlay,
-                   const std::string &timingStr) {
+void DrawHookBoard(cv::Mat &image, const int *board, const int *states,
+                   const BoardAnalysis *analysis, bool autoPlay) {
   const int n = Config::GRID_SIZE;
   const int banner = 48;
   const int cell = image.cols / n;
@@ -64,8 +81,6 @@ void DrawHookBoard(cv::Mat &image, const int *board,
   }
   cv::putText(image, status, cv::Point(10, 16), cv::FONT_HERSHEY_SIMPLEX, 0.5,
               cv::Scalar(0, 255, 0), 1);
-  cv::putText(image, timingStr, cv::Point(10, 38), cv::FONT_HERSHEY_SIMPLEX, 0.5,
-              cv::Scalar(0, 255, 255), 1);
 
   if (!board) {
     cv::putText(image, "Board not available", cv::Point(10, banner + 40),
@@ -80,7 +95,15 @@ void DrawHookBoard(cv::Mat &image, const int *board,
       cv::Rect rect(c * cell, banner + r * cell, cell, cell);
       cv::rectangle(image, rect, GemTypeToColor(type), cv::FILLED);
       cv::rectangle(image, rect, cv::Scalar(30, 30, 30), 1);
-      cv::putText(image, std::to_string(v),
+      std::string label = (v == -1) ? "H" : std::to_string(v);
+      if (v != -1 && states && states[r * n + c] != 0) {
+        int s = states[r * n + c];
+        label += (s == 1) ? "F"   // flame
+                 : (s == 2) ? "N" // supernova
+                 : (s == 4) ? "S" // star
+                            : "";
+      }
+      cv::putText(image, label,
                   cv::Point(c * cell + cell / 2 - 8,
                             banner + r * cell + cell / 2 + 8),
                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
@@ -191,19 +214,14 @@ void Application::RunHookMode() {
   std::cout << "Memory hook mode active. 'b'=auto-play 'p'=print 'm'=dump "
                "'q'=quit\n";
 
-  // Timing (latest values, ms) for diagnosing loop cost.
-  long long loopIndex = 0;
-  double readMs = 0, analyzeMs = 0, autoPlayMs = 0, keepMs = 0, drawMs = 0,
-         waitMs = 0, totalMs = 0;
-  auto lastTimingPrint = std::chrono::steady_clock::now();
-
   while (running_) {
-    auto loopStart = std::chrono::high_resolution_clock::now();
-
     // Read the board directly from game memory.
     int board[64];
     bool haveBoard = MemoryHook::ReadBoard(board);
-    auto tRead = std::chrono::high_resolution_clock::now();
+    int states[64] = {};
+    if (haveBoard) {
+      MemoryHook::ReadSpecialState(states);
+    }
 
     if (haveBoard) {
       std::vector<std::vector<Gem>> grid(
@@ -212,16 +230,17 @@ void Application::RunHookMode() {
         for (int c = 0; c < Config::GRID_SIZE; c++) {
           int v = board[r * Config::GRID_SIZE + c];
           grid[r][c].type = HookColorToGemType(v);
-          grid[r][c].state = GemState::NORMAL;
+          grid[r][c].state = (v == -1)
+                                 ? GemState::NORMAL
+                                 : HookSpecialToGemState(
+                                       states[r * Config::GRID_SIZE + c]);
           grid[r][c].gridPos = cv::Point(c, r);
         }
       }
       analysis_.analyze(grid);
     }
-    auto tAnalyze = std::chrono::high_resolution_clock::now();
 
     UpdateAutoPlay();
-    auto tAutoPlay = std::chrono::high_resolution_clock::now();
 
     // Periodically keep the game window active (not paused) when unfocused.
     auto nowSteady = std::chrono::steady_clock::now();
@@ -231,48 +250,12 @@ void Application::RunHookMode() {
       KeepGameActive(gameWindow_);
       lastActivation = nowSteady;
     }
-    auto tKeep = std::chrono::high_resolution_clock::now();
 
-    // Draw every frame so the timing line updates live.
-    char timingBuf[256];
-    std::snprintf(timingBuf, sizeof(timingBuf),
-                  "L%lld read=%.2f analyze=%.2f autoplay=%.2f keep=%.2f "
-                  "draw=%.2f wait=%.2f total=%.2f ms",
-                  loopIndex, readMs, analyzeMs, autoPlayMs, keepMs, drawMs,
-                  waitMs, totalMs);
-    DrawHookBoard(display, haveBoard ? board : nullptr, &analysis_,
-                  autoPlayEnabled_, timingBuf);
+    DrawHookBoard(display, haveBoard ? board : nullptr,
+                  haveBoard ? states : nullptr, &analysis_, autoPlayEnabled_);
     cv::imshow(Config::DISPLAY_WINDOW_NAME, display);
-    auto tDraw = std::chrono::high_resolution_clock::now();
 
     int key = cv::waitKey(1);
-    auto tWait = std::chrono::high_resolution_clock::now();
-
-    readMs =
-        std::chrono::duration<double, std::milli>(tRead - loopStart).count();
-    analyzeMs =
-        std::chrono::duration<double, std::milli>(tAnalyze - tRead).count();
-    autoPlayMs =
-        std::chrono::duration<double, std::milli>(tAutoPlay - tAnalyze).count();
-    keepMs =
-        std::chrono::duration<double, std::milli>(tKeep - tAutoPlay).count();
-    drawMs = std::chrono::duration<double, std::milli>(tDraw - tKeep).count();
-    waitMs = std::chrono::duration<double, std::milli>(tWait - tDraw).count();
-    totalMs =
-        std::chrono::duration<double, std::milli>(tWait - loopStart).count();
-    loopIndex++;
-
-    // Print timing to console once per second.
-    auto nowPrint = std::chrono::steady_clock::now();
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            nowPrint - lastTimingPrint)
-            .count() >= 1000) {
-      std::printf("loop=%lld read=%.2f analyze=%.2f autoplay=%.2f keep=%.2f "
-                  "draw=%.2f wait=%.2f total=%.2f ms\n",
-                  loopIndex, readMs, analyzeMs, autoPlayMs, keepMs, drawMs,
-                  waitMs, totalMs);
-      lastTimingPrint = nowPrint;
-    }
 
     if (key != -1) {
       HandleKeyboardInput(key);

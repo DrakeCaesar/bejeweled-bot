@@ -41,9 +41,11 @@ constexpr uint32_t kTimeLimitBoardVftRva = 0x46a698; // Sexy::TimeLimitBoard
 
 // Offsets within Board / gem objects (byte offsets), reverse-engineered:
 //   Board + kGridOffset    -> 64 gem object pointers (8x8, 4 bytes each)
-//   gem   + kGemTypeOffset -> gem type (color 0..6) as a dword
+//   gem   + kGemTypeOffset -> gem type (color 0..6, or -1 = hypercube)
+//   gem   + kSpecialStateOffset -> special state (0 normal, 1 flame, 2 star, 4 supernova)
 constexpr uint32_t kGridOffset = 0xF8;
-constexpr uint32_t kGemTypeOffset = 0x220; // gem object -> type (color 0..6) dword
+constexpr uint32_t kGemTypeOffset = 0x220;
+constexpr uint32_t kSpecialStateOffset = 0x228;
 
 // --- Attach / detach --------------------------------------------------------
 bool Attach(HWND hwnd);
@@ -81,6 +83,10 @@ void FindGemGridByPattern(const int board[64]);
 // dword at each gem+kGemTypeOffset. Returns true and fills `board` on success.
 // Quiet: no console output (safe to call every frame).
 bool ReadBoard(int board[64]);
+
+// Read the special-gem state (0 normal, 1 flame, 2 star, 4 supernova) for all
+// 64 cells, row-major. Returns true on success. Quiet.
+bool ReadSpecialState(int state[64]);
 
 // Verbose diagnostic: locate the board, print the raw gem pointer grid and the
 // decoded 8x8 color grid. Used by the --dumpgrid CLI mode.
