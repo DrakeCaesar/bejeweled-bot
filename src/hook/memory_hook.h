@@ -92,4 +92,12 @@ bool ReadSpecialState(int state[64]);
 // decoded 8x8 color grid. Used by the --dumpgrid CLI mode.
 void DumpGrid();
 
+// Verbose diagnostic: scan the board object's memory for ALL gem objects (not
+// just the 64 visible ones). Each gem has its parent board pointer at +0x00
+// and a valid color (0..6 or 0xFFFFFFFF) at +0x220. Incoming/falling gems (the
+// pool used to refill the board) will appear with y coordinates outside 0..7.
+// Used by the --scanpool CLI mode. This is the key to reading the gems that are
+// about to fall during a cascade.
+void ScanGemPool();
+
 } // namespace MemoryHook

@@ -29,6 +29,7 @@ std::vector<uint8_t> g_prevBoardBytes;
 // Cached board object address (found once via full-process scan, reused on
 // every read; reset on Detach). Avoids re-scanning the whole process each frame.
 uint32_t g_boardAddr = 0;
+uint32_t g_boardVft = 0; // vtable of the found board (validates the cache)
 
 // ---------------------------------------------------------------------------
 // Module enumeration: find Bejeweled3.exe base + size in the (32-bit) target.
@@ -607,6 +608,7 @@ void Detach() {
   g_state.moduleSize = 0;
   g_state.attached = false;
   g_boardAddr = 0; // invalidate cached board address
+  g_boardVft = 0;
 }
 
 bool IsAttached() { return g_state.attached; }
@@ -997,39 +999,112 @@ void FindGemGridByPattern(const int board[64]) {
 // Live board read: locate the Board object, then dereference the 8x8 grid of
 // gem pointers at +0xF8 and read each gem's type dword at +0x18.
 // ---------------------------------------------------------------------------
-static uint32_t FindBoardObject() {
+// A board object has a vtable pointer (into the module image) at +0x00 and,
+// at +0xF8, a grid of gem pointers whose gem objects point back to the board
+// at gem+0x00 and carry a valid color at gem+0x220. This signature is
+// independent of which Sexy::Board subclass is in use, so it works for every
+// game mode (Classic, Zen, Lightning, Quest, ...). The known-vtable list is
+// only a preference hint; the structural check is what actually validates.
+static bool IsKnownBoardVft(uint32_t vft) {
   const uint32_t base = g_state.moduleBase;
-  const uint32_t boardVfts[] = {
-      base + kBoardVftRva,          base + kClassicBoardVftRva,
-      base + kSpeedBoardVftRva,     base + kZenBoardVftRva,
-      base + kQuestBoardVftRva,     base + kPokerBoardVftRva,
-      base + kTimeLimitBoardVftRva,
+  static const uint32_t kVftRvas[] = {
+      kBoardVftRva,        kClassicBoardVftRva, kSpeedBoardVftRva,
+      kZenBoardVftRva,     kQuestBoardVftRva,   kPokerBoardVftRva,
+      kTimeLimitBoardVftRva,
   };
+  for (uint32_t rva : kVftRvas) {
+    if (vft == base + rva) {
+      return true;
+    }
+  }
+  return false;
+}
 
-  // Reuse the cached address if its vtable (first dword) still matches a known
-  // board vtable. This turns a multi-second scan into a single dword read.
-  if (g_boardAddr != 0) {
-    uint32_t vft = 0;
-    if (ReadU32(g_boardAddr, vft)) {
-      for (uint32_t bv : boardVfts) {
-        if (vft == bv) {
-          return g_boardAddr;
+// One pass over all committed readable (non-module) regions. For every object
+// whose first dword points into the module image, test the board grid
+// signature. Returns the first object whose vtable is a known board class,
+// otherwise the first structurally-valid board. 0 if none found.
+static uint32_t ScanForBoard() {
+  auto regions = EnumerateReadableRegions(g_state.handle);
+  const uint32_t modBase = g_state.moduleBase;
+  const uint32_t modEnd = modBase + g_state.moduleSize;
+
+  std::vector<uint8_t> buf;
+  uint32_t fallback = 0;
+  uint32_t fallbackVft = 0;
+
+  for (const auto &r : regions) {
+    buf.resize(r.size);
+    if (!Read(r.base, buf.data(), r.size)) {
+      continue;
+    }
+    for (size_t i = 0; i + 4 <= r.size; i += 4) {
+      uint32_t vft;
+      std::memcpy(&vft, buf.data() + i, 4);
+      // The object's vtable must live inside the game module image.
+      if (vft < modBase || vft >= modEnd) {
+        continue;
+      }
+      // The grid (64 slots) must fit inside this region's buffer.
+      if (i + kGridOffset + 64 * 4 > r.size) {
+        continue;
+      }
+      uint32_t addr = r.base + (uint32_t)i;
+
+      // Try up to a few populated grid slots; a valid one has a gem whose
+      // parent points back to this object and whose color is in range.
+      int tried = 0;
+      bool isBoard = false;
+      for (int k = 0; k < 64 && tried < 4; k++) {
+        uint32_t p;
+        std::memcpy(&p, buf.data() + i + kGridOffset + k * 4, 4);
+        if (p < 0x00F00000 || p >= 0x7FFF0000) {
+          continue; // empty / not a heap pointer
+        }
+        tried++;
+        uint32_t parent = 0, type = 0;
+        if (ReadU32(p, parent) && parent == addr &&
+            ReadU32(p + kGemTypeOffset, type) &&
+            (type <= 6 || type == 0xFFFFFFFF)) {
+          isBoard = true;
+          break;
         }
       }
-    }
-    g_boardAddr = 0; // stale -> rescan
-  }
+      if (!isBoard) {
+        continue;
+      }
 
-  // One-time full-process scan.
-  for (uint32_t vft : boardVfts) {
-    for (uint32_t h : ScanForDword(vft)) {
-      if ((h & 3) == 0) {
-        g_boardAddr = h;
-        return h;
+      if (IsKnownBoardVft(vft)) {
+        g_boardVft = vft;
+        return addr;
+      }
+      if (fallback == 0) {
+        fallback = addr;
+        fallbackVft = vft;
       }
     }
   }
-  return 0;
+
+  if (fallback != 0) {
+    g_boardVft = fallbackVft;
+  }
+  return fallback;
+}
+
+static uint32_t FindBoardObject() {
+  // Fast path: reuse the cached board if its vtable is unchanged (one read).
+  if (g_boardAddr != 0) {
+    uint32_t vft = 0;
+    if (ReadU32(g_boardAddr, vft) && vft == g_boardVft) {
+      return g_boardAddr;
+    }
+    g_boardAddr = 0; // stale (mode changed / board recreated) -> rescan
+    g_boardVft = 0;
+  }
+
+  // One-time structural scan across the whole process.
+  g_boardAddr = ScanForBoard();
+  return g_boardAddr;
 }
 
 bool ReadBoard(int board[64]) {
@@ -1164,6 +1239,103 @@ void DumpGrid() {
       std::printf("%d%s", seen[j], j + 1 < distinct ? "," : "");
     std::printf("]\n");
   }
+}
+
+// Gem object field offsets (byte offsets), reverse-engineered.
+constexpr uint32_t kGemParentOffset = 0x00;  // parent board object pointer
+constexpr uint32_t kGemIdOffset = 0x04;      // unique gem id
+constexpr uint32_t kGemXOffset = 0x08;       // grid column (0..7)
+constexpr uint32_t kGemYOffset = 0x0C;       // grid row (0..7); <0 or >7 = pool
+
+void ScanGemPool() {
+  if (!g_state.attached) {
+    std::cerr << "[MemoryHook] Not attached.\n";
+    return;
+  }
+
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    std::cerr << "[MemoryHook] Board object not found.\n";
+    return;
+  }
+  std::printf("Board @ 0x%08X\n", b);
+
+  // Read the whole board object (it's large, ~0x3078+ bytes) in one shot.
+  constexpr uint32_t kBoardScanSize = 0x4000;
+  std::vector<uint8_t> buf(kBoardScanSize);
+  if (!Read(b, buf.data(), buf.size())) {
+    std::cerr << "[MemoryHook] Failed to read board object memory.\n";
+    return;
+  }
+
+  struct GemInfo {
+    uint32_t addr;
+    uint32_t boardOffset; // where in the board object this pointer lives
+    int32_t id;
+    int32_t x;
+    int32_t y;
+    int32_t type;
+    int32_t state;
+  };
+  std::vector<GemInfo> gems;
+
+  // Scan every aligned dword in the board object for candidate gem pointers.
+  for (uint32_t off = 0; off + 4 <= kBoardScanSize; off += 4) {
+    uint32_t gem = *(uint32_t *)(buf.data() + off);
+    if (gem < 0x00F00000 || gem >= 0x7FFF0000) continue;
+
+    // A gem points back to its parent board, and has a valid color at +0x220.
+    uint32_t parent = 0, type = 0;
+    if (!ReadU32(gem + kGemParentOffset, parent)) continue;
+    if (parent != b) continue;
+    if (!ReadU32(gem + kGemTypeOffset, type)) continue;
+    if (!(type <= 6 || type == 0xFFFFFFFF)) continue;
+
+    int32_t id = 0, x = 0, y = 0, st = 0;
+    ReadU32(gem + kGemIdOffset, *(uint32_t *)&id);
+    ReadU32(gem + kGemXOffset, *(uint32_t *)&x);
+    ReadU32(gem + kGemYOffset, *(uint32_t *)&y);
+    ReadU32(gem + kSpecialStateOffset, *(uint32_t *)&st);
+
+    gems.push_back({gem, off, id, x, y, (int32_t)type, st});
+  }
+
+  // Count unique gem objects by address.
+  std::sort(gems.begin(), gems.end(),
+            [](const GemInfo &a, const GemInfo &b) { return a.addr < b.addr; });
+  size_t unique = 0;
+  for (size_t i = 0; i < gems.size(); i++) {
+    if (i == 0 || gems[i].addr != gems[i - 1].addr) unique++;
+  }
+
+  std::printf("Found %zu gem pointer entries, %zu unique gem objects.\n",
+              gems.size(), unique);
+  if (unique != gems.size()) {
+    std::printf("Duplicates (same gem referenced from multiple board "
+                "offsets):\n");
+    for (size_t i = 0; i < gems.size(); i++) {
+      if (i > 0 && gems[i].addr == gems[i - 1].addr) {
+        std::printf("  gem %08X (id %d): also at board +0x%X\n", gems[i].addr,
+                    gems[i].id, gems[i].boardOffset);
+      }
+    }
+  }
+
+  // Re-sort by id for the full table.
+  std::sort(gems.begin(), gems.end(),
+            [](const GemInfo &a, const GemInfo &b) { return a.id < b.id; });
+
+  std::printf("\n%8s %6s %6s %4s %4s %6s %5s\n", "addr", "id", "b+off", "x",
+              "y", "type", "state");
+  int onBoard = 0, inPool = 0;
+  for (const auto &g : gems) {
+    bool visible = (g.x >= 0 && g.x < 8 && g.y >= 0 && g.y < 8);
+    if (visible) onBoard++; else inPool++;
+    std::printf("%08X %6d +0x%03X %4d %4d %6d %5d%s\n", g.addr, g.id,
+                g.boardOffset, g.x, g.y, g.type, g.state,
+                visible ? "" : "   <-- pool/incoming");
+  }
+  std::printf("\nOn-board: %d, pool/incoming: %d\n", onBoard, inPool);
 }
 
 } // namespace MemoryHook

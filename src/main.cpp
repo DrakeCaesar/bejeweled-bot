@@ -42,6 +42,22 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  // Scan the board object for the full gem pool (incl. incoming/falling gems).
+  if (argc > 1 && std::strcmp(argv[1], "--scanpool") == 0) {
+    HWND hwnd = FindGameWindow(Config::WINDOW_TITLE);
+    if (!hwnd) {
+      std::cerr << "Error: could not find game window.\n";
+      return -1;
+    }
+    if (!MemoryHook::Attach(hwnd)) {
+      std::cerr << "Error: attach failed.\n";
+      return -1;
+    }
+    MemoryHook::ScanGemPool();
+    MemoryHook::Detach();
+    return 0;
+  }
+
   // Enable high-resolution timing
   TimerResolution timerResolution(1);
 
