@@ -47,6 +47,16 @@ constexpr uint32_t kGridOffset = 0xF8;
 constexpr uint32_t kGemTypeOffset = 0x220;
 constexpr uint32_t kSpecialStateOffset = 0x228;
 
+// Special-gem state values at kSpecialStateOffset (verified in-game by
+// comparing naturally-created specials against ones written by the editor):
+//   0 = normal, 1 = flame, 2 = hypercube, 4 = star, 5 = supernova
+// Hypercubes additionally carry kGemTypeOffset == -1 (0xFFFFFFFF).
+constexpr int kStateNormal = 0;
+constexpr int kStateFlame = 1;
+constexpr int kStateHypercube = 2;
+constexpr int kStateStar = 4;
+constexpr int kStateSupernova = 5;
+
 // --- Attach / detach --------------------------------------------------------
 bool Attach(HWND hwnd);
 void Detach();
@@ -56,6 +66,25 @@ bool IsAttached();
 bool Read(uint32_t address, void *buffer, size_t size);
 bool ReadU32(uint32_t address, uint32_t &out);
 bool ReadPtr(uint32_t address, uint32_t &out);
+
+// --- Raw writes (32-bit target) --------------------------------------------
+// Requires the process to be opened with VM_WRITE (done by Attach).
+bool Write(uint32_t address, const void *buffer, size_t size);
+
+// --- Test hooks -------------------------------------------------------------
+// Overwrite the live board with a 2-colour checkerboard: colorA where
+// (row+col) is even, colorB where odd. Special state is reset and each gem is
+// snapped to its resting position (col*cellSize, row*cellSize) so the board is
+// immediately settled. Returns the number of gem slots written (0 on failure).
+int SetBoardCheckerboard(int colorA, int colorB, float cellSize);
+
+// Write selected cells of the live board. `mask[i]` != 0 => cell i is written
+// with colour `color[i]` (0..6, or -1 = hypercube) and special state
+// `state[i]` (0 normal, 1 flame, 2 supernova, 4 star); the gem is snapped to
+// its resting position (col*cellSize, row*cellSize). Returns the number of
+// cells written (0 on failure).
+int WriteBoardCells(const uint8_t mask[64], const int color[64],
+                    const int state[64], float cellSize);
 
 // --- Metadata ---------------------------------------------------------------
 uint32_t ModuleBase(); // loaded image base (ASLR-aware)
@@ -95,6 +124,15 @@ bool ReadSpecialState(int state[64]);
 // Returns the number of populated slots (0..64).
 int ReadBoardRaw(uint32_t ptr[64], int type[64]);
 
+// Read, for each of the 64 grid slots, the gem object pointer, a raw window of
+// 8 dwords starting at gem+0x08 (covers the logical x/y at +0x08/+0x0C and the
+// candidate animated float position at +0x10/+0x14), plus the type dword at
+// +0x220 and special-state dword at +0x228. Used to learn which fields move
+// while a gem is falling. `ptr[i]` = 0 for an empty slot. Returns the number of
+// readable slots (0..64).
+int ReadGemDwords(uint32_t ptr[64], uint32_t d[64][8], int type[64],
+                  int state[64]);
+
 // --- Mersenne Twister RNG --------------------------------------------------
 // The game's RNG is a standard MT19937 (31-bit output) whose state object is
 // static at module-base + kMtStateRva. The 624-dword state array starts at
@@ -119,6 +157,12 @@ void TraceRng();
 // Verbose diagnostic: locate the board, print the raw gem pointer grid and the
 // decoded 8x8 color grid. Used by the --dumpgrid CLI mode.
 void DumpGrid();
+
+// Diagnostic: for a board that contains exactly one special gem, find which
+// dword offsets inside the gem object distinguish it from the ordinary gems.
+// Prints every offset where a small number of slots deviate from the modal
+// value, plus a full field dump for those slots. --dumpgem.
+void DumpGemFieldOutliers();
 
 // Verbose diagnostic: scan the board object's memory for ALL gem objects (not
 // just the 64 visible ones). Each gem has its parent board pointer at +0x00

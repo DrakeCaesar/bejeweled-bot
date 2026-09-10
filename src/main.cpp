@@ -2,6 +2,7 @@
 #include "core/application.h"
 #include "core/window_helpers.h"
 #include "hook/memory_hook.h"
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <mmsystem.h>
@@ -58,6 +59,22 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  // Find which gem-object fields distinguish a lone special gem.
+  if (argc > 1 && std::strcmp(argv[1], "--dumpgem") == 0) {
+    HWND hwnd = FindGameWindow(Config::WINDOW_TITLE);
+    if (!hwnd) {
+      std::cerr << "Error: could not find game window.\n";
+      return -1;
+    }
+    if (!MemoryHook::Attach(hwnd)) {
+      std::cerr << "Error: attach failed.\n";
+      return -1;
+    }
+    MemoryHook::DumpGemFieldOutliers();
+    MemoryHook::Detach();
+    return 0;
+  }
+
   // Trace the game's Mersenne Twister index alongside gem-board changes.
   if (argc > 1 && std::strcmp(argv[1], "--rngtrace") == 0) {
     HWND hwnd = FindGameWindow(Config::WINDOW_TITLE);
@@ -100,6 +117,18 @@ int main(int argc, char **argv) {
       return -1;
     }
     app.SetRngAutoTrace(20000);
+    app.Run();
+    return 0;
+  }
+
+  // Self-serve board/gem trace: autoplay + log per-slot gem state, then quit.
+  if (argc > 1 && std::strcmp(argv[1], "--trace") == 0) {
+    int ms = (argc > 2) ? std::atoi(argv[2]) : 30000;
+    Application app;
+    if (!app.Initialize()) {
+      return -1;
+    }
+    app.SetBoardTrace(ms);
     app.Run();
     return 0;
   }

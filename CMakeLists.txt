@@ -80,3 +80,25 @@ elseif(MSVC)
         $<$<CONFIG:Debug>:/DEBUG>
     )
 endif()
+
+# ============================================================================
+# Unit tests (pure board logic; no game process required)
+# ============================================================================
+enable_testing()
+
+add_executable(bejeweled-tests
+    tests/test_board_analysis.cpp
+    src/bot/board_analysis.cpp
+)
+target_link_libraries(bejeweled-tests PRIVATE ${OpenCV_LIBS})
+target_include_directories(bejeweled-tests PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}
+)
+
+if(MSVC)
+    target_compile_options(bejeweled-tests PRIVATE /MP${num_jobs})
+endif()
+
+add_test(NAME board_analysis COMMAND bejeweled-tests)

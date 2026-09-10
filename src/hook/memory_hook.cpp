@@ -2,6 +2,7 @@
 
 #include <TlHelp32.h>
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -111,7 +112,8 @@ struct Region {
   uint32_t size;
 };
 
-std::vector<Region> EnumerateReadableRegions(HANDLE hProcess) {
+std::vector<Region> EnumerateReadableRegions(HANDLE hProcess,
+                                            bool privateOnly = false) {
   std::vector<Region> regions;
   uintptr_t addr = 0x10000;
   const uintptr_t maxAddr = 0x7FFF0000; // 32-bit user space ceiling
@@ -137,7 +139,8 @@ std::vector<Region> EnumerateReadableRegions(HANDLE hProcess) {
     bool inModule =
         (regionBase >= g_state.moduleBase && regionBase < modEnd);
     if (readable && !inModule && mbi.Protect != PAGE_NOACCESS &&
-        !(mbi.Protect & PAGE_GUARD)) {
+        !(mbi.Protect & PAGE_GUARD) &&
+        (!privateOnly || mbi.Type == MEM_PRIVATE)) {
       regions.push_back({(uint32_t)regionBase, (uint32_t)regionSize});
     }
 
@@ -557,6 +560,75 @@ void ScanModuleForGrid() {
 
 } // namespace
 
+// Defined below (full-process structural scan); forward-declared for the
+// test-hook writers that appear earlier in the file.
+static uint32_t FindBoardObject();
+
+// ---------------------------------------------------------------------------
+// Board-address cache
+//
+// The full-process scan costs ~10s because the game has ~900 MB of committed
+// readable memory. The resulting board address is stable for as long as the
+// game process lives, so we persist it next to the exe and reuse it on the
+// next startup. It is only ever used after the normal vtable validation in
+// FindBoardObject, so a stale entry (game restarted, address reused) simply
+// falls back to a fresh scan.
+// ---------------------------------------------------------------------------
+void BoardCachePath(char *out, size_t n) {
+  char exe[MAX_PATH] = {0};
+  DWORD len = GetModuleFileNameA(nullptr, exe, MAX_PATH);
+  if (len == 0 || len >= MAX_PATH) {
+    out[0] = 0;
+    return;
+  }
+  char *slash = std::strrchr(exe, '\\');
+  if (slash) {
+    *(slash + 1) = 0;
+  } else {
+    exe[0] = 0;
+  }
+  std::snprintf(out, n, "%sboard_cache.txt", exe);
+}
+
+void SaveBoardCache() {
+  if (!g_boardAddr || !g_boardVft) {
+    return;
+  }
+  char path[MAX_PATH];
+  BoardCachePath(path, sizeof(path));
+  if (!path[0]) {
+    return;
+  }
+  FILE *f = std::fopen(path, "w");
+  if (!f) {
+    return;
+  }
+  std::fprintf(f, "%u %u %u %u\n", g_state.moduleBase, g_state.moduleSize,
+               g_boardAddr, g_boardVft);
+  std::fclose(f);
+}
+
+void LoadBoardCache() {
+  char path[MAX_PATH];
+  BoardCachePath(path, sizeof(path));
+  if (!path[0]) {
+    return;
+  }
+  FILE *f = std::fopen(path, "r");
+  if (!f) {
+    return;
+  }
+  unsigned mb = 0, msz = 0, ba = 0, vf = 0;
+  int got = std::fscanf(f, "%u %u %u %u", &mb, &msz, &ba, &vf);
+  std::fclose(f);
+  if (got == 4 && mb == g_state.moduleBase && msz == g_state.moduleSize && ba &&
+      vf) {
+    g_boardAddr = ba;
+    g_boardVft = vf;
+    std::printf("  [hook] reusing cached board address 0x%08X\n", ba);
+  }
+}
+
 // ===========================================================================
 // Public API
 // ===========================================================================
@@ -576,7 +648,9 @@ bool Attach(HWND hwnd) {
     return false;
   }
 
-  HANDLE h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+  HANDLE h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ |
+                             PROCESS_VM_WRITE | PROCESS_VM_OPERATION,
+                         FALSE, pid);
   if (!h) {
     std::cerr << "[MemoryHook] OpenProcess failed (err " << GetLastError()
               << ").\n";
@@ -595,6 +669,10 @@ bool Attach(HWND hwnd) {
   g_state.moduleBase = base;
   g_state.moduleSize = size;
   g_state.attached = true;
+
+  // Try to skip the ~10s full-process board scan using a previously found
+  // address. Validated on every use, so a stale entry is harmless.
+  LoadBoardCache();
   return true;
 }
 
@@ -628,6 +706,52 @@ bool ReadU32(uint32_t address, uint32_t &out) {
 }
 
 bool ReadPtr(uint32_t address, uint32_t &out) { return ReadU32(address, out); }
+
+bool Write(uint32_t address, const void *buffer, size_t size) {
+  if (!g_state.attached || !g_state.handle) {
+    return false;
+  }
+  SIZE_T n = 0;
+  return WriteProcessMemory(g_state.handle, (LPVOID)(uintptr_t)address, buffer,
+                            size, &n) &&
+         n == size;
+}
+
+int SetBoardCheckerboard(int colorA, int colorB, float cellSize) {
+  if (!g_state.attached) {
+    return 0;
+  }
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    return 0;
+  }
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    return 0;
+  }
+
+  int written = 0;
+  for (int i = 0; i < 64; i++) {
+    uint32_t gem = grid[i];
+    if (gem < 0x00F00000 || gem >= 0x7FFF0000) {
+      continue;
+    }
+    int row = i / 8;
+    int col = i % 8;
+    uint32_t color = (uint32_t)(((row + col) & 1) ? colorB : colorA);
+    if (!Write(gem + kGemTypeOffset, &color, 4)) {
+      continue;
+    }
+    uint32_t zero = 0;
+    Write(gem + kSpecialStateOffset, &zero, 4);
+    float px = (float)col * cellSize;
+    float py = (float)row * cellSize;
+    Write(gem + 0x10, &px, 4);
+    Write(gem + 0x14, &py, 4);
+    written++;
+  }
+  return written;
+}
 
 uint32_t ModuleBase() { return g_state.moduleBase; }
 uint32_t ModuleSize() { return g_state.moduleSize; }
@@ -1025,70 +1149,87 @@ static bool IsKnownBoardVft(uint32_t vft) {
 // signature. Returns the first object whose vtable is a known board class,
 // otherwise the first structurally-valid board. 0 if none found.
 static uint32_t ScanForBoard() {
-  auto regions = EnumerateReadableRegions(g_state.handle);
+  const auto t0 = std::chrono::steady_clock::now();
   const uint32_t modBase = g_state.moduleBase;
   const uint32_t modEnd = modBase + g_state.moduleSize;
 
   std::vector<uint8_t> buf;
-  uint32_t fallback = 0;
-  uint32_t fallbackVft = 0;
+  size_t scannedRegions = 0;
+  size_t totalBytes = 0;
 
-  for (const auto &r : regions) {
-    buf.resize(r.size);
-    if (!Read(r.base, buf.data(), r.size)) {
-      continue;
-    }
-    for (size_t i = 0; i + 4 <= r.size; i += 4) {
-      uint32_t vft;
-      std::memcpy(&vft, buf.data() + i, 4);
-      // The object's vtable must live inside the game module image.
-      if (vft < modBase || vft >= modEnd) {
+  // One pass over a set of regions: for every object whose first dword points
+  // into the module image, test the board grid signature and return the first
+  // structural match.
+  auto scanSet = [&](const std::vector<Region> &regions) -> uint32_t {
+    for (const auto &r : regions) {
+      buf.resize(r.size);
+      if (!Read(r.base, buf.data(), r.size)) {
         continue;
       }
-      // The grid (64 slots) must fit inside this region's buffer.
-      if (i + kGridOffset + 64 * 4 > r.size) {
-        continue;
-      }
-      uint32_t addr = r.base + (uint32_t)i;
-
-      // Try up to a few populated grid slots; a valid one has a gem whose
-      // parent points back to this object and whose color is in range.
-      int tried = 0;
-      bool isBoard = false;
-      for (int k = 0; k < 64 && tried < 4; k++) {
-        uint32_t p;
-        std::memcpy(&p, buf.data() + i + kGridOffset + k * 4, 4);
-        if (p < 0x00F00000 || p >= 0x7FFF0000) {
-          continue; // empty / not a heap pointer
+      scannedRegions++;
+      totalBytes += r.size;
+      for (size_t i = 0; i + 4 <= r.size; i += 4) {
+        uint32_t vft;
+        std::memcpy(&vft, buf.data() + i, 4);
+        // The object's vtable must live inside the game module image.
+        if (vft < modBase || vft >= modEnd) {
+          continue;
         }
-        tried++;
-        uint32_t parent = 0, type = 0;
-        if (ReadU32(p, parent) && parent == addr &&
-            ReadU32(p + kGemTypeOffset, type) &&
-            (type <= 6 || type == 0xFFFFFFFF)) {
-          isBoard = true;
-          break;
+        // The grid (64 slots) must fit inside this region's buffer.
+        if (i + kGridOffset + 64 * 4 > r.size) {
+          continue;
         }
-      }
-      if (!isBoard) {
-        continue;
-      }
+        uint32_t addr = r.base + (uint32_t)i;
 
-      if (IsKnownBoardVft(vft)) {
+        // Try up to a few populated grid slots; a valid one has a gem whose
+        // parent points back to this object and whose color is in range.
+        int tried = 0;
+        bool isBoard = false;
+        for (int k = 0; k < 64 && tried < 4; k++) {
+          uint32_t p;
+          std::memcpy(&p, buf.data() + i + kGridOffset + k * 4, 4);
+          if (p < 0x00F00000 || p >= 0x7FFF0000) {
+            continue; // empty / not a heap pointer
+          }
+          tried++;
+          uint32_t parent = 0, type = 0;
+          if (ReadU32(p, parent) && parent == addr &&
+              ReadU32(p + kGemTypeOffset, type) &&
+              (type <= 6 || type == 0xFFFFFFFF)) {
+            isBoard = true;
+            break;
+          }
+        }
+        if (!isBoard) {
+          continue;
+        }
+
+        // Accept the first structurally valid board. The known-vtable list is
+        // not exhaustive across game builds/modes, so insisting on it would
+        // force a full scan for no benefit.
         g_boardVft = vft;
         return addr;
       }
-      if (fallback == 0) {
-        fallback = addr;
-        fallbackVft = vft;
-      }
     }
+    return 0;
+  };
+
+  // Pass 1: private (heap/stack) memory. The board lives there in practice,
+  // and this skips the large mapped regions (D3D surfaces, file mappings).
+  uint32_t found = scanSet(EnumerateReadableRegions(g_state.handle, true));
+  // Pass 2: everything readable, only if pass 1 turned up nothing.
+  if (!found) {
+    found = scanSet(EnumerateReadableRegions(g_state.handle, false));
   }
 
-  if (fallback != 0) {
-    g_boardVft = fallbackVft;
-  }
-  return fallback;
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - t0)
+                      .count();
+  std::cout << "  [hook] board scan: " << ms << " ms, " << scannedRegions
+            << " regions, " << (totalBytes >> 20) << " MB -> "
+            << (found ? "found" : "not found") << std::endl;
+
+  return found;
 }
 
 static uint32_t FindBoardObject() {
@@ -1104,6 +1245,9 @@ static uint32_t FindBoardObject() {
 
   // One-time structural scan across the whole process.
   g_boardAddr = ScanForBoard();
+  if (g_boardAddr) {
+    SaveBoardCache();
+  }
   return g_boardAddr;
 }
 
@@ -1197,6 +1341,253 @@ int ReadBoardRaw(uint32_t ptr[64], int type[64]) {
     n++;
   }
   return n;
+}
+
+int ReadGemDwords(uint32_t ptr[64], uint32_t d[64][8], int type[64],
+                  int state[64]) {
+  for (int i = 0; i < 64; i++) {
+    ptr[i] = 0;
+    type[i] = -100;
+    state[i] = 0;
+    for (int k = 0; k < 8; k++) {
+      d[i][k] = 0;
+    }
+  }
+  if (!g_state.attached) {
+    return 0;
+  }
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    return 0;
+  }
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    return 0;
+  }
+  int n = 0;
+  for (int i = 0; i < 64; i++) {
+    uint32_t gem = grid[i];
+    ptr[i] = gem;
+    if (gem < 0x00F00000 || gem >= 0x7FFF0000) {
+      continue; // empty slot
+    }
+    uint32_t t = 0;
+    if (!ReadU32(gem + kGemTypeOffset, t)) {
+      continue;
+    }
+    if (!(t <= 6 || t == 0xFFFFFFFF)) {
+      continue;
+    }
+    type[i] = (int)t;
+    Read(gem + 0x08, d[i], 8 * 4);
+    uint32_t s = 0;
+    if (ReadU32(gem + kSpecialStateOffset, s)) {
+      state[i] = (int)s;
+    }
+    n++;
+  }
+  return n;
+}
+
+namespace {
+// Effect flags at gem+0x21C, read off naturally-created specials:
+//   flame 3 (0b011), star 4 (0b100), supernova 5 (0b101 = flame|star),
+//   hypercube 6 (0b110). A supernova visually reads as "flame + star".
+uint32_t EffectFlagsForState(int state) {
+  switch (state) {
+  case kStateFlame:
+    return 3;
+  case kStateHypercube:
+    return 6;
+  case kStateStar:
+    return 4;
+  case kStateSupernova:
+    return 5;
+  default:
+    return 0;
+  }
+}
+} // namespace
+
+int WriteBoardCells(const uint8_t mask[64], const int color[64],
+                    const int state[64], float cellSize) {
+  if (!g_state.attached) {
+    return 0;
+  }
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    return 0;
+  }
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    return 0;
+  }
+
+  int written = 0;
+  for (int i = 0; i < 64; i++) {
+    if (!mask[i]) {
+      continue;
+    }
+    uint32_t gem = grid[i];
+    if (gem < 0x00F00000 || gem >= 0x7FFF0000) {
+      continue;
+    }
+    int row = i / 8;
+    int col = i % 8;
+    uint32_t c = (uint32_t)color[i];
+    uint32_t s = (uint32_t)state[i];
+    if (!Write(gem + kGemTypeOffset, &c, 4)) {
+      continue;
+    }
+    Write(gem + kSpecialStateOffset, &s, 4);
+    float px = (float)col * cellSize;
+    float py = (float)row * cellSize;
+    Write(gem + 0x10, &px, 4);
+    Write(gem + 0x14, &py, 4);
+
+    // Specials also need their effect state initialised, otherwise the game
+    // renders them as ordinary gems (no flame/star overlay). Values copied from
+    // naturally-created specials.
+    uint32_t eff = EffectFlagsForState((int)s);
+    if (eff != 0) {
+      uint32_t f28 = 0xC0000000u; // -2.0f
+      uint32_t f2c = 0x3F999988u; // ~1.2f
+      Write(gem + 0x028, &f28, 4);
+      Write(gem + 0x02C, &f2c, 4);
+      Write(gem + 0x21C, &eff, 4);
+    }
+    written++;
+  }
+  return written;
+}
+
+void DumpGemFieldOutliers() {
+  if (!g_state.attached) {
+    std::cerr << "[MemoryHook] Not attached.\n";
+    return;
+  }
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    std::cerr << "[MemoryHook] Board object not found.\n";
+    return;
+  }
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    std::cerr << "[MemoryHook] Failed to read gem grid.\n";
+    return;
+  }
+
+  // Offsets probed inside every gem object.
+  std::vector<uint32_t> offsets;
+  for (uint32_t o = 0x00; o <= 0x40; o += 4) {
+    offsets.push_back(o);
+  }
+  for (uint32_t o = 0x1F0; o <= 0x240; o += 4) {
+    offsets.push_back(o);
+  }
+
+  std::vector<std::vector<uint32_t>> vals(64);
+  std::vector<bool> ok(64, false);
+  for (int i = 0; i < 64; ++i) {
+    vals[i].assign(offsets.size(), 0);
+    uint32_t gem = grid[i];
+    if (gem < 0x00F00000 || gem >= 0x7FFF0000) {
+      continue;
+    }
+    ok[i] = true;
+    for (size_t k = 0; k < offsets.size(); ++k) {
+      ReadU32(gem + offsets[k], vals[i][k]);
+    }
+  }
+
+  auto at = [&](int i, uint32_t off) -> uint32_t {
+    for (size_t k = 0; k < offsets.size(); ++k) {
+      if (offsets[k] == off) {
+        return vals[i][k];
+      }
+    }
+    return 0;
+  };
+
+  std::printf("Board @ 0x%08X\n\n", b);
+
+  std::printf("documented fields per slot:\n");
+  for (int i = 0; i < 64; ++i) {
+    if (!ok[i]) {
+      continue;
+    }
+    std::printf("  slot %2d (r%d,c%d) gem=%08X type(+220)=%u state(+228)=%u\n", i,
+                i / 8, i % 8, grid[i], at(i, 0x220), at(i, 0x228));
+  }
+
+  std::printf("\noffsets where a minority of slots differ from the modal "
+              "value:\n");
+  for (size_t k = 0; k < offsets.size(); ++k) {
+    std::vector<std::pair<uint32_t, int>> freq;
+    for (int i = 0; i < 64; ++i) {
+      if (!ok[i]) {
+        continue;
+      }
+      bool found = false;
+      for (auto &fv : freq) {
+        if (fv.first == vals[i][k]) {
+          fv.second++;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        freq.push_back({vals[i][k], 1});
+      }
+    }
+    if (freq.size() < 2) {
+      continue;
+    }
+    uint32_t modeVal = 0;
+    int modeCount = 0;
+    for (const auto &fv : freq) {
+      if (fv.second > modeCount) {
+        modeCount = fv.second;
+        modeVal = fv.first;
+      }
+    }
+    int outliers = 64 - modeCount;
+    if (outliers <= 0 || outliers > 24) {
+      continue;
+    }
+    std::printf("  +0x%03X mode=0x%08X (%d slots) outliers:", offsets[k],
+                modeVal, modeCount);
+    for (int i = 0; i < 64; ++i) {
+      if (!ok[i] || vals[i][k] == modeVal) {
+        continue;
+      }
+      std::printf("  %d(r%d,c%d)=0x%08X", i, i / 8, i % 8, vals[i][k]);
+    }
+    std::printf("\n");
+  }
+
+  // Full probe for every slot that carries a special marker, next to slot 0 as
+  // an ordinary reference gem.
+  std::printf("\nfull probe for special slots (and slot 0 as reference):\n");
+  auto dumpSlot = [&](int i) {
+    if (!ok[i]) {
+      return;
+    }
+    std::printf("  slot %2d (r%d,c%d) gem=%08X\n", i, i / 8, i % 8, grid[i]);
+    for (size_t k = 0; k < offsets.size(); ++k) {
+      std::printf("      +0x%03X = 0x%08X (%d)\n", offsets[k], vals[i][k],
+                  (int)vals[i][k]);
+    }
+  };
+  dumpSlot(0);
+  for (int i = 0; i < 64; ++i) {
+    if (i == 0 || !ok[i]) {
+      continue;
+    }
+    if (at(i, 0x228) != 0 || at(i, 0x220) == 0xFFFFFFFFu) {
+      dumpSlot(i);
+    }
+  }
 }
 
 bool ReadMtIndex(int &index) {

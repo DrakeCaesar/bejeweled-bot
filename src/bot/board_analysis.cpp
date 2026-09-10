@@ -322,7 +322,12 @@ int BoardState::clearMatches(const MatchableSwap *swap,
     }
   }
 
-  // Phase 2: Create special gems from 4+ or 5+ matches (before clearing)
+  // Phase 2: Create special gems from 4+ matches (before clearing).
+  //
+  // NOTE: the game creates MULTIPLE specials when several runs qualify in the
+  // same resolve step (verified in-game: a 4+4 intersection yields several
+  // flames plus a star), so we plant one per qualifying run rather than
+  // collapsing to a single "best" special.
   if (allowSpecialCreation && !matches.empty()) {
     for (const auto &match : matches) {
       int targetRow, targetCol;
