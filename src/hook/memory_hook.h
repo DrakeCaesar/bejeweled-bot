@@ -88,6 +88,34 @@ bool ReadBoard(int board[64]);
 // 64 cells, row-major. Returns true on success. Quiet.
 bool ReadSpecialState(int state[64]);
 
+// Raw logical-grid read. Unlike ReadBoard this does NOT fail when a cell is
+// empty — it reports emptiness, which is the "just cleared / Gemwipe window"
+// signal. `ptr[i]` = gem object pointer at slot i (0 if empty/unreadable);
+// `type[i]` = colour (0..6, -1 hypercube) or -100 if the slot is empty.
+// Returns the number of populated slots (0..64).
+int ReadBoardRaw(uint32_t ptr[64], int type[64]);
+
+// --- Mersenne Twister RNG --------------------------------------------------
+// The game's RNG is a standard MT19937 (31-bit output) whose state object is
+// static at module-base + kMtStateRva. The 624-dword state array starts at
+// +0x000; the current index (0..623) is a dword at +0x9C0. Reading these lets
+// us reproduce the exact sequence used when generating falling gems.
+constexpr uint32_t kMtStateRva = 0x4E20E8; // absolute 0x8E20E8
+constexpr uint32_t kMtIndexOffset = 0x9C0;
+constexpr int kMtStateCount = 624;
+
+// Read the live MT index (0..623). Returns false if unreadable.
+bool ReadMtIndex(int &index);
+
+// Read the live MT19937 state (624 dwords) and index. Used to reproduce the
+// exact random sequence for fallen-gem prediction.
+bool ReadMtState(uint32_t state[kMtStateCount], int &index);
+
+// Diagnostic: sample the MT index and the 8x8 gem grid for ~30s, printing a
+// line whenever the board changes. Used to learn how many MT values each gem
+// generation consumes and the mt-output -> color mapping. Used by --rngtrace.
+void TraceRng();
+
 // Verbose diagnostic: locate the board, print the raw gem pointer grid and the
 // decoded 8x8 color grid. Used by the --dumpgrid CLI mode.
 void DumpGrid();
@@ -99,5 +127,9 @@ void DumpGrid();
 // Used by the --scanpool CLI mode. This is the key to reading the gems that are
 // about to fall during a cascade.
 void ScanGemPool();
+
+// Diagnostic: scan the board object for runs of small values (0..6) via both
+// dword and byte views — a stored "next gems" sequence / bag. --scancolors.
+void ScanColorArrays();
 
 } // namespace MemoryHook

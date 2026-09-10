@@ -1163,6 +1163,127 @@ bool ReadSpecialState(int state[64]) {
   return deref == 64;
 }
 
+int ReadBoardRaw(uint32_t ptr[64], int type[64]) {
+  for (int i = 0; i < 64; i++) {
+    ptr[i] = 0;
+    type[i] = -100;
+  }
+  if (!g_state.attached) {
+    return 0;
+  }
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    return 0;
+  }
+  uint32_t grid[64];
+  if (!Read(b + kGridOffset, grid, sizeof(grid))) {
+    return 0;
+  }
+  int n = 0;
+  for (int i = 0; i < 64; i++) {
+    uint32_t gem = grid[i];
+    ptr[i] = gem;
+    if (gem < 0x00F00000 || gem >= 0x7FFF0000) {
+      continue; // empty slot
+    }
+    uint32_t t = 0;
+    if (!ReadU32(gem + kGemTypeOffset, t)) {
+      continue;
+    }
+    if (!(t <= 6 || t == 0xFFFFFFFF)) {
+      continue;
+    }
+    type[i] = (int)t;
+    n++;
+  }
+  return n;
+}
+
+bool ReadMtIndex(int &index) {
+  if (!g_state.attached) {
+    return false;
+  }
+  uint32_t v = 0;
+  if (!ReadU32(g_state.moduleBase + kMtStateRva + kMtIndexOffset, v)) {
+    return false;
+  }
+  index = (int)v;
+  return true;
+}
+
+bool ReadMtState(uint32_t state[kMtStateCount], int &index) {
+  if (!g_state.attached) {
+    return false;
+  }
+  uint32_t mt = g_state.moduleBase + kMtStateRva;
+  if (!Read(mt, state, kMtStateCount * 4)) {
+    return false;
+  }
+  uint32_t v = 0;
+  if (!ReadU32(mt + kMtIndexOffset, v)) {
+    return false;
+  }
+  index = (int)v;
+  return true;
+}
+
+void TraceRng() {
+  if (!g_state.attached) {
+    std::cerr << "[MemoryHook] Not attached.\n";
+    return;
+  }
+  uint32_t mt = g_state.moduleBase + kMtStateRva;
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    std::cerr << "[MemoryHook] Board object not found.\n";
+    return;
+  }
+  std::printf("MT state @ 0x%08X, board @ 0x%08X\n", mt, b);
+  std::printf("Sampling ~30s - play a few moves in the game...\n");
+
+  int prev[64];
+  for (int i = 0; i < 64; i++) {
+    prev[i] = -1000;
+  }
+  int prevIdx = -1;
+  DWORD start = GetTickCount();
+
+  while (GetTickCount() - start < 30000) {
+    int board[64];
+    if (!ReadBoard(board)) {
+      Sleep(2);
+      continue;
+    }
+    int idx = -1;
+    ReadMtIndex(idx);
+
+    bool changed = false;
+    for (int i = 0; i < 64; i++) {
+      if (board[i] != prev[i]) {
+        changed = true;
+        break;
+      }
+    }
+    if (changed) {
+      std::printf("t=%5lums idx=%3d (d=%+d)",
+                  (unsigned long)(GetTickCount() - start), idx,
+                  prevIdx < 0 ? 0 : idx - prevIdx);
+      for (int i = 0; i < 64; i++) {
+        if (board[i] != prev[i]) {
+          std::printf(" [%d:%d>%d]", i, prev[i], board[i]);
+        }
+      }
+      std::printf("\n");
+      for (int i = 0; i < 64; i++) {
+        prev[i] = board[i];
+      }
+    }
+    prevIdx = idx;
+    Sleep(2);
+  }
+  std::printf("Done.\n");
+}
+
 void DumpGrid() {
   if (!g_state.attached) {
     std::cerr << "[MemoryHook] Not attached.\n";
@@ -1201,6 +1322,22 @@ void DumpGrid() {
     std::printf("  ");
     for (int c = 0; c < 8; c++) {
       std::printf(" %2d", board[r * 8 + c]);
+    }
+    std::printf("\n");
+  }
+
+  // Field +0x18 (set by board-load from the stream) vs +0x220, per cell.
+  std::cout << "\n8x8 +0x18/+0x220 grid:\n";
+  for (int r = 0; r < 8; r++) {
+    std::printf("  ");
+    for (int c = 0; c < 8; c++) {
+      uint32_t gem = grid[r * 8 + c];
+      uint32_t v18 = 0, v220 = 0;
+      if (gem >= 0x00F00000 && gem < 0x7FFF0000) {
+        ReadU32(gem + 0x18, v18);
+        ReadU32(gem + 0x220, v220);
+      }
+      std::printf(" %d/%d", (int)v18, (int)v220);
     }
     std::printf("\n");
   }
@@ -1336,6 +1473,71 @@ void ScanGemPool() {
                 visible ? "" : "   <-- pool/incoming");
   }
   std::printf("\nOn-board: %d, pool/incoming: %d\n", onBoard, inPool);
+}
+
+void ScanColorArrays() {
+  if (!g_state.attached) {
+    std::cerr << "[MemoryHook] Not attached.\n";
+    return;
+  }
+  uint32_t b = FindBoardObject();
+  if (!b) {
+    std::cerr << "[MemoryHook] Board object not found.\n";
+    return;
+  }
+  std::printf("Board @ 0x%08X\n", b);
+
+  constexpr uint32_t kSize = 0x4000;
+  std::vector<uint8_t> buf(kSize);
+  if (!Read(b, buf.data(), buf.size())) {
+    std::cerr << "[MemoryHook] Failed to read board object.\n";
+    return;
+  }
+
+  std::printf("Dword runs of values in [0,6] (len>=8):\n");
+  int runStart = -1;
+  for (uint32_t off = 0; off + 4 <= kSize; off += 4) {
+    uint32_t v;
+    std::memcpy(&v, buf.data() + off, 4);
+    if (v <= 6) {
+      if (runStart < 0) {
+        runStart = (int)off;
+      }
+    } else if (runStart >= 0) {
+      int len = ((int)off - runStart) / 4;
+      if (len >= 8) {
+        std::printf("  +0x%04X len=%d:", runStart, len);
+        for (uint32_t o = (uint32_t)runStart; o < off; o += 4) {
+          uint32_t x;
+          std::memcpy(&x, buf.data() + o, 4);
+          std::printf(" %u", x);
+        }
+        std::printf("\n");
+      }
+      runStart = -1;
+    }
+  }
+
+  std::printf("Byte runs of values in [0,6] (len>=16):\n");
+  int bstart = -1;
+  for (uint32_t off = 0; off < kSize; off++) {
+    if (buf[off] <= 6) {
+      if (bstart < 0) {
+        bstart = (int)off;
+      }
+    } else if (bstart >= 0) {
+      int len = (int)off - bstart;
+      if (len >= 16) {
+        std::printf("  +0x%04X len=%d:", bstart, len);
+        for (uint32_t o = (uint32_t)bstart; o < off && o < (uint32_t)(bstart + 80);
+             o++) {
+          std::printf(" %u", buf[o]);
+        }
+        std::printf("\n");
+      }
+      bstart = -1;
+    }
+  }
 }
 
 } // namespace MemoryHook

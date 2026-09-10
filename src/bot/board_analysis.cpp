@@ -28,6 +28,7 @@ void BoardState::initFromGrid(const std::vector<std::vector<Gem>> &grid) {
     for (int col = 0; col < SIZE; ++col) {
       cells[row][col].type = grid[row][col].type;
       cells[row][col].state = grid[row][col].state;
+      cells[row][col].pending = false;
     }
   }
 }
@@ -42,21 +43,87 @@ GemType BoardState::getType(int row, int col, const MatchableSwap *swap) const {
   return cells[row][col].type;
 }
 
+GemType BoardState::activeType(int row, int col,
+                               const MatchableSwap *swap) const {
+  if (swap) {
+    if (row == swap->a.y && col == swap->a.x) {
+      const BoardCell &src = cells[swap->b.y][swap->b.x];
+      return src.pending ? GemType::UNKNOWN : src.type;
+    }
+    if (row == swap->b.y && col == swap->b.x) {
+      const BoardCell &src = cells[swap->a.y][swap->a.x];
+      return src.pending ? GemType::UNKNOWN : src.type;
+    }
+  }
+  // Locked gems break runs — they belong to an already-committed match.
+  if (cells[row][col].pending)
+    return GemType::UNKNOWN;
+  return cells[row][col].type;
+}
+
+void BoardState::markPendingMatches() {
+  clearPendingMatches();
+
+  // Horizontal runs of 3+
+  for (int row = 0; row < SIZE; ++row) {
+    int col = 0;
+    while (col < SIZE) {
+      GemType type = cells[row][col].type;
+      if (!IsMatchableType(type)) {
+        ++col;
+        continue;
+      }
+      int count = 1;
+      while (col + count < SIZE && cells[row][col + count].type == type)
+        ++count;
+      if (count >= 3)
+        for (int k = 0; k < count; ++k)
+          cells[row][col + k].pending = true;
+      col += count;
+    }
+  }
+
+  // Vertical runs of 3+
+  for (int col = 0; col < SIZE; ++col) {
+    int row = 0;
+    while (row < SIZE) {
+      GemType type = cells[row][col].type;
+      if (!IsMatchableType(type)) {
+        ++row;
+        continue;
+      }
+      int count = 1;
+      while (row + count < SIZE && cells[row + count][col].type == type)
+        ++count;
+      if (count >= 3)
+        for (int k = 0; k < count; ++k)
+          cells[row + k][col].pending = true;
+      row += count;
+    }
+  }
+}
+
+void BoardState::clearPendingMatches() {
+  for (int row = 0; row < SIZE; ++row)
+    for (int col = 0; col < SIZE; ++col)
+      cells[row][col].pending = false;
+}
+
 bool BoardState::wouldFormMatchAt(int row, int col,
                                   const MatchableSwap &swap) const {
-  GemType type = getType(row, col, &swap);
+  GemType type = activeType(row, col, &swap);
   if (!IsMatchableType(type))
     return false;
 
   // Horizontal
   int count = 1;
   for (int x = col - 1; x >= 0; --x) {
-    if (getType(row, x, &swap) != type)
+    if (activeType(row, x, &swap) != type)
       break;
     ++count;
   }
   for (int x = col + 1; x < SIZE; ++x) {
-    if (getType(row, x, &swap) != type)
+    if (activeType(row, x, &swap) != type)
       break;
     ++count;
   }
@@ -66,12 +133,12 @@ bool BoardState::wouldFormMatchAt(int row, int col,
   // Vertical
   count = 1;
   for (int y = row - 1; y >= 0; --y) {
-    if (getType(y, col, &swap) != type)
+    if (activeType(y, col, &swap) != type)
       break;
     ++count;
   }
   for (int y = row + 1; y < SIZE; ++y) {
-    if (getType(y, col, &swap) != type)
+    if (activeType(y, col, &swap) != type)
       break;
     ++count;
   }
@@ -79,6 +146,12 @@ bool BoardState::wouldFormMatchAt(int row, int col,
 }
 
 bool BoardState::swapCreatesMatch(const MatchableSwap &swap) const {
+  // A gem that is already part of a committed match cannot be moved or used to
+  // form a new match.
+  if (cells[swap.a.y][swap.a.x].pending ||
+      cells[swap.b.y][swap.b.x].pending)
+    return false;
+
   GemType typeA = cells[swap.a.y][swap.a.x].type;
   GemType typeB = cells[swap.b.y][swap.b.x].type;
 
@@ -576,6 +649,7 @@ bool BoardState::equals(const BoardState &other) const {
 int BoardState::simulateMove(const MatchableSwap &swap,
                              BoardState &finalBoard) const {
   finalBoard = *this;
+  finalBoard.clearPendingMatches(); // model the future resolution, not locks
   finalBoard.applySwap(swap);
 
   int total = finalBoard.clearMatches(&swap);
@@ -586,6 +660,40 @@ int BoardState::simulateMove(const MatchableSwap &swap,
       break;
     total += more;
     finalBoard.applyGravity();
+  }
+  return total;
+}
+
+void BoardState::fillEmptiesFrom(const BoardState &src) {
+  for (int row = 0; row < SIZE; ++row) {
+    for (int col = 0; col < SIZE; ++col) {
+      if (cells[row][col].type == GemType::EMPTY &&
+          src.cells[row][col].type != GemType::EMPTY) {
+        cells[row][col] = src.cells[row][col];
+      }
+    }
+  }
+}
+
+int BoardState::simulateMoveSeeded(const MatchableSwap &swap,
+                                   const BoardState &refill,
+                                   BoardState &finalBoard) const {
+  finalBoard = *this;
+  finalBoard.clearPendingMatches();
+  finalBoard.applySwap(swap);
+
+  int total = 0;
+  const MatchableSwap *swapPtr = &swap;
+  while (true) {
+    int cleared = finalBoard.clearMatches(swapPtr);
+    if (cleared == 0)
+      break;
+    total += cleared;
+    finalBoard.applyGravity();
+    // Seed the emptied top cells with the gems the game actually spawned there,
+    // so the cascade continues through the real refill instead of stopping.
+    finalBoard.fillEmptiesFrom(refill);
+    swapPtr = nullptr;
   }
   return total;
 }
@@ -644,7 +752,7 @@ namespace {
 /// Compute the longest match at (row, col) after a virtual swap
 int ComputeMatchLength(const BoardState &board, int row, int col,
                        const MatchableSwap &swap) {
-  GemType type = board.getType(row, col, &swap);
+  GemType type = board.activeType(row, col, &swap);
   if (!IsMatchableType(type))
     return 0;
 
@@ -653,12 +761,12 @@ int ComputeMatchLength(const BoardState &board, int row, int col,
   // Horizontal
   int count = 1;
   for (int x = col - 1; x >= 0; --x) {
-    if (board.getType(row, x, &swap) != type)
+    if (board.activeType(row, x, &swap) != type)
       break;
     ++count;
   }
   for (int x = col + 1; x < BoardState::SIZE; ++x) {
-    if (board.getType(row, x, &swap) != type)
+    if (board.activeType(row, x, &swap) != type)
       break;
     ++count;
   }
@@ -668,12 +776,12 @@ int ComputeMatchLength(const BoardState &board, int row, int col,
   // Vertical
   count = 1;
   for (int y = row - 1; y >= 0; --y) {
-    if (board.getType(y, col, &swap) != type)
+    if (board.activeType(y, col, &swap) != type)
       break;
     ++count;
   }
   for (int y = row + 1; y < BoardState::SIZE; ++y) {
-    if (board.getType(y, col, &swap) != type)
+    if (board.activeType(y, col, &swap) != type)
       break;
     ++count;
   }
@@ -701,15 +809,26 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
 
   boardValid = true;
 
-  // A board with a pre-existing match is mid-cascade / not yet settled. Never
-  // act on it — clear any pending best move and reset the stability counter so
-  // the bot waits for the board to fully resolve.
+  // Flag gems that are already part of a formed (lingering) match. They are
+  // committed: the bot cannot swap them or add to them, so every move search
+  // below treats them as non-matchable.
+  newBoard.markPendingMatches();
+
+  // A board with a pre-existing match is mid-cascade. The matched gems are
+  // already committed (flagged `pending` above) and will clear on their own.
   if (newBoard.hasExistingMatch()) {
     settling = true;
     stableFrameCount = 0;
     board = newBoard;
-    scoredSwaps.clear();
-    bestSwapIndex = -1;
+    if (Config::BOT_WAIT_FOR_SETTLE) {
+      // Normal play: wait for the cascade to finish before acting.
+      scoredSwaps.clear();
+      bestSwapIndex = -1;
+    } else {
+      // Mid-cascade mode: keep planning. computeScoredSwaps() ignores the
+      // locked (pending) gems, so only matches the bot actually creates count.
+      computeScoredSwaps();
+    }
     return;
   }
   settling = false;
@@ -723,7 +842,10 @@ void BoardAnalysis::analyze(const std::vector<std::vector<Gem>> &grid) {
   // Board changed - reset counter and update
   stableFrameCount = 1;
   board = newBoard;
+  computeScoredSwaps();
+}
 
+void BoardAnalysis::computeScoredSwaps() {
   // Find all valid swaps - prefer non-hypercube moves if configured
   std::vector<MatchableSwap> validSwaps;
   if (Config::BOT_PREFER_NON_HYPERCUBE_MOVES) {

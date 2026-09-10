@@ -125,6 +125,25 @@ void DrawHookBoard(cv::Mat &image, const int *board, const int *states,
     }
   }
 
+  // Mark gems that are part of an already-committed (lingering) match: the bot
+  // treats these as locked — they will clear and cannot be added to.
+  if (analysis && analysis->boardValid) {
+    for (int r = 0; r < n; r++) {
+      for (int c = 0; c < n; c++) {
+        if (!analysis->board.cells[r][c].pending)
+          continue;
+        cv::Rect rect(c * cell, banner + r * cell, cell, cell);
+        cv::rectangle(image, rect, cv::Scalar(0, 0, 255), 3);
+        cv::line(image, cv::Point(rect.x, rect.y),
+                 cv::Point(rect.x + rect.width, rect.y + rect.height),
+                 cv::Scalar(0, 0, 255), 2);
+        cv::line(image, cv::Point(rect.x + rect.width, rect.y),
+                 cv::Point(rect.x, rect.y + rect.height),
+                 cv::Scalar(0, 0, 255), 2);
+      }
+    }
+  }
+
   // Highlight the best swap.
   if (analysis && analysis->boardValid && analysis->bestSwapIndex >= 0) {
     const auto &s = analysis->scoredSwaps[analysis->bestSwapIndex];
@@ -229,6 +248,19 @@ void Application::RunHookMode() {
   std::cout << "Memory hook mode active. 'b'=auto-play 'p'=print 'm'=dump "
                "'q'=quit\n";
 
+  // Self-serve RNG trace: enable auto-play and log the full MT19937 state +
+  // index + gem board every frame to rng_state.bin; auto-quit afterwards.
+  bool rngTrace = rngAutoTraceMs_ > 0;
+  FILE *rngBin = nullptr;
+  std::chrono::steady_clock::time_point rngStart;
+  if (rngTrace) {
+    autoPlayEnabled_ = true;
+    rngBin = std::fopen("rng_state.bin", "wb");
+    rngStart = std::chrono::steady_clock::now();
+    std::cout << "RNG autoplay trace -> rng_state.bin for " << rngAutoTraceMs_
+              << " ms\n";
+  }
+
   while (running_) {
     // Read the board directly from game memory.
     int board[64];
@@ -236,6 +268,34 @@ void Application::RunHookMode() {
     int states[64] = {};
     if (haveBoard) {
       MemoryHook::ReadSpecialState(states);
+    }
+
+    if (rngTrace && rngBin) {
+      uint32_t st[MemoryHook::kMtStateCount];
+      int ix = -1;
+      MemoryHook::ReadMtState(st, ix);
+      int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - rngStart)
+                       .count();
+      int8_t bd[64];
+      for (int i = 0; i < 64; i++) {
+        bd[i] = haveBoard ? (int8_t)board[i] : (int8_t)-2;
+      }
+      uint32_t rptr[64];
+      int rtype[64];
+      MemoryHook::ReadBoardRaw(rptr, rtype);
+      std::fwrite(&ms, sizeof(ms), 1, rngBin);
+      std::fwrite(&ix, sizeof(ix), 1, rngBin);
+      std::fwrite(st, sizeof(uint32_t), MemoryHook::kMtStateCount, rngBin);
+      std::fwrite(rptr, sizeof(uint32_t), 64, rngBin);
+      for (int i = 0; i < 64; i++) {
+        int8_t t = (int8_t)rtype[i];
+        std::fwrite(&t, 1, 1, rngBin);
+      }
+      std::fflush(rngBin);
+      if (ms > rngAutoTraceMs_) {
+        running_ = false;
+      }
     }
 
     if (haveBoard) {
@@ -260,6 +320,7 @@ void Application::RunHookMode() {
         std::string s = MemBoardToString(board);
         if (observedStates_.empty() || observedStates_.back() != s) {
           observedStates_.push_back(s);
+          observedBoards_.push_back(analysis_.board);
         }
         if (!analysis_.settling &&
             analysis_.stableFrameCount >= Config::BOT_STABLE_FRAMES_REQUIRED) {
@@ -295,6 +356,10 @@ void Application::RunHookMode() {
       running_ = false;
     }
   }
+
+  if (rngBin) {
+    std::fclose(rngBin);
+  }
 }
 
 void Application::HandleKeyboardInput(int key) {
@@ -327,8 +392,7 @@ void Application::HandleKeyboardInput(int key) {
         std::cout << " (will stop when supernova move is found)";
       }
       std::cout << std::endl;
-      lastClickTime_ = std::chrono::high_resolution_clock::now();
-      clicksInProgress_ = 0;
+      awaitingBoardChange_ = false;
     } else {
       std::cout << "Auto-play DISABLED" << std::endl;
     }
@@ -353,36 +417,28 @@ void Application::ExecuteBestSwap() {
   int x2 = swap.b.x * Config::CELL_SIZE + Config::CELL_SIZE / 2;
   int y2 = swap.b.y * Config::CELL_SIZE + Config::CELL_SIZE / 2;
 
-  auto now = std::chrono::high_resolution_clock::now();
-  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                     now - lastClickTime_)
-                     .count();
+  SendMouseClickToGame(gameWindow_, x1, y1, true);
+  SendMouseClickToGame(gameWindow_, x1, y1, false);
+  SendMouseClickToGame(gameWindow_, x2, y2, true);
+  SendMouseClickToGame(gameWindow_, x2, y2, false);
 
-  if (clicksInProgress_ == 0 && elapsed >= Config::BOT_CLICK_DELAY_MS) {
-    SendMouseClickToGame(gameWindow_, x1, y1, true);
-    SendMouseClickToGame(gameWindow_, x1, y1, false);
-    SendMouseClickToGame(gameWindow_, x2, y2, true);
-    SendMouseClickToGame(gameWindow_, x2, y2, false);
+  // Event-driven gating: from here the bot waits until the board in memory
+  // reflects this swap before doing anything else. No fixed click delay.
+  awaitingBoardChange_ = true;
+  moveDispatchedAt_ = std::chrono::steady_clock::now();
+  analysis_.stableFrameCount = 0;
 
-    lastClickTime_ = now;
-    clicksInProgress_ = 2;
-
-    // Reset the stability counter so we wait for the board to settle again,
-    // and enforce a minimum settle delay so cascades finish before we act.
-    analysis_.stableFrameCount = 0;
-    settleUntil_ = std::chrono::steady_clock::now() +
-                   std::chrono::milliseconds(Config::BOT_SETTLE_DELAY_MS);
-
-    // Cascade validation: predict this move's result via simulation and start
-    // observing the live board to compare against it.
-    BoardState predicted;
-    predictedClears_ = analysis_.board.simulateMove(swap, predicted);
-    predictedBoard_ = predicted.toString();
-    observedStates_.clear();
-    observingCascade_ = true;
-  } else if (clicksInProgress_ == 2 && elapsed >= Config::BOT_CLICK_DELAY_MS) {
-    clicksInProgress_ = 0;
-  }
+  // Cascade validation: predict this move's result via simulation and start
+  // observing the live board to compare against it.
+  preMoveBoard_ = analysis_.board;
+  lastSwap_ = swap;
+  havePreMove_ = true;
+  BoardState predicted;
+  predictedClears_ = analysis_.board.simulateMove(swap, predicted);
+  predictedBoard_ = predicted.toString();
+  observedStates_.clear();
+  observedBoards_.clear();
+  observingCascade_ = true;
 }
 
 void Application::PrintCascadeComparison() {
@@ -395,20 +451,40 @@ void Application::PrintCascadeComparison() {
   std::cout << "Actual final board:\n" << actual << "\n";
 
   // Diff predicted vs actual final board (ignoring newlines).
-  int diff = 0;
-  size_t j = 0;
-  for (char pc : predictedBoard_) {
-    if (pc == '\n')
-      continue;
-    while (j < actual.size() && actual[j] == '\n')
+  auto diffBoards = [](const std::string &pred, const std::string &act) {
+    int diff = 0;
+    size_t j = 0;
+    for (char pc : pred) {
+      if (pc == '\n')
+        continue;
+      while (j < act.size() && act[j] == '\n')
+        ++j;
+      if (j >= act.size())
+        break;
+      if (pc != act[j])
+        ++diff;
       ++j;
-    if (j >= actual.size())
-      break;
-    if (pc != actual[j])
-      ++diff;
-    ++j;
+    }
+    return diff;
+  };
+  std::cout << "Cells differing from prediction (no refill): "
+            << diffBoards(predictedBoard_, actual) << "/64\n";
+
+  // Option B: re-run the simulation with the live refill injected, so the
+  // prediction continues through the gems the game actually spawned instead of
+  // stopping at the refill. The residual diff then measures only real model
+  // error (cascade/clear ordering), not the RNG.
+  if (havePreMove_ && !observedBoards_.empty()) {
+    const BoardState &refill = observedBoards_.back();
+    BoardState seeded;
+    int seededClears =
+        preMoveBoard_.simulateMoveSeeded(lastSwap_, refill, seeded);
+    std::string seededStr = seeded.toString();
+    std::cout << "Seeded clears (with live refill): " << seededClears << "\n";
+    std::cout << "Seeded final board:\n" << seededStr << "\n";
+    std::cout << "Cells differing from prediction (seeded): "
+              << diffBoards(seededStr, actual) << "/64\n";
   }
-  std::cout << "Cells differing from prediction: " << diff << "/64\n";
   std::cout << "============================\n";
 }
 
@@ -417,19 +493,33 @@ void Application::UpdateAutoPlay() {
     return;
   }
 
-  // Don't act until the post-move settle delay has elapsed.
-  if (std::chrono::steady_clock::now() < settleUntil_) {
+  // A move is in flight: wait until the board in memory actually reflects it.
+  // This replaces the old fixed click delay — we react to the real transition.
+  if (awaitingBoardChange_) {
+    bool stuck =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - moveDispatchedAt_)
+            .count() > Config::BOT_MAX_WAIT_FOR_CHANGE_MS;
+    if (!stuck && (!analysis_.boardValid ||
+                   analysis_.board.equals(preMoveBoard_))) {
+      return; // swap not applied yet — keep waiting
+    }
+    awaitingBoardChange_ = false; // swap registered (or we gave up)
+  }
+
+  if (!analysis_.boardValid) {
     return;
   }
 
-  // Don't act if the board has a pending match (cascade still resolving).
-  if (analysis_.settling) {
-    return;
-  }
-
-  if (!analysis_.boardValid ||
-      analysis_.stableFrameCount < Config::BOT_STABLE_FRAMES_REQUIRED) {
-    return;
+  // When waiting for settle, require a board with no pending match and a couple
+  // of identical reads (a debounce, not a frame-count heuristic).
+  if (Config::BOT_WAIT_FOR_SETTLE) {
+    if (analysis_.settling) {
+      return;
+    }
+    if (analysis_.stableFrameCount < Config::BOT_STABLE_FRAMES_REQUIRED) {
+      return;
+    }
   }
 
   if (Config::BOT_STOP_AFTER_SUPERNOVA_FOUND && analysis_.bestSwapIndex >= 0) {

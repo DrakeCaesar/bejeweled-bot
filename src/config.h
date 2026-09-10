@@ -21,12 +21,21 @@ const bool BOT_STOP_AFTER_SUPERNOVA_FOUND =
     true; // Stop bot when supernova move is detected
 const bool BOT_PREFER_NON_HYPERCUBE_MOVES =
     true; // Only match hypercubes if no other moves
-const int BOT_STABLE_FRAMES_REQUIRED =
-    20; // Number of stable frames required before making a move
-const int BOT_CLICK_DELAY_MS =
-    500; // Milliseconds to wait between clicks in auto-play
-const int BOT_SETTLE_DELAY_MS =
-    50; // Min wait after a move before acting again (let cascades finish)
+// Consecutive identical memory reads required before acting. With the memory
+// hook this is only a tiny debounce against a mid-transition read; the real
+// "board is settled" signal is a board with no pending match (analysis_.settling).
+const int BOT_STABLE_FRAMES_REQUIRED = 2;
+
+// Whether to wait for a cascade to fully settle before the next move.
+// true  = normal play (wait for the board to resolve).
+// false = chain moves the instant the previous swap registers in memory, so we
+//         can act mid-cascade (interception / Gemwipe experiments).
+const bool BOT_WAIT_FOR_SETTLE = false;
+
+// Safety net only: if a dispatched move is never reflected in memory (e.g. the
+// click was rejected), give up waiting after this long and try again. This is
+// NOT pacing — normal moves proceed as soon as memory changes.
+const int BOT_MAX_WAIT_FOR_CHANGE_MS = 100;
 
 // Resolution-dependent values that will be set at runtime
 inline int BOARD_X = 523;      // Will be set by application based on resolution

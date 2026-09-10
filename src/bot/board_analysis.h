@@ -19,6 +19,12 @@ struct MatchableSwap {
 struct BoardCell {
   GemType type = GemType::EMPTY;
   GemState state = GemState::NORMAL;
+  // True when this cell is part of a match that has ALREADY formed and is
+  // being cleared by the game (a lingering / pending match). Such gems are no
+  // longer active: they cannot be swapped and they cannot be used to extend or
+  // form a new match — the match they belong to is already committed.
+  // Derived from `type`, so it is not part of the board's identity.
+  bool pending = false;
 };
 
 /// Copyable 8x8 board state for simulation and DFS exploration.
@@ -33,6 +39,19 @@ struct BoardState {
 
   /// Get cell type, with optional swap applied virtually
   GemType getType(int row, int col, const MatchableSwap *swap = nullptr) const;
+
+  /// Like getType, but returns UNKNOWN for cells that are `pending` (already
+  /// part of a committed match). Used for match detection so a locked match
+  /// breaks a run instead of being counted as part of a new one.
+  GemType activeType(int row, int col,
+                     const MatchableSwap *swap = nullptr) const;
+
+  /// Flag every cell that participates in an existing 3+ match as `pending`
+  /// (locked / clearing). Derived state — call after initFromGrid().
+  void markPendingMatches();
+
+  /// Clear all `pending` flags (used before simulating a future resolution).
+  void clearPendingMatches();
 
   /// Check if a specific position would form a match (3+) after a swap
   bool wouldFormMatchAt(int row, int col, const MatchableSwap &swap) const;
@@ -79,6 +98,17 @@ struct BoardState {
   /// gap). Returns the total number of gems cleared.
   int simulateMove(const MatchableSwap &swap, BoardState &finalBoard) const;
 
+  /// Copy any gem from `src` into cells of *this that are EMPTY (same grid
+  /// position). Used to seed the refill with the gems the game actually
+  /// spawned, so the simulation continues instead of stopping at the refill.
+  void fillEmptiesFrom(const BoardState &src);
+
+  /// Like simulateMove, but after each clear+gravity the emptied top cells are
+  /// seeded from `refill` (the live board) so the cascade continues through the
+  /// game's real refill instead of stopping. Returns total gems cleared.
+  int simulateMoveSeeded(const MatchableSwap &swap, const BoardState &refill,
+                         BoardState &finalBoard) const;
+
   /// Compact 8-line rendering for diffing/prediction: r,o,y,g,b,p,w = colors,
   /// H = hypercube, '.' = empty, '?' = unknown.
   std::string toString() const;
@@ -113,4 +143,9 @@ struct BoardAnalysis {
 
   /// Run full analysis: snapshot board, find swaps, score them
   void analyze(const std::vector<std::vector<Gem>> &grid);
+
+private:
+  /// Find and score every valid swap for the current `board` snapshot.
+  /// Respects the `pending` (locked) flags on the board.
+  void computeScoredSwaps();
 };
